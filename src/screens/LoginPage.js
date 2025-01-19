@@ -3,6 +3,7 @@ import { View, StyleSheet, ImageBackground, Image, Text, ScrollView, Alert, Touc
 import { useDispatch, useSelector } from 'react-redux';
 import { ReusableTextInput, ReusablePressable, LoadingComponent } from '../components/index';
 import { login, autoLogin } from '../redux/userSlice';
+import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 
 const LoginPage = ({ navigation }) => {
@@ -41,7 +42,14 @@ const LoginPage = ({ navigation }) => {
             .catch((error) => {
                 setErrorMessage('Giriş başarısız. Lütfen e-posta ve şifrenizi kontrol edin.');
                 setLoading(false);
-                Alert.alert('Hata', 'Giriş başarısız. Lütfen e-posta ve şifrenizi kontrol edin.');
+                Toast.show({
+                    type: 'error',
+                    position: 'bottom',
+                    text1: 'Hata',
+                    text2: 'Giriş başarısız. Lütfen e-posta ve şifrenizi kontrol edin.',
+                    visibilityTime: 2000,
+                    autoHide: true,
+                });
             });
     };
 

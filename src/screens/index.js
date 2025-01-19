@@ -5,8 +5,7 @@ import SignupPage from './SignupPage';
 import FriendsPage from './FriendsPage';
 import MapPage from './MapPage';
 import SettingsPage from './SettingsPage';
-import Hakkinda from './SettingsPageScreens/Hakkinda';
-import Bildirimler from './SettingsPageScreens/Bildirimler';
+
 
 
 export {
@@ -16,6 +15,4 @@ export {
     FriendsPage,
     MapPage,
     SettingsPage,
-    Hakkinda,
-    Bildirimler
 };

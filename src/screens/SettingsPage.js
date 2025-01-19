@@ -14,12 +14,42 @@ const SettingsPage = ({ navigation }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const sections = [
-        { title: "Bildirimler", iconName: "notifications-outline", screen: "Bildirimler" },
-        { title: "İzinler", iconName: "key-outline", screen: "Profil" },
-        { title: "Gizlilik", iconName: "lock-closed-outline", screen: "Profil" },
-        { title: "Yardım ve Destek", iconName: "help-circle-outline", screen: "Profil" },
-        { title: "Hakkinda", iconName: "information-circle-outline", screen: "Hakkinda" },
-        { title: "Arkadaşlarınızı davet edin", iconName: "people-outline", screen: "Profil" },
+        {
+            title: "Bildirimler",
+            iconName: "notifications-outline",
+            screen: "Bildirimler",
+            iconColor: '#FF6347'
+        },
+        {
+            title: "İzinler",
+            iconName: "key-outline",
+            screen: "Izinler",
+            iconColor: '#4682B4'
+        },
+        {
+            title: "Gizlilik",
+            iconName: "lock-closed-outline",
+            screen: "Gizlilik",
+            iconColor: '#32CD32'
+        },
+        {
+            title: "Yardım ve Destek",
+            iconName: "help-circle-outline",
+            screen: "YardimDestek",
+            iconColor: '#FFD700'
+        },
+        {
+            title: "Hakkında",
+            iconName: "information-circle-outline",
+            screen: "Hakkinda",
+            iconColor: '#1E90FF'
+        },
+        {
+            title: "Arkadaşlarınızı davet edin",
+            iconName: "people-outline",
+            screen: "Arkadaşlarımı Davet Et",
+            iconColor: '#FF69B4'
+        },
     ];
 
     const filteredSections = sections.filter(section =>
@@ -53,89 +83,119 @@ const SettingsPage = ({ navigation }) => {
         dispatch(setTheme(selectedTheme));
     };
 
+    const handleNavigation = (screen) => {
+        navigation.navigate(screen);
+    };
+
     return (
-        <ScrollView style={[styles.container, { backgroundColor: currentTheme.background }]}>
-            <Text style={[styles.header, { color: currentTheme.text }]}>Ayarlar</Text>
-            <View style={[styles.searchContainer, { backgroundColor: currentTheme.background }]}>
-                <Ionicons name="search" size={20} color={currentTheme.text} style={styles.searchIcon} />
-                <TextInput
-                    style={[styles.searchInput, { color: currentTheme.text }]}
-                    placeholder="Ara"
-                    placeholderTextColor={currentTheme.text}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                />
-            </View>
+        <ScrollView
+            style={[styles.container, { backgroundColor: currentTheme.background }]}
+            contentContainerStyle={{ paddingBottom: 80 }}
+        >
+            {/* Header Bölümü */}
+            <View style={[styles.header, { backgroundColor: currentTheme.background }]}>
+                <Text style={[styles.headerTitle, { color: currentTheme.text }]}>Ayarlar</Text>
 
-            {filteredSections.length > 0 ? (
-                filteredSections.map((section, index) => (
-                    <RblSection
-                        key={index}
-                        title={section.title}
-                        iconName={section.iconName}
-                        onPress={() => navigation.navigate(section.screen)}
-                        iconColor={section.title == 'Bildirimler' ? '#FF6347'
-                            : section.title == 'İzinler' ? '#4682B4'
-                                : section.title == 'Gizlilik' ? '#32CD32'
-                                    : section.title == 'Yardım ve Destek' ? '#FFD700'
-                                        : section.title == 'Hakkinda' ? '#1E90FF'
-                                            : section.title == 'Arkadaşlarınızı davet edin' ? '#FF69B4'
-                                                : 'black'
-                        }
+                {/* Arama Çubuğu */}
+                <View style={[styles.searchContainer, { backgroundColor: currentTheme.cardBackground }]}>
+                    <Ionicons name="search" size={20} color={currentTheme.text} style={styles.searchIcon} />
+                    <TextInput
+                        style={[styles.searchInput, { color: currentTheme.text }]}
+                        placeholder="Ayarlarda ara..."
+                        placeholderTextColor={currentTheme.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
                     />
-                ))
-            ) : (
-                <Text style={[styles.noResults, { color: currentTheme.text }]}>Sonuç bulunamadı</Text>
-            )}
-
-            {/* Tema seçimi */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>Tema</Text>
-                <View style={styles.radioGroup}>
-                    <TouchableOpacity style={styles.radioButton} onPress={() => handleThemeChange('light')}>
-                        <Ionicons name="sunny" size={24} color="orange" />
-                        <RadioButton
-                            value="light"
-                            status={theme === 'light' ? 'checked' : 'unchecked'}
-                            onPress={() => handleThemeChange('light')}
-                        />
-                        <Text style={[styles.radioLabel, { color: currentTheme.text }]}>Açık</Text>
-                    </TouchableOpacity>
-                    <View style={styles.separator} />
-                    <TouchableOpacity style={styles.radioButton} onPress={() => handleThemeChange('dark')}>
-                        <Ionicons name="moon" size={24} color="black" />
-                        <RadioButton
-                            value="dark"
-                            status={theme === 'dark' ? 'checked' : 'unchecked'}
-                            onPress={() => handleThemeChange('dark')}
-                        />
-                        <Text style={[styles.radioLabel, { color: currentTheme.text }]}>Koyu</Text>
-                    </TouchableOpacity>
-                    <View style={styles.separator} />
-                    <TouchableOpacity style={styles.radioButton} onPress={() => handleThemeChange('system')}>
-                        <Ionicons name="settings" size={24} color="#6e7069" />
-                        <RadioButton
-                            value="system"
-                            status={theme === 'system' ? 'checked' : 'unchecked'}
-                            onPress={() => handleThemeChange('system')}
-                        />
-                        <Text style={[styles.radioLabel, { color: currentTheme.text }]}>Sistem Varsayılanı</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
 
-            <Pressable
-                style={[styles.section, styles.logoutContainer]}
-                onPress={() => handleLogout()}
-            >
-                <View style={styles.iconContainer}>
-                    <Ionicons name="log-out-outline" size={24} color="white" />
+            <View style={styles.content}>
+                {/* Tema Seçimi Kartı */}
+                <View style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
+                    <Text style={[styles.cardTitle, { color: currentTheme.text }]}>Tema</Text>
+                    <View style={styles.themeOptions}>
+                        <TouchableOpacity
+                            style={[
+                                styles.themeOption,
+                                theme === 'light' && styles.selectedThemeOption
+                            ]}
+                            onPress={() => handleThemeChange('light')}
+                        >
+                            <Ionicons name="sunny" size={24} color={theme === 'light' ? '#fff' : '#FDB813'} />
+                            <Text style={[
+                                styles.themeText,
+                                theme === 'light' && styles.selectedThemeText
+                            ]}>Açık</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.themeOption,
+                                theme === 'dark' && styles.selectedThemeOption
+                            ]}
+                            onPress={() => handleThemeChange('dark')}
+                        >
+                            <Ionicons name="moon" size={24} color={theme === 'dark' ? '#fff' : '#1A237E'} />
+                            <Text style={[
+                                styles.themeText,
+                                theme === 'dark' && styles.selectedThemeText
+                            ]}>Koyu</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.themeOption,
+                                theme === 'system' && styles.selectedThemeOption
+                            ]}
+                            onPress={() => handleThemeChange('system')}
+                        >
+                            <Ionicons name="settings" size={24} color={theme === 'system' ? '#fff' : '#757575'} />
+                            <Text style={[
+                                styles.themeText,
+                                theme === 'system' && styles.selectedThemeText
+                            ]}>Sistem</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-                <Text style={[styles.sectionTitle, { color: 'white' }]}>Çıkış Yap</Text>
-                <View style={styles.iconContainerRight}>
-                    <Ionicons name="chevron-forward" size={24} color="white" />
-                </View>
-            </Pressable>
+
+                {/* Ayarlar Kartları */}
+                {filteredSections.length > 0 ? (
+                    filteredSections.map((section, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}
+                            onPress={() => handleNavigation(section.screen)}
+                        >
+                            <View style={styles.settingRow}>
+                                <View style={[styles.iconContainer, { backgroundColor: section.iconColor + '20' }]}>
+                                    <Ionicons name={section.iconName} size={24} color={section.iconColor} />
+                                </View>
+                                <View style={styles.settingInfo}>
+                                    <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
+                                        {section.title}
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={24} color={currentTheme.text} />
+                            </View>
+                        </TouchableOpacity>
+                    ))
+                ) : (
+                    <View style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
+                        <Text style={[styles.noResults, { color: currentTheme.textSecondary }]}>
+                            Sonuç bulunamadı
+                        </Text>
+                    </View>
+                )}
+
+                {/* Çıkış Yap Butonu */}
+                <TouchableOpacity
+                    style={styles.logoutButton}
+                    onPress={handleLogout}
+                >
+                    <Ionicons name="log-out-outline" size={24} color="#fff" />
+                    <Text style={styles.logoutText}>Çıkış Yap</Text>
+                </TouchableOpacity>
+            </View>
         </ScrollView>
     );
 };
@@ -145,78 +205,121 @@ export default SettingsPage;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
     },
     header: {
-        fontSize: 35,
+        padding: 20,
+        paddingTop: 60,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 5,
+    },
+    headerTitle: {
+        fontSize: 34,
         fontWeight: 'bold',
-        textAlign: 'left',
-        marginLeft: 20,
-        marginVertical: 20,
-        marginTop: 90,
+        marginBottom: 20,
     },
     searchContainer: {
-        borderWidth: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        marginHorizontal: 20,
-        marginBottom: 20,
+        backgroundColor: '#F5F6FA',
+        borderRadius: 15,
+        padding: 10,
+        marginBottom: 10,
     },
     searchIcon: {
         marginRight: 10,
     },
     searchInput: {
         flex: 1,
-        height: 40,
+        fontSize: 16,
     },
-    noResults: {
-        textAlign: 'center',
-        fontSize: 18,
-        color: 'gray',
-        marginTop: 20,
+    content: {
+        padding: 20,
     },
-    section: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 18,
-        marginBottom: 10,
-        borderRadius: 10,
+    settingsCard: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 15,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
-        elevation: 5,
+        elevation: 3,
     },
-    sectionTitle: {
+    cardTitle: {
         fontSize: 18,
+        fontWeight: '600',
+        marginBottom: 15,
+    },
+    themeOptions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    themeOption: {
         flex: 1,
-        marginLeft: 10,
-        fontWeight: '500',
+        alignItems: 'center',
+        padding: 15,
+        borderRadius: 15,
+        marginHorizontal: 5,
+        backgroundColor: '#F5F6FA',
     },
-    radioGroup: {
-        flexDirection: 'column',
+    selectedThemeOption: {
+        backgroundColor: '#4CAF50',
     },
-    radioButton: {
+    themeText: {
+        marginTop: 8,
+        fontSize: 14,
+        color: '#666',
+    },
+    selectedThemeText: {
+        color: '#fff',
+    },
+    settingRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
     },
-    radioLabel: {
-        marginLeft: 10,
+    iconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    settingInfo: {
+        flex: 1,
+    },
+    settingTitle: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    noResults: {
+        textAlign: 'center',
         fontSize: 16,
     },
-    separator: {
-        height: 1,
-        backgroundColor: '#ccc',
-        marginVertical: 10,
-    },
-    logoutContainer: {
-        backgroundColor: 'red',
-    },
-    iconContainerRight: {
-        width: 30,
+    logoutButton: {
+        backgroundColor: '#FF5252',
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        padding: 15,
+        borderRadius: 20,
+        marginTop: 20,
+        shadowColor: '#FF5252',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    logoutText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 10,
     },
 });

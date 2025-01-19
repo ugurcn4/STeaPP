@@ -15,7 +15,9 @@ import {
     getDoc,
     orderBy,
     deleteDoc,
+    limit,
 } from 'firebase/firestore';
+import { haversine } from './../screens/MapPage';
 
 
 
@@ -217,15 +219,50 @@ export const startLiveLocationSharing = async (userId) => {
  * @param {string} userId - Kullanıcı ID'si
  * @param {Object} location - Konum bilgisi (latitude, longitude, timestamp)
  */
-export const addLocation = async (userId, location) => {
-    try {
-        await db
-            .collection('users')
-            .doc(userId)
-            .collection('locations')
-            .add(location);
-    } catch (error) {
-        console.error('Konum eklenirken hata oluştu:', error);
+export const addLocation = async (userId, newLocation) => {
+    const q = query(
+        collection(db, `users/${userId}/locations`),
+        where('enlem', '==', newLocation.coords.latitude.toFixed(4)),
+        where('boylam', '==', newLocation.coords.longitude.toFixed(4))
+    );
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        const lastLocationDoc = await getDocs(
+            query(
+                collection(db, `users/${userId}/locations`),
+                orderBy('timestamp', 'desc'),
+                limit(1)
+            )
+        );
+
+        if (!lastLocationDoc.empty) {
+            const lastLocation = lastLocationDoc.docs[0].data();
+            const distance = haversine(
+                { latitude: parseFloat(lastLocation.enlem), longitude: parseFloat(lastLocation.boylam) },
+                { latitude: parseFloat(newLocation.coords.latitude.toFixed(4)), longitude: parseFloat(newLocation.coords.longitude.toFixed(4)) }
+            );
+
+            if (distance < 50) {
+                await addDoc(collection(db, `users/${userId}/locations`), {
+                    enlem: newLocation.coords.latitude.toFixed(4),
+                    boylam: newLocation.coords.longitude.toFixed(4),
+                    timestamp: new Date(),
+                });
+            } else {
+                await addDoc(collection(db, `users/${userId}/locations`), {
+                    enlem: newLocation.coords.latitude.toFixed(4),
+                    boylam: newLocation.coords.longitude.toFixed(4),
+                    timestamp: new Date(),
+                });
+            }
+        } else {
+            await addDoc(collection(db, `users/${userId}/locations`), {
+                enlem: newLocation.coords.latitude.toFixed(4),
+                boylam: newLocation.coords.longitude.toFixed(4),
+                timestamp: new Date(),
+            });
+        }
     }
 };
 

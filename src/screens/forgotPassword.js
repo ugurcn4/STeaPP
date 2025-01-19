@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'reac
 import { useDispatch } from 'react-redux';
 import { LinearGradient } from 'expo-linear-gradient'; // Gradient efekti için
 import { sendPasswordResetEmail } from '../redux/userSlice';
+import Toast from 'react-native-toast-message';
 
 const ForgotPassword = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -12,11 +13,25 @@ const ForgotPassword = ({ navigation }) => {
         dispatch(sendPasswordResetEmail(email))
             .unwrap()
             .then(() => {
-                Alert.alert('Başarılı', 'Şifre sıfırlama e-postası gönderildi.');
+                Toast.show({
+                    type: 'success',
+                    position: 'top',
+                    text1: 'Başarılı',
+                    text2: 'Şifre sıfırlama e-postası gönderildi.',
+                    visibilityTime: 2000,
+                    autoHide: true,
+                });
                 navigation.navigate("Giriş Yap");
             })
             .catch((error) => {
-                Alert.alert('Hata', 'Şifre sıfırlama e-postası gönderilemedi.');
+                Toast.show({
+                    type: 'error',
+                    position: 'top',
+                    text1: 'Hata',
+                    text2: 'Şifre sıfırlama e-postası gönderilemedi. Lütfen e-posta adresinizi kontrol edin.',
+                    visibilityTime: 2000,
+                    autoHide: true,
+                });;
             });
     };
 

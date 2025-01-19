@@ -10,20 +10,25 @@ import { Alert } from 'react-native';
  */
 export const searchUsers = async (searchQuery) => {
     try {
+        console.log('Arama sorgusu:', searchQuery);
         const usersRef = collection(db, 'users');
-        const q = query(
-            usersRef,
-            where('informations.name', '>=', searchQuery),
-            where('informations.name', '<=', searchQuery + '\uf8ff') // Aralık araması
-        );
 
-        const querySnapshot = await getDocs(q);
+        // Tüm kullanıcıları çek
+        const querySnapshot = await getDocs(usersRef);
 
-        const users = querySnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        // JavaScript tarafında filtreleme yap
+        const users = querySnapshot.docs
+            .map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }))
+            .filter(user =>
+                user.informations?.name
+                    ?.toLowerCase()
+                    .includes(searchQuery.toLowerCase())
+            );
 
+        console.log('Bulunan kullanıcılar:', users);
         return users;
     } catch (error) {
         console.error('Kullanıcı arama hatası:', error);

@@ -13,16 +13,50 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ugurrucr.STeaPP",
+      "plugins": [
+        [
+          "expo-build-properties",
+          {
+            "ios": {
+              "useFrameworks": "static",
+              "useModularHeaders": true
+            }
+          }
+        ]
+      ]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/new-logo.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.ugurrucr.STeaPP",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8"
+        }
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3107485e-043c-4f7d-ad0c-3146533c3dd8"
+      }
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/3107485e-043c-4f7d-ad0c-3146533c3dd8"
     }
   }
 }

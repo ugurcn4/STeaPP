@@ -22,27 +22,33 @@ const CustomNavBar = () => {
                         iconName = focused ? 'settings' : 'settings-outline';
                     }
 
-                    // İkon bileşenini döndür
                     return <Ionicons name={iconName} size={size} color={color} />;
                 },
-                tabBarActiveTintColor: '#EFAC1A',
-                tabBarInactiveTintColor: 'gray',
+                tabBarActiveTintColor: '#1A73E8',
+                tabBarInactiveTintColor: '#757575',
                 tabBarStyle: {
                     backgroundColor: '#ffffff',
-                    paddingBottom: 10,
-                    height: 70,
+                    position: 'absolute',
+                    bottom: 20,
+                    left: 20,
+                    right: 20,
+                    elevation: 4,
+                    borderRadius: 25,
+                    height: 65,
+                    shadowColor: '#000',
+                    shadowOffset: {
+                        width: 0,
+                        height: 4,
+                    },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 8,
                     borderTopWidth: 0,
-                    elevation: 10,
-                },
-                tabBarLabelStyle: {
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                },
-                tabBarIconStyle: {
-                    size: 24,
                 },
                 tabBarItemStyle: {
-                    paddingVertical: 5,
+                    paddingVertical: 8,
+                },
+                tabBarLabelStyle: {
+                    display: 'none', // İkon altındaki yazıları kaldır
                 },
                 headerShown: false,
             })}

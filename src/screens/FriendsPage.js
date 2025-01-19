@@ -32,6 +32,7 @@ import {
     deleteShare,
 } from '../helpers/firebaseHelpers';
 import Toast from 'react-native-toast-message';
+import FriendProfileModal from '../modals/friendProfileModal';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -54,6 +55,8 @@ const FriendsPage = () => {
     const [activeTab, setActiveTab] = useState('Arkadaşlar');
     const [selectedFriends, setSelectedFriends] = useState([]);
     const [shares, setShares] = useState([]);
+    const [selectedFriend, setSelectedFriend] = useState(null);
+    const [friendProfileVisible, setFriendProfileVisible] = useState(false);
 
     useEffect(() => {
         const fetchCurrentUserUid = async () => {
@@ -167,10 +170,15 @@ const FriendsPage = () => {
         }
     };
 
+
     const handleSendFriendRequest = async (friendId) => {
         try {
             const response = await sendFriendRequest(friendId);
             if (response.success) {
+                setRequestStatus(prev => ({
+                    ...prev,
+                    [friendId]: 'İstek Gönderildi'
+                }));
                 showToast('success', 'Başarılı', response.message);
             } else {
                 showToast('error', 'Hata', response.message);
@@ -283,6 +291,26 @@ const FriendsPage = () => {
         }
     };
 
+    const handleFriendPress = async (friend) => {
+        try {
+            // Arkadaşın detaylı bilgilerini Firestore'dan al
+            const friendDoc = await getDoc(doc(db, 'users', friend.id));
+            if (friendDoc.exists()) {
+                const friendData = friendDoc.data();
+                setSelectedFriend({
+                    ...friend,
+                    bio: friendData.bio,
+                    phoneNumber: friendData.phoneNumber,
+                    insta: friendData.insta,
+                    email: friendData.informations?.email,
+                });
+                setFriendProfileVisible(true);
+            }
+        } catch (error) {
+            console.error('Arkadaş bilgileri alınırken hata:', error);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <Text style={styles.header}>Arkadaşlar</Text>
@@ -305,16 +333,20 @@ const FriendsPage = () => {
                         data={friends}
                         keyExtractor={(item) => item.id}
                         renderItem={({ item }) => (
-                            <View style={styles.friendCard}>
+                            <TouchableOpacity
+                                style={styles.friendCard}
+                                onPress={() => handleFriendPress(item)}
+                            >
                                 <Image
-                                    source={item.profilePicture ? { uri: item.profilePicture }
+                                    source={item.profilePicture
+                                        ? { uri: item.profilePicture }
                                         : { uri: `https://ui-avatars.com/api/?name=${item.name.slice(0, 2)}&background=4CAF50&color=fff&size=128` }}
                                     style={styles.profileImage}
                                 />
                                 <View style={styles.friendDetails}>
                                     <Text style={styles.friendName}>{item.name}</Text>
                                 </View>
-                            </View>
+                            </TouchableOpacity>
                         )}
                     />
                 </>
@@ -527,6 +559,12 @@ const FriendsPage = () => {
                     onReject={handleReject}
                 />
             )}
+
+            <FriendProfileModal
+                visible={friendProfileVisible}
+                onClose={() => setFriendProfileVisible(false)}
+                friend={selectedFriend}
+            />
         </SafeAreaView>
     );
 };
