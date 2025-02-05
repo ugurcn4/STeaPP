@@ -3,7 +3,7 @@ import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
 import { HfInference } from '@huggingface/inference';
 import { getWeatherInfo } from './weatherService';
 
-const HF_ACCESS_TOKEN = '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'; // Kopyaladığınız token'ı buraya yapıştırın
+const API_KEY = process.env.REACT_APP_HUGGING_FACE_API_KEY;
 
 const getWeatherPrompt = (weather) => {
     const weatherConditions = {
@@ -68,7 +68,7 @@ const MOCK_RECOMMENDATIONS = [
 const recommendationCache = new Map();
 const CACHE_DURATION = 30 * 60 * 1000; // 30 dakika
 
-const hf = new HfInference(HF_ACCESS_TOKEN);
+const hf = new HfInference(API_KEY);
 
 export const getAIRecommendations = async (latitude, longitude, userPreferences = {}) => {
     try {
@@ -226,24 +226,6 @@ const getRouteImage = (index) => {
     return images[index] || images[0];
 };
 
-// En yakın cache'lenmiş konumu bul
-const findNearestCache = (lat, lon) => {
-    let nearest = null;
-    let minDistance = Infinity;
-
-    for (const [key, value] of recommendationCache.entries()) {
-        const [cacheLat, cacheLon] = key.split(',').map(Number);
-        const distance = calculateDistance(lat, lon, cacheLat, cacheLon);
-
-        if (distance < minDistance && distance < 5) { // 5km'den yakın lokasyonlar
-            minDistance = distance;
-            nearest = value;
-        }
-    }
-
-    return nearest;
-};
-
 // İki nokta arası mesafe hesapla (km)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Dünya yarıçapı (km)
@@ -274,31 +256,6 @@ export const getAIResponse = async (message, coords) => {
     }
 };
 
-// AI yanıtını formatla
-const formatAIResponse = (response, locationInfo, weatherDesc, temperature) => {
-    try {
-        // Emoji ve başlıkları kontrol et
-        if (!response.includes('🎯')) {
-            response = '🎯 Öneriler:\n' + response;
-        }
-        if (!response.includes('⏰')) {
-            response += `\n\n⏰ En iyi zaman: ${new Date().getHours() < 12 ? 'Öğleden önce' : 'Öğleden sonra'}`;
-        }
-        if (!response.includes('💡')) {
-            response += `\n💡 İpucu: ${weatherDesc} havada uygun kıyafet seçimi önemli!`;
-        }
-
-        // Numaralandırmayı düzelt
-        response = response.replace(/(\d+\.)(?!\s)/g, '$1 ');
-
-        // Boş satırları temizle
-        response = response.replace(/\n\s*\n/g, '\n\n');
-
-        return response;
-    } catch (error) {
-        return response;
-    }
-};
 
 // Akıllı yanıt oluşturucuyu geliştirelim
 const generateSmartResponse = (message, locationInfo, weatherDesc, temperature) => {
