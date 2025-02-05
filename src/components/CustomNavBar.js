@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { HomePage, FriendsPage, MapPage, SettingsPage } from '../screens';
+import { HomePage, FriendsPage, MapPage, SettingsPage, ActivitiesScreen } from '../screens';
 import { Ionicons } from '@expo/vector-icons'; // İkonlar için
 
 const Tab = createBottomTabNavigator();
@@ -18,6 +18,8 @@ const CustomNavBar = () => {
                         iconName = focused ? 'map' : 'map-outline';
                     } else if (route.name === 'Arkadaşlar') {
                         iconName = focused ? 'people' : 'people-outline';
+                    } else if (route.name === 'Etkinlikler') {
+                        iconName = focused ? 'calendar' : 'calendar-outline';
                     } else if (route.name === 'Ayarlar') {
                         iconName = focused ? 'settings' : 'settings-outline';
                     }
@@ -56,6 +58,7 @@ const CustomNavBar = () => {
             <Tab.Screen name="Ana Sayfa" component={HomePage} />
             <Tab.Screen name="Harita" component={MapPage} />
             <Tab.Screen name="Arkadaşlar" component={FriendsPage} />
+            <Tab.Screen name="Etkinlikler" component={ActivitiesScreen} />
             <Tab.Screen name="Ayarlar" component={SettingsPage} />
         </Tab.Navigator>
     );

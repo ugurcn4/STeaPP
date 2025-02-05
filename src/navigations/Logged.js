@@ -6,7 +6,9 @@ import {
     LoginPage,
     SignupPage,
     Hakkinda,
-    Bildirimler
+    Bildirimler,
+    NearbyRestaurants,
+    NearbyHotels
 } from '../screens'
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -43,16 +45,6 @@ const Logged = () => {
             <Stack.Screen
                 name="Arkadaşlar"
                 component={FriendsPage}
-                options={{ headerShown: false }}
-            />
-            <Stack.Screen
-                name="Hakkinda"
-                component={Hakkinda}
-                options={{ headerShown: false }}
-            />
-            <Stack.Screen
-                name="Bildirimler"
-                component={Bildirimler}
                 options={{ headerShown: false }}
             />
         </Stack.Navigator>

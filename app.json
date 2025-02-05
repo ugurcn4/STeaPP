@@ -15,17 +15,56 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ugurrucr.STeaPP",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Fotoğraf yüklemek için galerinize erişim izni gerekiyor",
+        "NSCameraUsageDescription": "Fotoğraf çekmek için kamera izni gerekiyor"
+      },
       "plugins": [
         [
           "expo-build-properties",
           {
             "ios": {
-              "useFrameworks": "static",
-              "useModularHeaders": true
+              "useFrameworks": "dynamic",
+              "useModularHeaders": true,
+              "deploymentTarget": "13.0",
+              "pods": {
+                "FirebaseCoreInternal": {
+                  "modular_headers": true
+                },
+                "GoogleUtilities": {
+                  "modular_headers": true
+                },
+                "FirebaseCore": {
+                  "modular_headers": true
+                },
+                "FirebaseFirestore": {
+                  "modular_headers": true
+                },
+                "FirebaseCoreExtension": {
+                  "modular_headers": true
+                },
+                "FirebaseFirestoreInternal": {
+                  "modular_headers": true
+                },
+                "FirebaseAppCheckInterop": {
+                  "modular_headers": true
+                },
+                "FirebaseSharedSwift": {
+                  "modular_headers": true
+                },
+                "FirebaseStorage": {
+                  "modular_headers": true
+                }
+              }
             }
           }
-        ]
-      ]
+        ],
+        "@react-native-firebase/app"
+      ],
+      "config": {
+        "googleMapsApiKey": "AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,7 +82,8 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "CAMERA"
       ]
     },
     "web": {
@@ -57,6 +97,26 @@
     "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/3107485e-043c-4f7d-ad0c-3146533c3dd8"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Yakındaki yerleri göstermek için konumunuza ihtiyacımız var."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Uygulamanın QR kod taraması yapabilmesi için kamera izni gerekiyor."
+        }
+      ],
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "QR kod taraması için kamera izni gerekiyor."
+        }
+      ]
+    ]
   }
 }

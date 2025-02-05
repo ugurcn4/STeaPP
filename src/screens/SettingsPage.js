@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { RblSection } from '../components/';
 import { logout } from '../redux/userSlice';
@@ -7,6 +7,24 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { RadioButton } from 'react-native-paper';
 import { setTheme } from '../redux/themeSlice';
 import { lightTheme, darkTheme } from '../themes';
+import { CommonActions } from '@react-navigation/native';
+
+// Shadow Wrapper Component
+const ShadowWrapper = ({ children, style }) => {
+    if (Platform.OS === 'ios') {
+        return <View style={style}>{children}</View>;
+    }
+
+    return (
+        <View style={[style, {
+            backgroundColor: 'white',
+            borderWidth: 1,
+            borderColor: 'rgba(0,0,0,0.05)',
+        }]}>
+            {children}
+        </View>
+    );
+};
 
 const SettingsPage = ({ navigation }) => {
     const dispatch = useDispatch();
@@ -66,12 +84,17 @@ const SettingsPage = ({ navigation }) => {
             [
                 { text: "Hayır", onPress: () => { } },
                 {
-                    text: "Evet", onPress: () => {
+                    text: "Evet",
+                    onPress: () => {
                         dispatch(logout());
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: "Giriş Yap" }],
-                        });
+                        navigation.dispatch(
+                            CommonActions.reset({
+                                index: 0,
+                                routes: [
+                                    { name: 'Auth', params: { screen: 'Giriş Yap' } }
+                                ],
+                            })
+                        );
                     }
                 }
             ],
@@ -87,13 +110,29 @@ const SettingsPage = ({ navigation }) => {
         navigation.navigate(screen);
     };
 
+    const renderLogoutButton = () => (
+        <TouchableOpacity
+            style={[
+                styles.logoutButton,
+                Platform.OS === 'android' && styles.logoutButtonAndroid
+            ]}
+            onPress={handleLogout}
+        >
+            <Text style={[
+                styles.logoutButtonText,
+                Platform.OS === 'android' && styles.logoutButtonTextAndroid
+            ]}>
+                Çıkış Yap
+            </Text>
+        </TouchableOpacity>
+    );
+
     return (
         <ScrollView
             style={[styles.container, { backgroundColor: currentTheme.background }]}
             contentContainerStyle={{ paddingBottom: 80 }}
         >
-            {/* Header Bölümü */}
-            <View style={[styles.header, { backgroundColor: currentTheme.background }]}>
+            <ShadowWrapper style={[styles.header, { backgroundColor: currentTheme.background }]}>
                 <Text style={[styles.headerTitle, { color: currentTheme.text }]}>Ayarlar</Text>
 
                 {/* Arama Çubuğu */}
@@ -107,11 +146,11 @@ const SettingsPage = ({ navigation }) => {
                         onChangeText={setSearchQuery}
                     />
                 </View>
-            </View>
+            </ShadowWrapper>
 
             <View style={styles.content}>
                 {/* Tema Seçimi Kartı */}
-                <View style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
+                <ShadowWrapper style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
                     <Text style={[styles.cardTitle, { color: currentTheme.text }]}>Tema</Text>
                     <View style={styles.themeOptions}>
                         <TouchableOpacity
@@ -156,45 +195,39 @@ const SettingsPage = ({ navigation }) => {
                             ]}>Sistem</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                </ShadowWrapper>
 
                 {/* Ayarlar Kartları */}
                 {filteredSections.length > 0 ? (
                     filteredSections.map((section, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}
-                            onPress={() => handleNavigation(section.screen)}
-                        >
-                            <View style={styles.settingRow}>
-                                <View style={[styles.iconContainer, { backgroundColor: section.iconColor + '20' }]}>
-                                    <Ionicons name={section.iconName} size={24} color={section.iconColor} />
+                        <ShadowWrapper key={index} style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
+                            <TouchableOpacity
+                                onPress={() => handleNavigation(section.screen)}
+                            >
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconContainer, { backgroundColor: section.iconColor + '20' }]}>
+                                        <Ionicons name={section.iconName} size={24} color={section.iconColor} />
+                                    </View>
+                                    <View style={styles.settingInfo}>
+                                        <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
+                                            {section.title}
+                                        </Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={24} color={currentTheme.text} />
                                 </View>
-                                <View style={styles.settingInfo}>
-                                    <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                        {section.title}
-                                    </Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={24} color={currentTheme.text} />
-                            </View>
-                        </TouchableOpacity>
+                            </TouchableOpacity>
+                        </ShadowWrapper>
                     ))
                 ) : (
-                    <View style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
+                    <ShadowWrapper style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
                         <Text style={[styles.noResults, { color: currentTheme.textSecondary }]}>
                             Sonuç bulunamadı
                         </Text>
-                    </View>
+                    </ShadowWrapper>
                 )}
 
                 {/* Çıkış Yap Butonu */}
-                <TouchableOpacity
-                    style={styles.logoutButton}
-                    onPress={handleLogout}
-                >
-                    <Ionicons name="log-out-outline" size={24} color="#fff" />
-                    <Text style={styles.logoutText}>Çıkış Yap</Text>
-                </TouchableOpacity>
+                {renderLogoutButton()}
             </View>
         </ScrollView>
     );
@@ -215,7 +248,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 10,
-        elevation: 5,
     },
     headerTitle: {
         fontSize: 34,
@@ -241,7 +273,6 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     settingsCard: {
-        backgroundColor: '#fff',
         borderRadius: 20,
         padding: 20,
         marginBottom: 15,
@@ -249,7 +280,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
-        elevation: 3,
     },
     cardTitle: {
         fontSize: 18,
@@ -303,23 +333,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     logoutButton: {
-        backgroundColor: '#FF5252',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 15,
-        borderRadius: 20,
-        marginTop: 20,
-        shadowColor: '#FF5252',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 5,
+        marginHorizontal: 16,
+        marginBottom: Platform.OS === 'ios' ? 40 : 20,
+        borderRadius: 8,
     },
-    logoutText: {
-        color: '#fff',
+    logoutButtonAndroid: {
+        backgroundColor: '#FF3B30',
+        elevation: 3,
+        padding: 12,
+    },
+    logoutButtonText: {
         fontSize: 16,
         fontWeight: '600',
-        marginLeft: 10,
+        textAlign: 'center',
+        color: Platform.OS === 'ios' ? '#FF3B30' : '#FFF',
+    },
+    logoutButtonTextAndroid: {
+        color: '#FFF',
     },
 });

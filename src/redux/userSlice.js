@@ -106,85 +106,84 @@ export const sendPasswordResetEmail = createAsyncThunk(
 );
 
 const initialState = {
-    Loading: false,
     isAuth: false,
-    token: null,
     user: null,
-    error: null,
+    loading: false,
+    error: null
 };
 
-export const userSlice = createSlice({
+const userSlice = createSlice({
     name: 'user',
     initialState,
     reducers: {
-        setEmail: (state, action) => {
-            state.email = action.payload.email;
-        },
-        setPassword: (state, action) => {
-            state.password = action.payload.password;
-        },
-        setUserName: (state, action) => {
-            state.username = action.payload.username;
-        },
         setLoading: (state, action) => {
-            state.Loading = action.payload.Loading;
+            state.loading = action.payload;
+        },
+        setError: (state, action) => {
+            state.error = action.payload;
+            state.loading = false;
+        },
+        clearError: (state) => {
+            state.error = null;
         }
     },
     extraReducers: (builder) => {
         builder
             .addCase(login.pending, (state) => {
-                state.Loading = true;
+                state.loading = true;
+                state.error = null;
             })
             .addCase(login.fulfilled, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = true;
                 state.user = action.payload.user;
                 state.token = action.payload.token;
+                state.error = null;
             })
             .addCase(login.rejected, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.error = action.error.message;
             })
             .addCase(autoLogin.pending, (state) => {
-                state.Loading = true;
+                state.loading = true;
                 state.isAuth = false;
             })
             .addCase(autoLogin.fulfilled, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = true;
                 state.token = action.payload;
             })
             .addCase(autoLogin.rejected, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = false;
                 state.error = action.payload;
                 state.token = null;
             })
             .addCase(logout.pending, (state) => {
-                state.Loading = true;
+                state.loading = true;
             })
             .addCase(logout.fulfilled, (state) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = false;
                 state.token = null;
                 state.error = null;
             })
             .addCase(logout.rejected, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.error = action.payload;
             })
             .addCase(register.pending, (state) => {
-                state.Loading = true;
+                state.loading = true;
                 state.isAuth = false;
             })
             .addCase(register.fulfilled, (state, action) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = true;
                 state.token = action.payload.token;
                 state.user = action.payload.user;
             })
             .addCase(register.rejected, (state) => {
-                state.Loading = false;
+                state.loading = false;
                 state.isAuth = false;
                 state.error = 'Geçersiz E-Posta veya Şifre';
             })
@@ -201,5 +200,5 @@ export const userSlice = createSlice({
     }
 });
 
-export const { setPassword, setEmail, setLoading } = userSlice.actions;
+export const { setLoading, setError, clearError } = userSlice.actions;
 export default userSlice.reducer;

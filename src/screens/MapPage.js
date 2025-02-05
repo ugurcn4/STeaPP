@@ -2,70 +2,174 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Modal, FlatList, Image } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { collection, addDoc, where, query, getDocs, onSnapshot, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, where, query, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, getAuth } from 'firebase/auth';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
-import { addLocation } from '../helpers/firebaseHelpers';
-
 
 import {
     getSharedWithMe,
-    listenToSharedWithMe,
     trackLiveLocations,
     shareSelectedLocations,
+    listenToShares,
+    listenToSharedLocations,
 } from '../helpers/firebaseHelpers';
 import { fetchFriends } from './FriendsPage';
+import { haversine } from '../helpers/locationUtils';
+import EmojiModal from '../modals/EmojiModal';
+import { emojiCategories } from '../modals/EmojiModal';
 
+const CustomMarker = ({ type, timestamp, user, emoji }) => {
+    const markerConfig = {
+        normal: {
+            color: '#2C3E50',
+            icon: emoji || '📍',
+            size: 32,
+            isEmoji: true
+        },
+        live: {
+            color: '#4CAF50',
+            icon: 'radio-button-on',
+            size: 24,
+            isEmoji: false
+        },
+        shared: {
+            color: '#2196F3',
+            icon: emoji || '📍',
+            size: 32,
+            isEmoji: true
+        },
+        selected: {
+            color: '#FFC107',
+            icon: 'checkbox',
+            size: 24,
+            isEmoji: false
+        }
+    };
 
-// İki koordinat arasındaki mesafeyi hesaplamak için Haversine formülü
-export const haversine = (lat1, lon1, lat2, lon2) => {
-    const toRad = (x) => x * Math.PI / 180;
-    const R = 6371e3; // Dünyanın metre cinsinden yarıçapı
-    const φ1 = toRad(lat1);
-    const φ2 = toRad(lat2);
-    const Δφ = toRad(lat2 - lat1);
-    const Δλ = toRad(lon2 - lon1);
+    const config = markerConfig[type] || markerConfig.normal;
 
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-        Math.cos(φ1) * Math.cos(φ2) *
-        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    // Tarih formatını düzenleyen yardımcı fonksiyon
+    const formatDate = (timestamp) => {
+        if (!timestamp) return '';
 
-    return R * c; // Metre cinsinden mesafe
-};
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-const CustomMarker = ({ isSelected, timestamp, type = 'normal' }) => {
-    let markerColor = '#FF5252'; // Varsayılan kırmızı
-    let iconName = 'location';
+        // Bugün için
+        if (diffDays === 0) {
+            if (diffTime < 1000 * 60 * 60) { // 1 saatten az
+                const minutes = Math.floor(diffTime / (1000 * 60));
+                return `${minutes} dakika önce`;
+            }
+            return 'Bugün ' + date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        }
 
-    switch (type) {
-        case 'selected':
-            markerColor = '#4CAF50'; // Seçili yeşil
-            iconName = 'location';
-            break;
-        case 'shared':
-            markerColor = '#2196F3'; // Paylaşılan mavi
-            iconName = 'share-location';
-            break;
-        case 'live':
-            markerColor = '#FFC107'; // Canlı sarı
-            iconName = 'navigate';
-            break;
-    }
+        // Dün için
+        if (diffDays === 1) {
+            return 'Dün ' + date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 7 günden az ise
+        if (diffDays < 7) {
+            return `${diffDays} gün önce`;
+        }
+
+        // Diğer durumlar için
+        return date.toLocaleDateString('tr-TR', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+    };
 
     return (
         <View style={styles.markerContainer}>
-            <View style={[styles.markerBubble, { backgroundColor: markerColor }]}>
-                <Ionicons name={iconName} size={20} color="#FFF" />
-            </View>
-            <View style={[styles.markerArrow, { borderTopColor: markerColor }]} />
-            {timestamp && (
-                <View style={styles.markerLabel}>
-                    <Text style={styles.markerText}>
-                        {new Date(timestamp).toLocaleDateString()}
-                    </Text>
+            {config.isEmoji ? (
+                <Text style={[styles.markerEmoji, { fontSize: config.size }]}>
+                    {config.icon}
+                </Text>
+            ) : (
+                <View style={styles.markerIconContainer}>
+                    <Ionicons
+                        name={config.icon}
+                        size={config.size}
+                        color={config.color}
+                    />
                 </View>
+            )}
+
+            {(timestamp || user) && (
+                <View style={styles.markerLabel}>
+                    {user && (
+                        <Text style={[styles.markerUsername, { color: config.color }]}>
+                            {user}
+                        </Text>
+                    )}
+                    {timestamp && (
+                        <View style={styles.timeContainer}>
+                            <Ionicons
+                                name="time-outline"
+                                size={12}
+                                color="#666666"
+                                style={styles.timeIcon}
+                            />
+                            <Text style={styles.markerTimestamp}>
+                                {formatDate(timestamp)}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            )}
+        </View>
+    );
+};
+
+const SelectionModeBar = ({ selectionMode, selectedCount, onToggleMode, onShare, onClear }) => {
+    return (
+        <View style={styles.selectionModeContainer}>
+            {selectionMode ? (
+                <View style={styles.selectionModeActiveBar}>
+                    <View style={styles.selectionModeInfo}>
+                        <Text style={styles.selectedCountText}>
+                            {selectedCount} konum seçildi
+                        </Text>
+                    </View>
+                    <View style={styles.selectionModeActions}>
+                        {selectedCount > 0 && (
+                            <>
+                                <TouchableOpacity
+                                    style={styles.actionButton}
+                                    onPress={onClear}
+                                >
+                                    <Ionicons name="trash-outline" size={22} color="#FF5252" />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.actionButton}
+                                    onPress={onShare}
+                                >
+                                    <Ionicons name="share-social" size={22} color="#4CAF50" />
+                                </TouchableOpacity>
+                            </>
+                        )}
+                        <TouchableOpacity
+                            style={styles.exitSelectionButton}
+                            onPress={onToggleMode}
+                        >
+                            <Text style={styles.exitSelectionText}>Çıkış</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            ) : (
+                <TouchableOpacity
+                    style={styles.selectionModeButton}
+                    onPress={onToggleMode}
+                >
+                    <Ionicons name="checkbox-outline" size={24} color="#4CAF50" />
+                    <Text style={styles.selectionModeButtonText}>Konum Seç</Text>
+                </TouchableOpacity>
             )}
         </View>
     );
@@ -83,10 +187,21 @@ const MapPage = () => {
     const [liveLocation, setLiveLocation] = useState(null); // Canlı konum için state
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedLocations, setSelectedLocations] = useState([]);
-    const [selectedFriend, setSelectedFriend] = useState(null);
     const [friendPickerVisible, setFriendPickerVisible] = useState(false);
     const [friends, setFriends] = useState([]);
     const mapRef = useRef(null);
+    const [liveLocations, setLiveLocations] = useState([]);
+    const [liveLocationsUnsubscribe, setLiveLocationsUnsubscribe] = useState(null);
+    const [sharedLocationsUnsubscribe, setSharedLocationsUnsubscribe] = useState(null);
+    const [activeShares, setActiveShares] = useState([]);
+    const [sharedWithMe, setSharedWithMe] = useState([]);
+    const [locations, setLocations] = useState({
+        active: {},
+        shared: {}
+    });
+    const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+    const [selectedMarkerIcon, setSelectedMarkerIcon] = useState('pin');
+    const [selectedMarkerId, setSelectedMarkerId] = useState(null);
 
     const auth = getAuth();
 
@@ -101,8 +216,6 @@ const MapPage = () => {
 
         return () => unsubscribe();
     }, []);
-
-
 
     useEffect(() => {
         const getLocation = async () => {
@@ -243,44 +356,93 @@ const MapPage = () => {
             getLocation();
             fetchLocations();
             fetchSharedLocations();
-
-            const unsubscribeSharedWithMe = listenToSharedWithMe(userId, (sharedLocations) => {
-                setSharedLocations(sharedLocations);
-            });
-
-            // Canlı konumları dinleyin
-            const unsubscribeLiveLocations = trackLiveLocations(userId, (liveLocations) => {
-                if (liveLocations.length > 0) {
-                    setLiveLocation(liveLocations[liveLocations.length - 1]);
-                }
-                else {
-                    setLiveLocation(null); // Canlı konum yoksa null yap
-                }
-            });
-
-            return () => {
-                unsubscribeSharedWithMe();
-                unsubscribeLiveLocations();
-            };
         }
-
     }, [userId]);
 
+    // Paylaşımları dinlemek için ayrı bir useEffect
+    useEffect(() => {
+        if (!userId) return;
+
+        // Paylaşımları dinle
+        const unsubscribe = listenToShares(userId, (type, locations) => {
+            if (type === 'active') {
+                setActiveShares(locations);
+            } else if (type === 'shared') {
+                setSharedWithMe(locations);
+            }
+        });
+
+        // Canlı konumları dinle
+        const unsubscribeLive = trackLiveLocations(userId, (locations) => {
+            if (Array.isArray(locations)) {
+                setLiveLocations(locations);
+            }
+        });
+
+        return () => {
+            if (unsubscribe) unsubscribe();
+            if (unsubscribeLive) unsubscribeLive();
+        };
+    }, [userId]);
+
+    // Konumları filtrelemek için useEffect
+    useEffect(() => {
+        const filterLocations = () => {
+            // Canlı konumları filtrele
+            const filteredLive = liveLocations.filter(location => {
+                const hasActiveShare = activeShares.some(share =>
+                    share.friendId === location.sharedBy &&
+                    share.type === 'live'
+                );
+                return hasActiveShare;
+            });
+
+            // Paylaşılan konumları filtrele
+            const filteredShared = sharedLocations.filter(location => {
+                const hasActiveShare = activeShares.some(share =>
+                    share.friendId === location.sharedBy &&
+                    share.type === 'current'
+                );
+                return hasActiveShare;
+            });
+
+            setLocations({
+                active: filteredLive.map(loc => ({
+                    ...loc,
+                    type: 'live'
+                })),
+                shared: filteredShared.map(loc => ({
+                    ...loc,
+                    type: 'shared'
+                }))
+            });
+        };
+
+        filterLocations();
+    }, [activeShares, liveLocations, sharedLocations]);
 
     const handleMarkerPress = (location) => {
-        if (!selectionMode) return;
-
-        setSelectedLocations((prev) =>
-            prev.some(loc =>
+        if (selectionMode) {
+            // Seçim modu aktifse mevcut seçim işlemlerini yap
+            const isSelected = selectedLocations.some(loc =>
                 loc.enlem === location.enlem &&
                 loc.boylam === location.boylam
-            )
-                ? prev.filter(loc =>
-                    loc.enlem !== location.enlem ||
-                    loc.boylam !== location.boylam
-                )
-                : [...prev, location]
-        );
+            );
+
+            if (isSelected) {
+                setSelectedLocations(prev =>
+                    prev.filter(loc =>
+                        loc.enlem !== location.enlem ||
+                        loc.boylam !== location.boylam
+                    )
+                );
+            } else {
+                setSelectedLocations(prev => [...prev, location]);
+            }
+        } else {
+            // Seçim modu aktif değilse etiket göster/gizle
+            setSelectedMarkerId(prev => prev === location.id ? null : location.id);
+        }
     };
 
 
@@ -318,6 +480,30 @@ const MapPage = () => {
             loadFriends();
         }
     }, [friendPickerVisible, userId]);
+
+    useEffect(() => {
+        if (!userId) return;
+
+        // Paylaşılan konumları dinle
+        const unsubscribe = listenToSharedLocations(userId, (type, locations) => {
+            if (type === 'live') {
+                setLiveLocations(locations);
+            } else {
+                setSharedLocations(locations);
+            }
+        });
+
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
+    }, [userId]);
+
+    const getEmojiForMarker = (markerId) => {
+        const selectedEmoji = emojiCategories
+            .flatMap(category => category.emojis)
+            .find(emoji => emoji.id === selectedMarkerIcon);
+        return selectedEmoji ? selectedEmoji.emoji : '📍';
+    };
 
     if (loading) {
         return (
@@ -361,7 +547,7 @@ const MapPage = () => {
 
                 {locationClusters.flat().map((loc, index) => (
                     <Marker
-                        key={index}
+                        key={`cluster-${index}`}
                         coordinate={{
                             latitude: parseFloat(loc.enlem),
                             longitude: parseFloat(loc.boylam)
@@ -369,32 +555,49 @@ const MapPage = () => {
                         onPress={() => handleMarkerPress(loc)}
                     >
                         <CustomMarker
-                            isSelected={selectedLocations.some(
-                                selected =>
-                                    selected.enlem === loc.enlem &&
-                                    selected.boylam === loc.boylam
-                            )}
-                            timestamp={loc.timestamp}
                             type={selectedLocations.some(
                                 selected =>
                                     selected.enlem === loc.enlem &&
                                     selected.boylam === loc.boylam
                             ) ? 'selected' : 'normal'}
+                            timestamp={selectedMarkerId === loc.id ? loc.timestamp : null}
+                            emoji={getEmojiForMarker(loc.id)}
                         />
                     </Marker>
                 ))}
 
-                {sharedLocations.map((loc, index) => (
+                {locations.active.map((loc) => (
                     <Marker
-                        key={`shared_${index}`}
+                        key={`live-${loc.sharedBy}-${loc.timestamp}`}
                         coordinate={{
-                            latitude: parseFloat(loc.latitude),
-                            longitude: parseFloat(loc.longitude)
+                            latitude: loc.latitude,
+                            longitude: loc.longitude
                         }}
+                        onPress={() => handleMarkerPress(loc)}
                     >
                         <CustomMarker
-                            timestamp={loc.timestamp}
+                            type="live"
+                            timestamp={selectedMarkerId === loc.id ? loc.timestamp : null}
+                            user={selectedMarkerId === loc.id ? loc.sharedBy : null}
+                            emoji={getEmojiForMarker(loc.id)}
+                        />
+                    </Marker>
+                ))}
+
+                {locations.shared.map((loc) => (
+                    <Marker
+                        key={`shared-${loc.sharedBy}-${loc.timestamp}`}
+                        coordinate={{
+                            latitude: loc.latitude,
+                            longitude: loc.longitude
+                        }}
+                        onPress={() => handleMarkerPress(loc)}
+                    >
+                        <CustomMarker
                             type="shared"
+                            timestamp={selectedMarkerId === loc.id ? loc.timestamp : null}
+                            user={selectedMarkerId === loc.id ? loc.sharedBy : null}
+                            emoji={getEmojiForMarker(loc.id)}
                         />
                     </Marker>
                 ))}
@@ -407,26 +610,61 @@ const MapPage = () => {
                         }}
                     >
                         <CustomMarker
-                            timestamp={liveLocation.timestamp}
                             type="live"
+                            timestamp={selectedMarkerId === liveLocation.id ? liveLocation.timestamp : null}
+                            user={selectedMarkerId === liveLocation.id ? liveLocation.sharedBy : null}
+                            emoji={getEmojiForMarker(liveLocation.id)}
                         />
                     </Marker>
                 )}
             </MapView>
 
+            {selectionMode && (
+                <View style={styles.selectionModeOverlay}>
+                    <Text style={styles.selectionModeText}>
+                        Rota seçmek için işaretçilere tıklayın
+                    </Text>
+                </View>
+            )}
+
             <View style={styles.mapControls}>
                 <TouchableOpacity
-                    style={styles.mapTypeButton}
+                    style={styles.controlButton}
                     onPress={() => setPickerVisible(!pickerVisible)}
                 >
                     <Ionicons name="layers-outline" size={24} color="#333" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={styles.myLocationButton}
+                    style={styles.controlButton}
                     onPress={handleMyLocation}
                 >
                     <Ionicons name="locate" size={24} color="#333" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.controlButton, styles.emojiControlButton]}
+                    onPress={() => setEmojiPickerVisible(true)}
+                >
+                    <Text style={styles.selectedEmoji}>
+                        {emojiCategories
+                            .flatMap(category => category.emojis)
+                            .find(emoji => emoji.id === selectedMarkerIcon)?.emoji || '📍'}
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.controlButton,
+                        { backgroundColor: selectionMode ? '#E8F5E9' : '#fff' }
+                    ]}
+                    onPress={() => setSelectionMode(!selectionMode)}
+                >
+                    <Ionicons
+                        name={selectionMode ? "checkbox" : "checkbox-outline"}
+                        size={24}
+                        color={selectionMode ? "#4CAF50" : "#333"}
+                    />
                 </TouchableOpacity>
             </View>
 
@@ -467,31 +705,35 @@ const MapPage = () => {
                 </View>
             )}
 
-            <View style={styles.selectionControls}>
-                <TouchableOpacity
-                    style={[styles.selectionButton, selectionMode && styles.activeSelectionButton]}
-                    onPress={() => setSelectionMode(!selectionMode)}
-                >
-                    <Ionicons
-                        name={selectionMode ? "checkmark-circle" : "ellipse-outline"}
-                        size={24}
-                        color={selectionMode ? "#fff" : "#333"}
-                    />
-                    <Text style={[styles.selectionButtonText, selectionMode && styles.activeSelectionButtonText]}>
-                        {selectionMode ? "Seçim Modunu Kapat" : "Seçim Modunu Aç"}
-                    </Text>
-                </TouchableOpacity>
-
-                {selectionMode && selectedLocations.length > 0 && (
-                    <TouchableOpacity
-                        style={styles.shareButton}
-                        onPress={() => setFriendPickerVisible(true)}
-                    >
-                        <Ionicons name="share-social" size={24} color="#fff" />
-                        <Text style={styles.shareButtonText}>Paylaş ({selectedLocations.length})</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
+            {selectionMode && (
+                <View style={styles.selectionModeContainer}>
+                    <View style={styles.selectionModeActiveBar}>
+                        <View style={styles.selectionModeInfo}>
+                            <Text style={styles.selectedCountText}>
+                                {selectedLocations.length} konum seçildi
+                            </Text>
+                        </View>
+                        <View style={styles.selectionModeActions}>
+                            {selectedLocations.length > 0 && (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.actionButton}
+                                        onPress={() => setSelectedLocations([])}
+                                    >
+                                        <Ionicons name="trash-outline" size={22} color="#FF5252" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.actionButton}
+                                        onPress={() => setFriendPickerVisible(true)}
+                                    >
+                                        <Ionicons name="share-social" size={22} color="#4CAF50" />
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            )}
 
             <Modal
                 visible={friendPickerVisible}
@@ -556,6 +798,22 @@ const MapPage = () => {
                     </View>
                 </View>
             </Modal>
+
+            <Modal
+                visible={emojiPickerVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setEmojiPickerVisible(false)}
+            >
+                <EmojiModal
+                    currentEmoji={selectedMarkerIcon}
+                    onSelectEmoji={(emoji) => {
+                        setSelectedMarkerIcon(emoji.id);
+                        setEmojiPickerVisible(false);
+                    }}
+                    onClose={() => setEmojiPickerVisible(false)}
+                />
+            </Modal>
         </View>
     );
 };
@@ -572,19 +830,10 @@ const styles = StyleSheet.create({
         right: 16,
         top: 50,
         backgroundColor: 'transparent',
+        alignItems: 'center',
+        gap: 10,
     },
-    mapTypeButton: {
-        backgroundColor: '#fff',
-        padding: 12,
-        borderRadius: 30,
-        marginBottom: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-    myLocationButton: {
+    controlButton: {
         backgroundColor: '#fff',
         padding: 12,
         borderRadius: 30,
@@ -593,6 +842,8 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
         elevation: 5,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     mapTypeSelector: {
         position: 'absolute',
@@ -625,53 +876,71 @@ const styles = StyleSheet.create({
     selectedMapTypeText: {
         color: '#fff',
     },
-    selectionControls: {
+    selectionModeContainer: {
         position: 'absolute',
-        bottom: 100,
+        bottom: 20,
         left: 16,
         right: 16,
     },
-    selectionButton: {
+    selectionModeButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fff',
+        backgroundColor: '#FFFFFF',
         padding: 12,
-        borderRadius: 30,
+        borderRadius: 25,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
         elevation: 5,
     },
-    activeSelectionButton: {
-        backgroundColor: '#4CAF50',
-    },
-    selectionButtonText: {
+    selectionModeButtonText: {
         marginLeft: 8,
         fontSize: 16,
+        color: '#4CAF50',
+        fontWeight: '600',
+    },
+    selectionModeActiveBar: {
+        flexDirection: 'row',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 25,
+        padding: 12,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 5,
+    },
+    selectionModeInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    selectedCountText: {
+        fontSize: 15,
         color: '#333',
+        fontWeight: '600',
     },
-    activeSelectionButtonText: {
-        color: '#fff',
-    },
-    shareButton: {
+    selectionModeActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#4CAF50',
-        padding: 12,
-        borderRadius: 30,
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
     },
-    shareButtonText: {
+    actionButton: {
+        padding: 8,
+        marginHorizontal: 4,
+    },
+    exitSelectionButton: {
+        backgroundColor: '#F5F5F5',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
         marginLeft: 8,
-        fontSize: 16,
-        color: '#fff',
+    },
+    exitSelectionText: {
+        color: '#333',
+        fontWeight: '600',
+        fontSize: 14,
     },
     modalContainer: {
         flex: 1,
@@ -760,49 +1029,76 @@ const styles = StyleSheet.create({
     },
     markerContainer: {
         alignItems: 'center',
+        width: 'auto',
     },
-    markerBubble: {
-        flexDirection: 'row',
+    markerEmoji: {
+        textAlign: 'center',
+        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 1,
+    },
+    markerIconContainer: {
+        padding: 8,
+        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1.5,
+        borderColor: '#E0E0E0',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
-        borderRadius: 20,
-        backgroundColor: '#FF5252',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-    markerArrow: {
-        width: 0,
-        height: 0,
-        borderLeftWidth: 8,
-        borderRightWidth: 8,
-        borderTopWidth: 8,
-        borderStyle: 'solid',
-        backgroundColor: 'transparent',
-        borderLeftColor: 'transparent',
-        borderRightColor: 'transparent',
-        borderTopColor: '#FF5252',
-        alignSelf: 'center',
-        marginTop: -1,
     },
     markerLabel: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 4,
+        backgroundColor: '#FFFFFF',
         paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderRadius: 8,
         marginTop: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-        elevation: 3,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        minWidth: 100,
+        alignItems: 'center',
     },
-    markerText: {
-        fontSize: 12,
-        color: '#333',
+    timeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+        paddingTop: 2,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F0F0',
+    },
+    timeIcon: {
+        marginRight: 4,
+    },
+    markerUsername: {
+        fontSize: 13,
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 2,
+    },
+    markerTimestamp: {
+        fontSize: 11,
+        color: '#666666',
+    },
+    selectionModeOverlay: {
+        position: 'absolute',
+        top: 100,
+        left: 16,
+        right: 16,
+        backgroundColor: 'rgba(76, 175, 80, 0.9)',
+        padding: 12,
+        borderRadius: 25,
+        zIndex: 1,
+        alignItems: 'center',
+    },
+    selectionModeText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    emojiControlButton: {
+        padding: 8,
+    },
+    selectedEmoji: {
+        fontSize: 24,
     },
 });
 

@@ -1,21 +1,27 @@
 // Tanım: isLogged değerine göre Auth veya Logged'ı görüntüleyen kod
-import React from 'react'
-import Auth from './Auth'
-import MainStack from './MainStack'
-import { NavigationContainer } from '@react-navigation/native';
+import React from 'react';
 import { useSelector } from 'react-redux';
+import Auth from './Auth';
+import MainStack from './MainStack';
+import { createStackNavigator } from '@react-navigation/stack';
+
+const Stack = createStackNavigator();
 
 const RootPage = () => {
-    const { isAuth } = useSelector((state) => state.user)
+    const { isAuth } = useSelector((state) => state.user);
 
     return (
-        <NavigationContainer
-            ScreenOptions={{ headerShown: false }}>
-            {
-                !isAuth ? <Auth /> : <MainStack />
-            }
-        </NavigationContainer>
-    )
-}
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {!isAuth ? (
+                <Stack.Screen name="Auth" component={Auth} />
+            ) : (
+                <Stack.Screen
+                    name="MainStack"
+                    component={MainStack}
+                />
+            )}
+        </Stack.Navigator>
+    );
+};
 
-export default RootPage
+export default RootPage;

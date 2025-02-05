@@ -1,27 +1,81 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useSelector } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { lightTheme, darkTheme } from '../../themes';
+import { useNotifications } from '../../Notifications/useNotifications';
+import * as Notifications from 'expo-notifications';
 
 const NotificationsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
     const currentTheme = theme === 'dark' ? darkTheme : lightTheme;
 
-    const [notifications, setNotifications] = useState({
-        allNotifications: true,
-        newFriends: true,
-        messages: true,
-        activityUpdates: true,
-        emailNotifications: false,
-    });
+    const {
+        settings,
+        loading,
+        error,
+        toggleNotificationSetting,
+        loadNotificationSettings
+    } = useNotifications();
 
-    const toggleSwitch = (key) => {
-        setNotifications(prev => ({
-            ...prev,
-            [key]: !prev[key]
-        }));
+    useEffect(() => {
+        loadNotificationSettings();
+    }, []);
+
+    const sendTestNotification = async () => {
+        try {
+            const { status } = await Notifications.getPermissionsAsync();
+
+            if (status !== 'granted') {
+                Alert.alert(
+                    "İzin Gerekli",
+                    "Bildirim göndermek için izin gerekiyor.",
+                    [{ text: "Tamam", style: "default" }]
+                );
+                return;
+            }
+
+            if (settings.allNotifications) {
+                await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: "Test Bildirimi",
+                        body: "Bildirimler başarıyla çalışıyor! 🎉",
+                        sound: true,
+                        priority: 'high',
+                        vibrate: true,
+                    },
+                    trigger: null,
+                });
+
+                Alert.alert(
+                    "Başarılı",
+                    "Test bildirimi gönderildi!",
+                    [{ text: "Tamam", style: "default" }]
+                );
+            } else {
+                Alert.alert(
+                    "Bildirim Hatası",
+                    "Bildirimleri test etmek için önce 'Tüm Bildirimler' ayarını açın.",
+                    [{ text: "Tamam", style: "default" }]
+                );
+            }
+        } catch (error) {
+            console.error('Test bildirimi gönderme hatası:', error);
+            Alert.alert(
+                "Hata",
+                "Bildirim gönderilirken bir hata oluştu: " + error.message,
+                [{ text: "Tamam", style: "default" }]
+            );
+        }
     };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
+                <ActivityIndicator size="large" color="#4CAF50" />
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
@@ -47,8 +101,8 @@ const NotificationsPage = ({ navigation }) => {
                         Tüm Bildirimler
                     </Text>
                     <Switch
-                        value={notifications.allNotifications}
-                        onValueChange={() => toggleSwitch('allNotifications')}
+                        value={settings.allNotifications}
+                        onValueChange={(value) => toggleNotificationSetting('allNotifications', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
                     />
                 </View>
@@ -58,9 +112,10 @@ const NotificationsPage = ({ navigation }) => {
                         Yeni Arkadaş İstekleri
                     </Text>
                     <Switch
-                        value={notifications.newFriends}
-                        onValueChange={() => toggleSwitch('newFriends')}
+                        value={settings.newFriends}
+                        onValueChange={(value) => toggleNotificationSetting('newFriends', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
                     />
                 </View>
 
@@ -69,9 +124,10 @@ const NotificationsPage = ({ navigation }) => {
                         Mesajlar
                     </Text>
                     <Switch
-                        value={notifications.messages}
-                        onValueChange={() => toggleSwitch('messages')}
+                        value={settings.messages}
+                        onValueChange={(value) => toggleNotificationSetting('messages', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
                     />
                 </View>
 
@@ -80,9 +136,10 @@ const NotificationsPage = ({ navigation }) => {
                         Aktivite Güncellemeleri
                     </Text>
                     <Switch
-                        value={notifications.activityUpdates}
-                        onValueChange={() => toggleSwitch('activityUpdates')}
+                        value={settings.activityUpdates}
+                        onValueChange={(value) => toggleNotificationSetting('activityUpdates', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
                     />
                 </View>
 
@@ -91,12 +148,36 @@ const NotificationsPage = ({ navigation }) => {
                         E-posta Bildirimleri
                     </Text>
                     <Switch
-                        value={notifications.emailNotifications}
-                        onValueChange={() => toggleSwitch('emailNotifications')}
+                        value={settings.emailNotifications}
+                        onValueChange={(value) => toggleNotificationSetting('emailNotifications', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
                     />
                 </View>
             </View>
+
+            <TouchableOpacity
+                style={[
+                    styles.testButton,
+                    { opacity: settings.allNotifications ? 1 : 0.5 }
+                ]}
+                onPress={sendTestNotification}
+            >
+                <Ionicons
+                    name="notifications"
+                    size={24}
+                    color="#FFFFFF"
+                />
+                <Text style={styles.testButtonText}>
+                    Test Bildirimi Gönder
+                </Text>
+            </TouchableOpacity>
+
+            {error && (
+                <Text style={styles.errorText}>
+                    {error}
+                </Text>
+            )}
 
             <Text style={[styles.note, { color: currentTheme.text }]}>
                 Not: Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
@@ -147,6 +228,28 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
         marginTop: 20,
         opacity: 0.7,
+    },
+    errorText: {
+        color: 'red',
+        fontSize: 14,
+        marginTop: 20,
+        textAlign: 'center',
+    },
+    testButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#4CAF50',
+        padding: 15,
+        borderRadius: 10,
+        marginHorizontal: 20,
+        marginTop: 20,
+    },
+    testButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 10,
     },
 });
 

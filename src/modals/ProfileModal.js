@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
-import { Entypo, FontAwesome } from '@expo/vector-icons';
+import { Entypo, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from '../../firebaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import Toast from 'react-native-toast-message';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -25,7 +29,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     const [imageModalVisible, setImageModalVisible] = useState(false);
     const [uploading, setUploading] = useState(false); // Yükleme durumu
     const [progress, setProgress] = useState(0); // Yükleme ilerlemesi
-
+    const [verificationStep, setVerificationStep] = useState('input'); // 'input', 'verify'
+    const [verificationCode, setVerificationCode] = useState('');
+    const [timer, setTimer] = useState(60);
+    const [isTimerActive, setIsTimerActive] = useState(false);
 
     const auth = getAuth();
 
@@ -204,7 +211,6 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         }
     };
 
-
     const getProfileImageUri = () => {
         if (userData?.profilePicture) {
             return { uri: userData.profilePicture };
@@ -215,9 +221,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 uri: `https://ui-avatars.com/api/?name=${initials}&background=4CAF50&color=fff&size=128`,
             };
         }
-
     };
-
 
     const handleNavigateToFriendsPage = () => {
         setModalVisible(false);
@@ -243,6 +247,62 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         }));
     };
 
+    // Timer için useEffect
+    useEffect(() => {
+        let interval;
+        if (isTimerActive && timer > 0) {
+            interval = setInterval(() => {
+                setTimer((prev) => prev - 1);
+            }, 1000);
+        } else if (timer === 0) {
+            setIsTimerActive(false);
+            setTimer(60);
+        }
+        return () => clearInterval(interval);
+    }, [isTimerActive, timer]);
+
+    const handleSendVerificationCode = async () => {
+        if (!userInfo.phoneNumber || !userInfo.phoneNumber.match(/^\d{10,}$/)) {
+            showToast('error', 'Hata', 'Geçerli bir telefon numarası girin.');
+            return;
+        }
+
+        try {
+            const response = await sendVerificationSMS(userInfo.phoneNumber);
+            if (response.success) {
+                setVerificationStep('verify');
+                setIsTimerActive(true);
+                showToast('success', 'Başarılı', 'Doğrulama kodu gönderildi');
+            } else {
+                showToast('error', 'Hata', response.message);
+            }
+        } catch (error) {
+            showToast('error', 'Hata', 'Doğrulama kodu gönderilemedi');
+        }
+    };
+
+    const handleVerifyCode = async () => {
+        if (!verificationCode || verificationCode.length !== 6) {
+            showToast('error', 'Hata', '6 haneli doğrulama kodunu girin');
+            return;
+        }
+
+        try {
+            const response = await verifyPhoneNumber(userInfo.phoneNumber, verificationCode);
+            if (response.success) {
+                await handleAddPhoneNumber();
+                setVerificationStep('input');
+                setVerificationCode('');
+                setPhoneModalVisible(false);
+                showToast('success', 'Başarılı', 'Telefon numarası doğrulandı ve eklendi');
+            } else {
+                showToast('error', 'Hata', 'Doğrulama kodu hatalı');
+            }
+        } catch (error) {
+            showToast('error', 'Hata', 'Doğrulama işlemi başarısız');
+        }
+    };
+
     return (
         <Modal
             animationType="fade"
@@ -250,87 +310,225 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
             visible={modalVisible}
             onRequestClose={() => setModalVisible(false)}
         >
-            <View style={styles.modalContainer}>
-                <View style={styles.modalContent}>
-                    <View style={styles.header}>
-                        <View style={styles.profileSection}>
-                            <TouchableOpacity style={styles.imageContainer} onPress={() => setImageModalVisible(true)}>
+            <BlurView intensity={20} style={styles.modalContainer}>
+                <Animated.View
+                    entering={FadeInDown.springify()}
+                    exiting={FadeOutDown.springify()}
+                    style={styles.modalContent}
+                >
+                    {/* Header Section */}
+                    <View style={styles.headerSection}>
+                        <TouchableOpacity
+                            style={styles.closeButton}
+                            onPress={() => setModalVisible(false)}
+                        >
+                            <MaterialCommunityIcons name="close" size={24} color="#666" />
+                        </TouchableOpacity>
+
+                        <View style={styles.profileHeader}>
+                            <TouchableOpacity
+                                style={styles.avatarContainer}
+                                onPress={() => setImageModalVisible(true)}
+                            >
                                 <Image
-                                    style={styles.profileImage}
                                     source={getProfileImageUri()}
+                                    style={styles.avatarImage}
                                 />
-                                <TouchableOpacity style={styles.editIcon} onPress={handleChangeProfilePicture}>
-                                    <FontAwesome name="pencil" size={18} color="#fff" />
-                                </TouchableOpacity>
+                                <View style={styles.editIconContainer}>
+                                    <MaterialCommunityIcons
+                                        name="camera"
+                                        size={20}
+                                        color="#fff"
+                                        onPress={handleChangeProfilePicture}
+                                    />
+                                </View>
                             </TouchableOpacity>
 
+                            <Text style={styles.userName}>{userData?.name || 'İsimsiz Kullanıcı'}</Text>
+                            <Text style={styles.userBio}>{userInfo?.bio || 'Biyografi ekleyin'}</Text>
+                        </View>
 
-                            <View style={styles.nameSection}>
-                                <Text style={styles.name}>{userData?.name || ''}</Text>
-                                <Text style={styles.jobTitle}>{userInfo?.bio || 'Biyografi Ekleyin'}</Text>
-                                <View style={styles.statsSection}>
-                                    <TouchableOpacity style={styles.statsBox} onPress={handleNavigateToFriendsPage}>
-                                        <Text style={styles.statsNumber}>{userData?.friendsCount || 0}</Text>
-                                        <Text style={styles.statsLabel}>Arkadaş</Text>
-                                    </TouchableOpacity>
-                                    <View style={styles.statsBox}>
-                                        <Text style={styles.statsNumber}>10</Text>
-                                        <Text style={styles.statsLabel}>Favori</Text>
-                                    </View>
-                                </View>
+                        <View style={styles.statsContainer}>
+                            <TouchableOpacity
+                                style={styles.statItem}
+                                onPress={handleNavigateToFriendsPage}
+                            >
+                                <Text style={styles.statNumber}>{userData?.friendsCount || 0}</Text>
+                                <Text style={styles.statLabel}>Arkadaş</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                            <View style={styles.statItem}>
+                                <Text style={styles.statNumber}>10</Text>
+                                <Text style={styles.statLabel}>Favori</Text>
                             </View>
                         </View>
                     </View>
 
-                    <View style={styles.infoContainer}>
-                        <View style={styles.infoRow}>
-                            <Entypo name="mail" size={24} color="#4A90E2" />
-                            <Text style={styles.infoText}>
-                                {userData?.email || auth.currentUser?.email || ''}
-                            </Text>
-                        </View>
-                        <TouchableOpacity style={styles.infoRow} onPress={() => setPhoneModalVisible(true)}>
-                            <Entypo name="phone" size={24} color="#4A90E2" />
-                            <Text style={styles.infoText}>{userInfo?.phoneNumber || 'Telefon numarası ekle'}</Text>
+                    {/* Info Cards Section */}
+                    <View style={styles.infoSection}>
+                        <Text style={styles.sectionTitle}>İletişim Bilgileri</Text>
+
+                        <TouchableOpacity style={styles.infoCard}>
+                            <MaterialCommunityIcons name="email-outline" size={24} color="#4CAF50" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>E-posta</Text>
+                                <Text style={styles.infoValue}>
+                                    {userData?.email || auth.currentUser?.email || ''}
+                                </Text>
+                            </View>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.infoRow} onPress={() => setInstaModalVisible(true)}>
-                            <Entypo name="instagram" size={24} color="#4A90E2" />
-                            <Text style={styles.infoText}>{'@' + userInfo?.insta || 'Instagram hesabı ekle'}</Text>
+
+                        <TouchableOpacity
+                            style={styles.infoCard}
+                            onPress={() => setPhoneModalVisible(true)}
+                        >
+                            <MaterialCommunityIcons name="phone-outline" size={24} color="#4CAF50" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Telefon</Text>
+                                <Text style={styles.infoValue}>
+                                    {userInfo?.phoneNumber || 'Telefon numarası ekle'}
+                                </Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.infoRow} onPress={() => setBioModalVisible(true)}>
-                            <Entypo name="text" size={24} color="#4A90E2" />
-                            <Text style={styles.infoText}>{userInfo?.bio || 'Biyografi ekle'}</Text>
+
+                        <TouchableOpacity
+                            style={styles.infoCard}
+                            onPress={() => setInstaModalVisible(true)}
+                        >
+                            <MaterialCommunityIcons name="instagram" size={24} color="#4CAF50" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Instagram</Text>
+                                <Text style={styles.infoValue}>
+                                    {'@' + userInfo?.insta || 'Instagram hesabı ekle'}
+                                </Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.infoCard}
+                            onPress={() => setBioModalVisible(true)}
+                        >
+                            <MaterialCommunityIcons name="text" size={24} color="#4CAF50" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Biyografi</Text>
+                                <Text style={styles.infoValue}>
+                                    {userInfo?.bio || 'Biyografi ekle'}
+                                </Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
                         </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-                        <Text style={styles.closeButtonText}>Kapat</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+                </Animated.View>
+            </BlurView>
 
             <Modal
                 animationType="fade"
                 transparent={true}
                 visible={phoneModalVisible}
-                onRequestClose={() => setPhoneModalVisible(false)}
+                onRequestClose={() => {
+                    setPhoneModalVisible(false);
+                    setVerificationStep('input');
+                    setVerificationCode('');
+                }}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Telefon Numarası Ekle</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={userInfo.phoneNumber}
-                            onChangeText={handlePhoneNumberChange}
-                            placeholder="Telefon numarası"
-                            keyboardType="phone-pad"
-                        />
-                        <Button title="Kaydet" onPress={handleAddPhoneNumber} />
-                        <TouchableOpacity style={styles.closeButton} onPress={() => setPhoneModalVisible(false)}>
-                            <Text style={styles.closeButtonText}>İptal</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <BlurView intensity={20} style={styles.subModalContainer}>
+                    <Animated.View
+                        entering={FadeInDown.springify()}
+                        exiting={FadeOutDown.springify()}
+                        style={styles.subModalContent}
+                    >
+                        <View style={styles.subModalHeader}>
+                            <Text style={styles.subModalTitle}>
+                                {verificationStep === 'input' ? 'Telefon Numarası' : 'Doğrulama Kodu'}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.subModalCloseButton}
+                                onPress={() => {
+                                    setPhoneModalVisible(false);
+                                    setVerificationStep('input');
+                                    setVerificationCode('');
+                                }}
+                            >
+                                <MaterialCommunityIcons name="close" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {verificationStep === 'input' ? (
+                            <>
+                                <View style={styles.inputContainer}>
+                                    <MaterialCommunityIcons name="phone" size={24} color="#4CAF50" />
+                                    <TextInput
+                                        style={styles.input}
+                                        value={userInfo.phoneNumber}
+                                        onChangeText={(text) => setUserInfo(prev => ({ ...prev, phoneNumber: text }))}
+                                        placeholder="Telefon numaranızı girin"
+                                        keyboardType="phone-pad"
+                                        placeholderTextColor="#999"
+                                    />
+                                </View>
+
+                                <TouchableOpacity
+                                    style={styles.saveButton}
+                                    onPress={handleSendVerificationCode}
+                                >
+                                    <LinearGradient
+                                        colors={['#4CAF50', '#45a049']}
+                                        style={styles.saveButtonGradient}
+                                    >
+                                        <Text style={styles.saveButtonText}>Doğrulama Kodu Gönder</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <>
+                                <View style={styles.verificationContainer}>
+                                    <Text style={styles.verificationText}>
+                                        {userInfo.phoneNumber} numarasına gönderilen 6 haneli doğrulama kodunu girin
+                                    </Text>
+                                    <View style={styles.inputContainer}>
+                                        <MaterialCommunityIcons name="lock-outline" size={24} color="#4CAF50" />
+                                        <TextInput
+                                            style={styles.input}
+                                            value={verificationCode}
+                                            onChangeText={setVerificationCode}
+                                            placeholder="Doğrulama kodu"
+                                            keyboardType="number-pad"
+                                            maxLength={6}
+                                            placeholderTextColor="#999"
+                                        />
+                                    </View>
+                                    {isTimerActive && (
+                                        <Text style={styles.timerText}>
+                                            Kalan süre: {timer} saniye
+                                        </Text>
+                                    )}
+                                    {!isTimerActive && (
+                                        <TouchableOpacity
+                                            style={styles.resendButton}
+                                            onPress={handleSendVerificationCode}
+                                        >
+                                            <Text style={styles.resendButtonText}>Kodu Tekrar Gönder</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+
+                                <TouchableOpacity
+                                    style={styles.saveButton}
+                                    onPress={handleVerifyCode}
+                                >
+                                    <LinearGradient
+                                        colors={['#4CAF50', '#45a049']}
+                                        style={styles.saveButtonGradient}
+                                    >
+                                        <Text style={styles.saveButtonText}>Doğrula</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </Animated.View>
+                </BlurView>
             </Modal>
 
             <Modal
@@ -339,21 +537,46 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 visible={instaModalVisible}
                 onRequestClose={() => setInstaModalVisible(false)}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Instagram Hesabı Ekle</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={userInfo.insta}
-                            onChangeText={handleInstaAccountChange}
-                            placeholder="Instagram hesabı"
-                        />
-                        <Button title="Kaydet" onPress={handleAddInstaAccount} />
-                        <TouchableOpacity style={styles.closeButton} onPress={() => setInstaModalVisible(false)}>
-                            <Text style={styles.closeButtonText}>İptal</Text>
+                <BlurView intensity={20} style={styles.subModalContainer}>
+                    <Animated.View
+                        entering={FadeInDown.springify()}
+                        exiting={FadeOutDown.springify()}
+                        style={styles.subModalContent}
+                    >
+                        <View style={styles.subModalHeader}>
+                            <Text style={styles.subModalTitle}>Instagram Hesabı</Text>
+                            <TouchableOpacity
+                                style={styles.subModalCloseButton}
+                                onPress={() => setInstaModalVisible(false)}
+                            >
+                                <MaterialCommunityIcons name="close" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <MaterialCommunityIcons name="instagram" size={24} color="#4CAF50" />
+                            <TextInput
+                                style={styles.input}
+                                value={userInfo.insta}
+                                onChangeText={handleInstaAccountChange}
+                                placeholder="Instagram kullanıcı adınızı girin"
+                                placeholderTextColor="#999"
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.saveButton}
+                            onPress={handleAddInstaAccount}
+                        >
+                            <LinearGradient
+                                colors={['#4CAF50', '#45a049']}
+                                style={styles.saveButtonGradient}
+                            >
+                                <Text style={styles.saveButtonText}>Kaydet</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
-                    </View>
-                </View>
+                    </Animated.View>
+                </BlurView>
             </Modal>
 
             <Modal
@@ -362,21 +585,48 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 visible={bioModalVisible}
                 onRequestClose={() => setBioModalVisible(false)}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Biyografi Ekle</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={userInfo.bio}
-                            onChangeText={handleBioChange}
-                            placeholder="Biyografi"
-                        />
-                        <Button title="Kaydet" onPress={handleUpdateBio} />
-                        <TouchableOpacity style={styles.closeButton} onPress={() => setBioModalVisible(false)}>
-                            <Text style={styles.closeButtonText}>İptal</Text>
+                <BlurView intensity={20} style={styles.subModalContainer}>
+                    <Animated.View
+                        entering={FadeInDown.springify()}
+                        exiting={FadeOutDown.springify()}
+                        style={styles.subModalContent}
+                    >
+                        <View style={styles.subModalHeader}>
+                            <Text style={styles.subModalTitle}>Biyografi</Text>
+                            <TouchableOpacity
+                                style={styles.subModalCloseButton}
+                                onPress={() => setBioModalVisible(false)}
+                            >
+                                <MaterialCommunityIcons name="close" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <MaterialCommunityIcons name="text" size={24} color="#4CAF50" />
+                            <TextInput
+                                style={[styles.input, styles.bioInput]}
+                                value={userInfo.bio}
+                                onChangeText={handleBioChange}
+                                placeholder="Kendinizden bahsedin"
+                                placeholderTextColor="#999"
+                                multiline
+                                numberOfLines={4}
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.saveButton}
+                            onPress={handleUpdateBio}
+                        >
+                            <LinearGradient
+                                colors={['#4CAF50', '#45a049']}
+                                style={styles.saveButtonGradient}
+                            >
+                                <Text style={styles.saveButtonText}>Kaydet</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
-                    </View>
-                </View>
+                    </Animated.View>
+                </BlurView>
             </Modal>
 
             <Modal
@@ -418,140 +668,195 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.3)', // Daha yumuşak bir arka plan rengi
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
     },
     modalContent: {
-        backgroundColor: 'white',
-        padding: 30,
-        borderRadius: 20, // Yuvarlatılmış köşeler
-        width: '85%',
-        maxWidth: 420,
-        elevation: 5, // Gölgeleme efekti
+        width: '90%',
+        maxWidth: 400,
+        backgroundColor: '#fff',
+        borderRadius: 30,
+        padding: 20,
+        elevation: 5,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
-    header: {
+    headerSection: {
         alignItems: 'center',
         marginBottom: 20,
-    },
-    profileSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    imageContainer: {
-        position: 'relative',
-        marginRight: 20,
-    },
-    profileImage: {
-        width: 100,
-        height: 100,
-        borderRadius: 50, // Profil fotoğrafı yuvarlak
-        borderWidth: 3,
-        borderColor: '#4CAF50', // Çerçeve rengi
-    },
-    editIcon: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#4CAF50',
-        borderRadius: 20,
-        padding: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-    },
-    nameSection: {
-        flex: 1,
-    },
-    name: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#333', // Ana metin rengi
-    },
-    jobTitle: {
-        fontSize: 16,
-        color: '#888', // Daha açık renkli bir alt yazı
-    },
-    statsSection: {
-        flexDirection: 'row',
-        marginTop: 10,
-        justifyContent: 'space-between',
-    },
-    statsBox: {
-        alignItems: 'center',
-        width: '45%', // Daha düzenli istatistik kutuları
-        paddingVertical: 10,
-        backgroundColor: '#F4F4F4', // Daha yumuşak arka plan
-        borderRadius: 10,
-    },
-    statsNumber: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    statsLabel: {
-        fontSize: 12,
-        color: '#777',
-    },
-    infoContainer: {
-        marginTop: 20,
-        borderTopWidth: 1,
-        borderTopColor: '#f1f1f1',
-        paddingTop: 15,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
-    infoText: {
-        marginLeft: 10,
-        fontSize: 16,
-        color: '#444', // Daha net bir yazı rengi
     },
     closeButton: {
-        marginTop: 20,
-        backgroundColor: '#4CAF50',
-        paddingVertical: 12,
-        borderRadius: 8,
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        padding: 10,
+    },
+    profileHeader: {
         alignItems: 'center',
+        marginTop: 20,
+    },
+    avatarContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        marginBottom: 15,
+        position: 'relative',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 50,
+        borderWidth: 3,
+        borderColor: '#4CAF50',
+    },
+    editIconContainer: {
+        position: 'absolute',
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#4CAF50',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
-        marginHorizontal: 20, // Buton genişliği
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#fff',
     },
-    closeButtonText: {
-        color: 'black',
+    userName: {
+        fontSize: 24,
         fontWeight: 'bold',
+        color: '#2c3e50',
+        marginBottom: 5,
+    },
+    userBio: {
         fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        paddingHorizontal: 20,
     },
-    modalTitle: {
-        fontSize: 20,
+    statsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 20,
+        paddingVertical: 15,
+        width: '100%',
+    },
+    statItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statDivider: {
+        width: 1,
+        height: 30,
+        backgroundColor: '#ddd',
+        marginHorizontal: 20,
+    },
+    statNumber: {
+        fontSize: 24,
         fontWeight: 'bold',
+        color: '#4CAF50',
+    },
+    statLabel: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 5,
+    },
+    infoSection: {
+        marginTop: 20,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#2c3e50',
+        marginBottom: 15,
+        paddingHorizontal: 5,
+    },
+    infoCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 15,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 15,
         marginBottom: 10,
-        color: '#333',
     },
-    input: {
-        height: 45,
-        borderColor: '#ccc',
-        borderWidth: 1,
-        borderRadius: 10,
-        marginBottom: 20,
-        paddingLeft: 15,
+    infoContent: {
+        flex: 1,
+        marginLeft: 15,
+    },
+    infoLabel: {
+        fontSize: 12,
+        color: '#666',
+    },
+    infoValue: {
         fontSize: 16,
-        color: '#333',
+        color: '#2c3e50',
+        marginTop: 2,
     },
-    modalContainer: {
+    subModalContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)', // Arka planı karartmak
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        padding: 20,
+    },
+    subModalContent: {
+        width: '90%',
+        maxWidth: 400,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 20,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    subModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    subModalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#2c3e50',
+    },
+    subModalCloseButton: {
+        padding: 5,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 20,
+    },
+    input: {
+        flex: 1,
+        marginLeft: 10,
+        fontSize: 16,
+        color: '#2c3e50',
+    },
+    bioInput: {
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    saveButton: {
+        overflow: 'hidden',
+        borderRadius: 12,
+    },
+    saveButtonGradient: {
+        padding: 15,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     imageModalContent: {
         backgroundColor: 'white',
@@ -599,6 +904,30 @@ const styles = StyleSheet.create({
         height: '100%',
         backgroundColor: '#4CAF50',
         borderRadius: 5,
+    },
+    verificationContainer: {
+        marginBottom: 20,
+    },
+    verificationText: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    timerText: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginTop: 8,
+    },
+    resendButton: {
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    resendButtonText: {
+        color: '#4CAF50',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 

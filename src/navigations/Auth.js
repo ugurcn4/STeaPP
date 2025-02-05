@@ -7,6 +7,7 @@ import PrivacyPage from '../screens/SettingsPageScreens/PrivacyPage';
 import HelpSupportPage from '../screens/SettingsPageScreens/HelpSupportPage';
 import AboutPage from '../screens/SettingsPageScreens/AboutPage';
 import InviteFriendsPage from '../screens/SettingsPageScreens/InviteFriendsPage';
+import NearbyRestaurants from '../screens/HomePageCards/NearbyRestaurants';
 
 const Stack = createNativeStackNavigator();
 
@@ -51,6 +52,20 @@ const Auth = () => {
                 component={InviteFriendsPage}
                 options={{
                     headerShown: false,
+                }}
+            />
+            <Stack.Screen
+                name="NearbyRestaurants"
+                component={NearbyRestaurants}
+                options={{
+                    title: 'Yakındaki Restoranlar',
+                    headerStyle: {
+                        backgroundColor: '#fff',
+                    },
+                    headerTintColor: '#2C3E50',
+                    headerTitleStyle: {
+                        fontWeight: 'bold',
+                    },
                 }}
             />
         </Stack.Navigator>

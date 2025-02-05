@@ -1,16 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Platform } from 'react-native';
+import {
+    View,
+    Text,
+    StyleSheet,
+    Switch,
+    TouchableOpacity,
+    Platform,
+    Alert,
+    Linking
+} from 'react-native';
 import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import * as Location from 'expo-location';
-//import * as Notifications from 'expo-notifications';
+import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
+import * as IntentLauncher from 'expo-intent-launcher';
+import { Audio } from 'expo-av';
+import { ApplicationId } from '../../constants';
 
 const PermissionsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
     const currentTheme = theme === 'dark' ? darkTheme : lightTheme;
-
     const [permissions, setPermissions] = useState({
         location: false,
         camera: false,
@@ -24,53 +35,133 @@ const PermissionsPage = ({ navigation }) => {
     }, []);
 
     const checkPermissions = async () => {
-        // Konum izni kontrolü
-        const locationStatus = await Location.getForegroundPermissionsAsync();
+        try {
+            const [
+                locationStatus,
+                cameraStatus,
+                notificationStatus,
+                mediaStatus,
+                microphoneStatus
+            ] = await Promise.all([
+                Location.getForegroundPermissionsAsync(),
+                ImagePicker.getCameraPermissionsAsync(),
+                Notifications.getPermissionsAsync(),
+                ImagePicker.getMediaLibraryPermissionsAsync(),
+                Audio.getPermissionsAsync()
+            ]);
 
-        // Kamera izni kontrolü
-        const cameraStatus = await ImagePicker.getCameraPermissionsAsync();
-
-        // Bildirim izni kontrolü
-        const notificationStatus = await Notifications.getPermissionsAsync();
-
-        // Galeri izni kontrolü
-        const mediaStatus = await ImagePicker.getMediaLibraryPermissionsAsync();
-
-        setPermissions({
-            location: locationStatus.status === 'granted',
-            camera: cameraStatus.status === 'granted',
-            notifications: notificationStatus.status === 'granted',
-            photos: mediaStatus.status === 'granted',
-            microphone: false, // Mikrofon izni için ayrı bir kontrol eklenebilir
-        });
+            setPermissions({
+                location: locationStatus.status === 'granted',
+                camera: cameraStatus.status === 'granted',
+                notifications: notificationStatus.status === 'granted',
+                photos: mediaStatus.status === 'granted',
+                microphone: microphoneStatus.status === 'granted',
+            });
+        } catch (error) {
+            console.error('İzin kontrolü hatası:', error);
+        }
     };
 
-    const requestPermission = async (type) => {
+    const handlePermissionChange = async (type) => {
         try {
+            if (permissions[type]) {
+                Alert.alert(
+                    "İzni Kapat",
+                    `${getPermissionName(type)} iznini kapatmak için cihaz ayarlarına gitmeniz gerekiyor. Ayarları açmak ister misiniz?`,
+                    [
+                        {
+                            text: "İptal",
+                            style: "cancel"
+                        },
+                        {
+                            text: "Ayarları Aç",
+                            onPress: () => openSettings()
+                        }
+                    ]
+                );
+                return;
+            }
+
+            let status;
             switch (type) {
                 case 'location':
-                    const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-                    setPermissions(prev => ({ ...prev, location: locationStatus === 'granted' }));
+                    status = await Location.requestForegroundPermissionsAsync();
                     break;
-
                 case 'camera':
-                    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-                    setPermissions(prev => ({ ...prev, camera: cameraStatus === 'granted' }));
+                    status = await ImagePicker.requestCameraPermissionsAsync();
                     break;
-
                 case 'notifications':
-                    const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
-                    setPermissions(prev => ({ ...prev, notifications: notificationStatus === 'granted' }));
+                    status = await Notifications.requestPermissionsAsync();
                     break;
-
                 case 'photos':
-                    const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                    setPermissions(prev => ({ ...prev, photos: mediaStatus === 'granted' }));
+                    status = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    break;
+                case 'microphone':
+                    status = await Audio.requestPermissionsAsync();
                     break;
             }
+
+            if (status.status !== 'granted') {
+                showPermissionAlert(getPermissionName(type));
+            }
+
+            checkPermissions();
         } catch (error) {
-            console.error('İzin alınırken hata:', error);
+            console.error('İzin değiştirme hatası:', error);
         }
+    };
+
+    const getPermissionName = (type) => {
+        const names = {
+            location: 'konum',
+            camera: 'kamera',
+            notifications: 'bildirim',
+            photos: 'galeri',
+            microphone: 'mikrofon'
+        };
+        const name = names[type];
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    };
+
+    const openSettings = async () => {
+        try {
+            if (Platform.OS === 'ios') {
+                await Linking.openSettings();
+            } else {
+                const packageName = 'com.yourdomain.yourappname'; // Android uygulama ID'nizi buraya yazın
+                await IntentLauncher.startActivityAsync(
+                    IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
+                    { data: 'package:' + packageName }
+                );
+            }
+        } catch (error) {
+            console.error('Ayarlar açılırken hata:', error);
+            Linking.openSettings().catch(err => {
+                console.error('Alternatif ayarlar açma hatası:', err);
+                Alert.alert(
+                    "Hata",
+                    "Ayarlar açılamadı. Lütfen manuel olarak uygulama ayarlarına gidin.",
+                    [{ text: "Tamam" }]
+                );
+            });
+        }
+    };
+
+    const showPermissionAlert = (permissionType) => {
+        Alert.alert(
+            "İzin Gerekli",
+            `${permissionType} izni için ayarları açmak ister misiniz?`,
+            [
+                {
+                    text: "İptal",
+                    style: "cancel"
+                },
+                {
+                    text: "Ayarları Aç",
+                    onPress: openSettings
+                }
+            ]
+        );
     };
 
     return (
@@ -99,15 +190,16 @@ const PermissionsPage = ({ navigation }) => {
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
                                 Konum
                             </Text>
-                            <Text style={styles.permissionDescription}>
-                                Yakındaki etkinlikleri görebilmek için
+                            <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
+                                Arkadaşlarınızla konum paylaşımı için gerekli
                             </Text>
                         </View>
                     </View>
                     <Switch
                         value={permissions.location}
-                        onValueChange={() => requestPermission('location')}
-                        trackColor={{ false: "#767577", true: "#4682B4" }}
+                        onValueChange={() => handlePermissionChange('location')}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        thumbColor={permissions.location ? "#fff" : "#f4f3f4"}
                     />
                 </View>
 
@@ -118,15 +210,16 @@ const PermissionsPage = ({ navigation }) => {
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
                                 Kamera
                             </Text>
-                            <Text style={styles.permissionDescription}>
-                                Fotoğraf çekmek için
+                            <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
+                                Fotoğraf çekmek ve paylaşmak için gerekli
                             </Text>
                         </View>
                     </View>
                     <Switch
                         value={permissions.camera}
-                        onValueChange={() => requestPermission('camera')}
-                        trackColor={{ false: "#767577", true: "#4682B4" }}
+                        onValueChange={() => handlePermissionChange('camera')}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        thumbColor={permissions.camera ? "#fff" : "#f4f3f4"}
                     />
                 </View>
 
@@ -137,15 +230,16 @@ const PermissionsPage = ({ navigation }) => {
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
                                 Bildirimler
                             </Text>
-                            <Text style={styles.permissionDescription}>
-                                Önemli güncellemeleri almak için
+                            <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
+                                Mesaj ve etkinlik bildirimlerini almak için gerekli
                             </Text>
                         </View>
                     </View>
                     <Switch
                         value={permissions.notifications}
-                        onValueChange={() => requestPermission('notifications')}
-                        trackColor={{ false: "#767577", true: "#4682B4" }}
+                        onValueChange={() => handlePermissionChange('notifications')}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        thumbColor={permissions.notifications ? "#fff" : "#f4f3f4"}
                     />
                 </View>
 
@@ -156,22 +250,83 @@ const PermissionsPage = ({ navigation }) => {
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
                                 Fotoğraflar
                             </Text>
-                            <Text style={styles.permissionDescription}>
-                                Galeriden fotoğraf seçmek için
+                            <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
+                                Galeriden fotoğraf seçmek ve paylaşmak için gerekli
                             </Text>
                         </View>
                     </View>
                     <Switch
                         value={permissions.photos}
-                        onValueChange={() => requestPermission('photos')}
-                        trackColor={{ false: "#767577", true: "#4682B4" }}
+                        onValueChange={() => handlePermissionChange('photos')}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        thumbColor={permissions.photos ? "#fff" : "#f4f3f4"}
+                    />
+                </View>
+
+                <View style={styles.permissionItem}>
+                    <View style={styles.permissionInfo}>
+                        <Ionicons name="mic-outline" size={24} color={currentTheme.text} />
+                        <View style={styles.textContainer}>
+                            <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
+                                Mikrofon
+                            </Text>
+                            <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
+                                Sesli mesaj göndermek için gerekli
+                            </Text>
+                        </View>
+                    </View>
+                    <Switch
+                        value={permissions.microphone}
+                        onValueChange={() => handlePermissionChange('microphone')}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        thumbColor={permissions.microphone ? "#fff" : "#f4f3f4"}
                     />
                 </View>
             </View>
 
-            <Text style={[styles.note, { color: currentTheme.text }]}>
+            <Text style={[styles.note, { color: currentTheme.textSecondary }]}>
                 Not: Bu izinler uygulamanın düzgün çalışması için gereklidir. İzinleri istediğiniz zaman cihaz ayarlarından değiştirebilirsiniz.
             </Text>
+
+            <View style={styles.bottomSection}>
+                <TouchableOpacity
+                    style={[styles.settingsButton, { backgroundColor: currentTheme.cardBackground }]}
+                    onPress={openSettings}
+                >
+                    <Ionicons
+                        name="settings-outline"
+                        size={24}
+                        color={currentTheme.text}
+                        style={styles.buttonIcon}
+                    />
+                    <Text style={[styles.buttonText, { color: currentTheme.text }]}>
+                        Sistem İzinlerini Yönet
+                    </Text>
+                </TouchableOpacity>
+
+                <View style={styles.infoContainer}>
+                    <View style={styles.infoItem}>
+                        <Ionicons
+                            name="shield-checkmark-outline"
+                            size={20}
+                            color={currentTheme.textSecondary}
+                        />
+                        <Text style={[styles.infoText, { color: currentTheme.textSecondary }]}>
+                            Verileriniz güvende
+                        </Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                        <Ionicons
+                            name="lock-closed-outline"
+                            size={20}
+                            color={currentTheme.textSecondary}
+                        />
+                        <Text style={[styles.infoText, { color: currentTheme.textSecondary }]}>
+                            KVKK uyumlu
+                        </Text>
+                    </View>
+                </View>
+            </View>
         </View>
     );
 };
@@ -230,10 +385,48 @@ const styles = StyleSheet.create({
     note: {
         fontSize: 14,
         fontStyle: 'italic',
-        marginTop: 20,
         opacity: 0.7,
         textAlign: 'center',
         paddingHorizontal: 20,
+        marginBottom: 20,
+    },
+    bottomSection: {
+        marginTop: 'auto',
+        padding: 20,
+    },
+    settingsButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    buttonIcon: {
+        marginRight: 10,
+    },
+    buttonText: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    infoContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 10,
+    },
+    infoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+    },
+    infoText: {
+        marginLeft: 6,
+        fontSize: 14,
     },
 });
 

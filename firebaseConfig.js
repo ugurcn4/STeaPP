@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -14,16 +14,32 @@ const firebaseConfig = {
     appId: "1:54620040129:web:79be3774262e51ccf55d40"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+let app;
+let auth;
 
+// Firebase app'i bir kere başlat
+if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+    // Auth'u AsyncStorage ile başlat
+    auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage)
+    });
+} else {
+    app = getApp();
+    auth = getAuth(app);
+}
 
+// Diğer servisleri başlat
+const db = getFirestore(app);
 const storage = getStorage(app);
 
-const db = getFirestore(app);
+console.log('Firebase servisleri başlatıldı:', {
+    appInitialized: !!app,
+    authInitialized: !!auth,
+    dbInitialized: !!db,
+    storageInitialized: !!storage
+});
 
+// Exports
 export { auth, db, storage };
 export default app;

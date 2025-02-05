@@ -3,32 +3,34 @@ import RootPage from './src/navigations/RootPage';
 import { Provider } from 'react-redux';
 import { store } from './src/redux/store';
 import Toast from 'react-native-toast-message';
-import { View, Text, Button, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
-import { startBackgroundLocationTask } from './src/services/BackgroundLocationTask'; // Arka plan izleme fonksiyonunu içe aktarın
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { NavigationContainer } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+// Bildirim davranışını yapılandır
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const App = () => {
-  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
-  const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
-  const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
 
-  // Uygulama yüklendiğinde arka plan konum izlemeyi başlat
-  useEffect(() => {
-    const initializeBackgroundTasks = async () => {
-      try {
-        console.log('Arka plan konum izleme başlatılıyor...');
-        await startBackgroundLocationTask(); // Arka plan konum izleme başlatılır
-      } catch (err) {
-        console.error('Arka plan konum izleme başlatılamadı:', err);
-      }
-    };
 
-    initializeBackgroundTasks();
-  }, []);
-
-  // Güncelleme denetimi
+  // Güncelleme denetimi sadece production build'de çalışsın
   useEffect(() => {
     const checkForUpdates = async () => {
+      // Expo Go'da güncelleme kontrolü yapma
+      if (isExpoGo) {
+        return;
+      }
+
       setIsCheckingForUpdate(true);
       try {
         const update = await Updates.checkForUpdateAsync();
@@ -45,61 +47,35 @@ const App = () => {
     checkForUpdates();
   }, []);
 
-  const handleUpdate = async () => {
-    setIsUpdateDownloading(true);
-    try {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-    } catch (e) {
-      console.error('Güncelleme yüklenirken hata oluştu:', e);
-    } finally {
-      setIsUpdateDownloading(false);
-    }
-  };
+  useEffect(() => {
+    // Bildirim izinlerini kontrol et
+    const checkNotificationPermissions = async () => {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        return;
+      }
+    };
+
+    checkNotificationPermissions();
+  }, []);
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Provider store={store}>
-        <>
-          {isCheckingForUpdate && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0000ff" />
-                <Text>Güncellemeler kontrol ediliyor...</Text>
-              </View>
-          )}
-          {!isCheckingForUpdate && isUpdateAvailable && (
-              <View style={styles.updateContainer}>
-                <Text>Bir güncelleme mevcut!</Text>
-                <Button title="Şimdi Güncelle" onPress={handleUpdate} />
-              </View>
-          )}
-          {!isCheckingForUpdate && !isUpdateAvailable && (
-              <>
-                <RootPage />
-                <Toast />
-              </>
-          )}
-          {isUpdateDownloading && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0000ff" />
-                <Text>Güncelleme indiriliyor...</Text>
-              </View>
-          )}
-        </>
+        <NavigationContainer>
+          <RootPage />
+        </NavigationContainer>
+        <Toast />
       </Provider>
+    </GestureHandlerRootView>
   );
 };
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  updateContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
 
 export default App;
