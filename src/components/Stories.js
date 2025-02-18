@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     ScrollView,
@@ -8,8 +8,7 @@ import {
     Text,
     Alert
 } from 'react-native';
-import { getStories, uploadStory } from '../services/storyService';
-import { LinearGradient } from 'expo-linear-gradient';
+import { getStories, uploadStory, clearStoryCache } from '../services/storyService';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { getCurrentUserUid } from '../services/friendFunctions';
@@ -22,18 +21,23 @@ const Stories = ({ friends, navigation }) => {
     const [viewedStories, setViewedStories] = useState(new Set());
     const [currentUser, setCurrentUser] = useState(null);
     const [myStories, setMyStories] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        fetchStories();
-        fetchCurrentUser();
-        fetchMyStories();
-    }, [friends]);
+    // Profil fotoğrafı için yardımcı fonksiyon - memoized
+    const getProfilePicture = useCallback((user) => {
+        if (!user) return null;
+        if (user.profilePicture && user.profilePicture.startsWith('http')) {
+            return user.profilePicture;
+        }
+        const name = user.informations?.name || '';
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&size=200&color=fff&bold=true&font-size=0.33`;
+    }, []);
 
-    const fetchStories = async () => {
+    const fetchStories = useCallback(async () => {
         try {
+            setIsLoading(true);
             const friendIds = friends.map(friend => friend.id);
 
-            // Eğer arkadaş listesi boşsa hikayeleri getirmeye çalışma
             if (friendIds.length === 0) {
                 setStories({});
                 return;
@@ -41,7 +45,6 @@ const Stories = ({ friends, navigation }) => {
 
             const fetchedStories = await getStories(friendIds);
 
-            // Hikayeleri kullanıcılara göre grupla
             const groupedStories = fetchedStories.reduce((acc, story) => {
                 if (!acc[story.userId]) {
                     acc[story.userId] = [];
@@ -54,28 +57,21 @@ const Stories = ({ friends, navigation }) => {
         } catch (error) {
             console.error('Hikayeler yüklenirken hata:', error);
             setStories({});
+        } finally {
+            setIsLoading(false);
         }
-    };
+    }, [friends]);
 
-    // Aktif kullanıcının bilgilerini al
-    const fetchCurrentUser = async () => {
+    const fetchCurrentUser = useCallback(async () => {
         try {
             const userId = await getCurrentUserUid();
             if (userId) {
                 const userDoc = await getDoc(doc(db, 'users', userId));
                 if (userDoc.exists()) {
                     const userData = userDoc.data();
-
-                    const profilePicture =
-                        userData.profilePicture ||
-                        userData.informations?.profilePicture ||
-                        userData.informations?.profileImage ||
-                        null;
-
                     setCurrentUser({
                         id: userId,
                         ...userData,
-                        profilePicture,
                         name: userData.informations?.name || 'Ben'
                     });
                 }
@@ -83,9 +79,9 @@ const Stories = ({ friends, navigation }) => {
         } catch (error) {
             console.error('Kullanıcı bilgileri alınamadı:', error);
         }
-    };
+    }, []);
 
-    const fetchMyStories = async () => {
+    const fetchMyStories = useCallback(async () => {
         try {
             const userId = await getCurrentUserUid();
             if (userId) {
@@ -95,33 +91,44 @@ const Stories = ({ friends, navigation }) => {
         } catch (error) {
             console.error('Kişisel hikayeler yüklenirken hata:', error);
         }
-    };
+    }, []);
 
-    // Arkadaşları hikayesi olanlar ve olmayanlar olarak ayır
-    const sortedFriends = friends.sort((a, b) => {
-        const aHasStory = stories[a.id]?.length > 0;
-        const bHasStory = stories[b.id]?.length > 0;
-        const aViewed = viewedStories.has(a.id);
-        const bViewed = viewedStories.has(b.id);
+    useEffect(() => {
+        const loadData = async () => {
+            await Promise.all([
+                fetchStories(),
+                fetchCurrentUser(),
+                fetchMyStories()
+            ]);
+        };
 
-        if (aHasStory && !bHasStory) return -1;
-        if (!aHasStory && bHasStory) return 1;
-        if (aViewed && !bViewed) return 1;
-        if (!aViewed && bViewed) return -1;
-        return 0;
-    }).filter(friend => stories[friend.id]?.length > 0); // Sadece hikayesi olanları göster
+        loadData();
 
-    // Profil fotoğrafı için yardımcı fonksiyon
-    const getProfilePicture = (user) => {
-        if (!user) return null;
+        // Komponentin unmount olduğunda önbelleği temizle
+        return () => {
+            clearStoryCache();
+        };
+    }, [friends]);
 
-        return user.profilePicture ||
-            user.informations?.profilePicture ||
-            user.informations?.profileImage ||
-            null;
-    };
+    // Arkadaşları hikayesi olanlar ve olmayanlar olarak ayır - memoized
+    const sortedFriends = useMemo(() => {
+        return friends
+            .sort((a, b) => {
+                const aHasStory = stories[a.id]?.length > 0;
+                const bHasStory = stories[b.id]?.length > 0;
+                const aViewed = viewedStories.has(a.id);
+                const bViewed = viewedStories.has(b.id);
 
-    const handleStoryPress = (userId, userStories) => {
+                if (aHasStory && !bHasStory) return -1;
+                if (!aHasStory && bHasStory) return 1;
+                if (aViewed && !bViewed) return 1;
+                if (!aViewed && bViewed) return -1;
+                return 0;
+            })
+            .filter(friend => stories[friend.id]?.length > 0);
+    }, [friends, stories, viewedStories]);
+
+    const handleStoryPress = useCallback((userId, userStories) => {
         const user = friends.find(friend => friend.id === userId);
         setViewedStories(prev => new Set(prev).add(userId));
         navigation.navigate('StoryView', {
@@ -129,14 +136,13 @@ const Stories = ({ friends, navigation }) => {
             stories: userStories,
             user: user,
             updateStories: (updatedStories) => {
-                // stories state'ini güncelle
                 setStories(prev => ({
                     ...prev,
                     [userId]: updatedStories
                 }));
             }
         });
-    };
+    }, [friends, navigation]);
 
     const handleAddStory = async () => {
         try {
@@ -148,45 +154,16 @@ const Stories = ({ friends, navigation }) => {
 
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                quality: 0.8,
+                allowsEditing: false,
+                quality: 1,
                 aspect: undefined,
                 allowsMultipleSelection: false,
-                presentationStyle: 'pageSheet',
+                presentationStyle: 'fullScreen',
             });
 
             if (!result.canceled) {
-                const userId = await getCurrentUserUid();
-                if (!userId) {
-                    Alert.alert('Hata', 'Kullanıcı bulunamadı');
-                    return;
-                }
-
                 const imageUri = result.assets[0].uri;
-                const manipulateResult = await manipulateAsync(
-                    imageUri,
-                    [
-                        {
-                            resize: {
-                                width: 1080,
-                                height: undefined
-                            }
-                        }
-                    ],
-                    { format: SaveFormat.JPEG }
-                );
-
-                const response = await fetch(manipulateResult.uri);
-                const blob = await response.blob();
-
-                const uploadResult = await uploadStory(userId, blob);
-
-                if (uploadResult.success) {
-                    Alert.alert('Başarılı', 'Hikayen paylaşıldı!');
-                    fetchStories();
-                } else {
-                    Alert.alert('Hata', 'Hikaye paylaşılırken bir sorun oluştu.');
-                }
+                navigation.navigate('StoryEditor', { imageUri });
             }
         } catch (error) {
             console.error('Hikaye ekleme hatası:', error);
@@ -229,6 +206,8 @@ const Stories = ({ friends, navigation }) => {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.container}
+            removeClippedSubviews={true} // Performans iyileştirmesi
+            initialNumToRender={10} // Başlangıçta render edilecek öğe sayısı
         >
             {/* Hikaye Ekleme/Görüntüleme Butonu */}
             <TouchableOpacity
@@ -241,15 +220,9 @@ const Stories = ({ friends, navigation }) => {
                         myStories.length > 0 ? styles.activeStoryRing : styles.inactiveStoryRing
                     ]}>
                         <Image
-                            source={
-                                getProfilePicture(currentUser)
-                                    ? { uri: getProfilePicture(currentUser) }
-                                    : {
-                                        uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.informations?.name || currentUser?.name || '')
-                                            }&background=random&size=200&color=fff&bold=true`
-                                    }
-                            }
+                            source={{ uri: getProfilePicture(currentUser) }}
                             style={styles.storyImage}
+                            loading="eager" // Öncelikli yükleme
                         />
                         <View style={styles.plusIconContainer}>
                             <Ionicons name="add-circle" size={20} color="#2196F3" />
@@ -263,8 +236,6 @@ const Stories = ({ friends, navigation }) => {
 
             {/* Arkadaş Hikayeleri */}
             {sortedFriends.map((friend) => {
-                const profilePic = getProfilePicture(friend);
-
                 return (
                     <TouchableOpacity
                         key={friend.id}
@@ -276,15 +247,9 @@ const Stories = ({ friends, navigation }) => {
                             viewedStories.has(friend.id) ? styles.viewedStoryRing : styles.activeStoryRing
                         ]}>
                             <Image
-                                source={
-                                    profilePic
-                                        ? { uri: profilePic }
-                                        : {
-                                            uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.informations?.name || friend.name || '')
-                                                }&background=random&size=200&color=fff&bold=true`
-                                        }
-                                }
+                                source={{ uri: getProfilePicture(friend) }}
                                 style={styles.storyImage}
+                                loading="eager" // Öncelikli yükleme
                             />
                         </View>
                         <Text style={styles.storyText} numberOfLines={1}>
@@ -299,22 +264,22 @@ const Stories = ({ friends, navigation }) => {
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 10,
-        paddingHorizontal: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
     },
     storyItem: {
         alignItems: 'center',
-        marginHorizontal: 8,
+        marginHorizontal: 9,
     },
     addStoryButton: {
         position: 'relative',
         alignItems: 'center',
     },
     storyRing: {
-        width: 68,
-        height: 68,
-        borderRadius: 34,
-        padding: 2,
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        padding: 3,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -332,26 +297,27 @@ const styles = StyleSheet.create({
         bottom: 0,
         right: 0,
         backgroundColor: '#FFF',
-        borderRadius: 10,
-        width: 20,
-        height: 20,
+        borderRadius: 12,
+        width: 27,
+        height: 27,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#FFF',
-    },
-    storyImage: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
         borderWidth: 2,
         borderColor: '#FFF',
     },
+    storyImage: {
+        width: 76,
+        height: 76,
+        borderRadius: 37,
+        borderWidth: 3,
+        borderColor: '#FFF',
+    },
+
     storyText: {
         marginTop: 4,
         fontSize: 12,
         color: '#262626',
-        maxWidth: 64,
+        maxWidth: 76,
         textAlign: 'center',
     },
 });

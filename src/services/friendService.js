@@ -22,7 +22,6 @@ export const getFriends = async (userId) => {
                         id: friendId,
                         ...friendDoc.data(),
                         name: friendDoc.data().informations?.name || 'İsimsiz Kullanıcı',
-                        profilePicture: friendDoc.data().informations?.profileImage,
                         username: friendDoc.data().informations?.username,
                         email: friendDoc.data().informations?.email
                     };

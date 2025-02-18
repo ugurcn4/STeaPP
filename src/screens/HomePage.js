@@ -1,27 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, ActivityIndicator, Easing, Platform } from 'react-native';
-import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, ActivityIndicator, Easing, Platform, RefreshControl } from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import ProfileModal from '../modals/ProfileModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, onSnapshot, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, doc, getDoc, where, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import ProgressBar from 'react-native-progress/Bar';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
 import WeatherCard from './HomePageCards/WeatherCard';
-
-const haversine = (lat1, lon1, lat2, lon2) => {
-    const toRad = (x) => x * Math.PI / 180;
-    const R = 6371; // Dünya'nın yarıçapı (km)
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon1 - lon2);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Mesafe (km)
-};
+import { haversine } from '../helpers/locationUtils';
+import LottieView from 'lottie-react-native';
+import CityExplorerCard from './HomePageCards/CityExplorerCard';
 
 // motivationMessages'ı component dışında tanımlayalım
 const motivationMessages = [
@@ -40,7 +30,6 @@ const HomePage = ({ navigation }) => {
     const [isAnimating, setIsAnimating] = useState(false);
 
     const [userId, setUserId] = useState(null);
-    const [locations, setLocations] = useState([]);
     const [todayStats, setTodayStats] = useState({ places: 0, distance: 0 });
     const [totalStats, setTotalStats] = useState({ places: 0, distance: 0 });
     const DAILY_GOAL_KM = 7;
@@ -52,6 +41,11 @@ const HomePage = ({ navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [waveAnimation] = useState(new Animated.Value(0));
     const [handAnimation] = useState(new Animated.Value(0));
+    const [showConfetti, setShowConfetti] = useState(false);
+    const [currentStreak, setCurrentStreak] = useState(0);
+    const [lastCompletionDate, setLastCompletionDate] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [showInfoTooltip, setShowInfoTooltip] = useState(false);
 
     useEffect(() => {
         let timeoutId;
@@ -99,10 +93,20 @@ const HomePage = ({ navigation }) => {
 
     useEffect(() => {
         const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setUserId(user.uid);
-                fetchUserData(user);
+                // Firebase'in başlatılmasını bekle
+                try {
+                    if (!db) {
+                        await initializeFirebase();
+                        db = getFirebaseDb();
+                    }
+                    fetchUserData(user);
+                } catch (error) {
+                    console.error('Firebase başlatma hatası:', error);
+                    setIsLoading(false);
+                }
             } else {
                 setIsLoading(false);
             }
@@ -201,13 +205,43 @@ const HomePage = ({ navigation }) => {
                 setUserData(data);
                 setUserName(data.informations?.name || user.displayName || user.email.split('@')[0]);
                 setUserEmail(user.email);
+
+                // Streak verilerini doğru şekilde al
+                const streak = data.currentStreak || 0;
+                const lastDate = data.lastCompletionDate?.toDate();
+
+                // Eğer son tamamlama tarihi varsa ve bir günden fazla geçmişse streak'i sıfırla
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (lastDate) {
+                    const daysDifference = Math.floor(
+                        (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
+                    );
+
+                    if (daysDifference > 1) {
+                        // Bir günden fazla geçmişse streak'i sıfırla
+                        setCurrentStreak(0);
+                        await updateDoc(docRef, { currentStreak: 0 });
+                    } else {
+                        setCurrentStreak(streak);
+                    }
+                } else {
+                    setCurrentStreak(0);
+                }
+
+                setLastCompletionDate(lastDate || null);
             } else {
                 setUserName(user.displayName || user.email.split('@')[0]);
                 setUserEmail(user.email);
+                await setDoc(docRef, {
+                    currentStreak: 0,
+                    lastCompletionDate: null,
+                    streakHistory: {}
+                });
             }
         } catch (error) {
-            setUserName(user.displayName || user.email.split('@')[0]);
-            setUserEmail(user.email);
+            console.error('Kullanıcı verileri çekilirken hata:', error);
         } finally {
             setIsLoading(false);
         }
@@ -257,64 +291,84 @@ const HomePage = ({ navigation }) => {
 
     useEffect(() => {
         if (userId) {
-            const q = query(
-                collection(db, `users/${userId}/locations`),
-                orderBy('timestamp', 'desc')
+            const pathsRef = collection(db, `users/${userId}/paths`);
+            const userPathsQuery = query(
+                pathsRef,
+                orderBy('firstDiscovery', 'desc')
             );
 
-            const unsubscribe = onSnapshot(q, (querySnapshot) => {
-                const fetchedLocations = querySnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        ...data,
-                        id: doc.id,
-                        timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
-                    };
+            const unsubscribe = onSnapshot(userPathsQuery, (snapshot) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                let todayTotalDistance = 0;
+                let todayPlacesCount = 0;
+                let allTimeDistance = 0;
+                let allTimePlacesCount = 0;
+
+                snapshot.docs.forEach(doc => {
+                    const path = doc.data();
+                    const discoveryTime = path.firstDiscovery?.toDate();
+                    const points = path.points || [];
+
+                    if (points.length >= 2) {
+                        // Mesafeyi metre cinsinden hesapla ve kilometreye çevir
+                        const pathDistance = calculatePathDistance(points) / 1000; // km'ye çevir
+
+                        // Her path bir yer olarak sayılır
+                        if (discoveryTime && discoveryTime >= today) {
+                            todayTotalDistance += pathDistance;
+                            todayPlacesCount += 1; // Bugün keşfedilen yer sayısı
+                        }
+
+                        allTimeDistance += pathDistance;
+                        allTimePlacesCount += 1; // Toplam keşfedilen yer sayısı
+                    }
                 });
 
-                setLocations(fetchedLocations);
-                calculateStats(fetchedLocations);
+                setTodayStats({
+                    places: todayPlacesCount,
+                    distance: Math.round(todayTotalDistance)
+                });
+
+                setTotalStats({
+                    places: allTimePlacesCount,
+                    distance: Math.round(allTimeDistance)
+                });
+
+                const percentage = Math.min((todayTotalDistance / DAILY_GOAL_KM) * 100, 100);
+                setDailyGoalPercentage(Math.round(percentage));
+
+                // Hedef tamamlandığında streak'i güncelle
+                if (percentage >= 100) {
+                    updateStreak();
+                }
             });
 
             return () => unsubscribe();
         }
     }, [userId]);
 
-    const calculateStats = (locations) => {
-        const today = new Date();
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const calculatePathDistance = (points) => {
+        if (!points || points.length < 2) return 0;
 
-        let todayPlaces = 0;
-        let todayDistance = 0;
-        let totalPlaces = locations.length;
-        let totalDistance = 0;
+        let total = 0;
+        for (let i = 1; i < points.length; i++) {
+            const prevPoint = points[i - 1];
+            const currentPoint = points[i];
 
-        for (let i = 0; i < locations.length - 1; i++) {
-            const start = locations[i];
-            const end = locations[i + 1];
-
-            const startLat = parseFloat(start.enlem);
-            const startLon = parseFloat(start.boylam);
-            const endLat = parseFloat(end.enlem);
-            const endLon = parseFloat(end.boylam);
-
-            const distance = haversine(startLat, startLon, endLat, endLon);
-
-            totalDistance += distance;
-
-            const startDate = start.timestamp.toDate ? start.timestamp.toDate() : start.timestamp;
-            if (startDate >= todayStart && startDate < todayEnd) {
-                todayPlaces++;
-                todayDistance += distance;
+            if (prevPoint.latitude && prevPoint.longitude &&
+                currentPoint.latitude && currentPoint.longitude) {
+                total += haversine(
+                    prevPoint.latitude,
+                    prevPoint.longitude,
+                    currentPoint.latitude,
+                    currentPoint.longitude
+                );
             }
         }
 
-        setTodayStats({ places: todayPlaces, distance: (todayDistance).toFixed(1) });
-        setTotalStats({ places: totalPlaces, distance: (totalDistance).toFixed(1) });
-
-        const dailyGoalPercentage = Math.min((todayDistance / DAILY_GOAL_KM) * 100, 100).toFixed(1);
-        setDailyGoalPercentage(dailyGoalPercentage);
+        return total;
     };
 
     const getProfileImageUri = () => {
@@ -489,7 +543,7 @@ const HomePage = ({ navigation }) => {
                                 />
                             </View>
                             <View style={styles.aiCardTextContainer}>
-                                <Text style={styles.aiCardTitle}>AI Asistan</Text>
+                                <Text style={styles.aiCardTitle}>STeaPPY AI</Text>
                                 <View style={styles.messageContainer}>
                                     <Text
                                         style={styles.aiCardSubtitle}
@@ -543,10 +597,190 @@ const HomePage = ({ navigation }) => {
         </Animated.View>
     );
 
+    const renderGoalCard = () => (
+        <TouchableOpacity
+            style={styles.goalCard}
+            activeOpacity={1}
+        >
+            <View style={styles.goalHeader}>
+                <View style={styles.goalTitleContainer}>
+                    <Text style={styles.goalTitle}>Günlük Hedef</Text>
+                    <TouchableOpacity
+                        onPress={() => setShowInfoTooltip(!showInfoTooltip)}
+                        style={styles.infoButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MaterialIcons name="info-outline" size={20} color="#95A5A6" />
+                    </TouchableOpacity>
+                    {showInfoTooltip && (
+                        <TouchableOpacity
+                            style={styles.tooltipOverlay}
+                            activeOpacity={1}
+                            onPress={() => setShowInfoTooltip(false)}
+                        >
+                            <View style={styles.tooltipContainer}>
+                                <View style={styles.tooltipArrow} />
+                                <View style={styles.tooltipContent}>
+                                    <View style={styles.tooltipHeader}>
+                                        <Text style={styles.tooltipTitle}>Nasıl Hesaplanır?</Text>
+                                        <TouchableOpacity
+                                            onPress={() => setShowInfoTooltip(false)}
+                                            style={styles.closeButton}
+                                        >
+                                            <MaterialIcons name="close" size={20} color="#95A5A6" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.tooltipSection}>
+                                        <Text style={styles.tooltipSubtitle}>Günlük Hedef:</Text>
+                                        <Text style={styles.tooltipText}>• Günlük hedef {DAILY_GOAL_KM}km'dir</Text>
+                                        <Text style={styles.tooltipText}>• Katedilen mesafenin sayılması için haritada işaretlenmesi gerekmektedir</Text>
+                                        <Text style={styles.tooltipText}>• Her gün en az {DAILY_GOAL_KM}km yol kat etmelisiniz</Text>
+                                        <Text style={styles.tooltipText}>• İlerleme çubuğu gün içinde kat ettiğiniz mesafeyi gösterir</Text>
+                                    </View>
+                                    <View style={styles.tooltipSection}>
+                                        <Text style={styles.tooltipSubtitle}>Streak Sistemi:</Text>
+                                        <Text style={styles.tooltipText}>• Her gün hedefinizi tamamladığınızda streak'iniz 1 artar</Text>
+                                        <Text style={styles.tooltipText}>• Bir gün kaçırırsanız streak sıfırlanır</Text>
+                                        <Text style={styles.tooltipText}>• Streak'iniz başarı serinizi gösterir</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                </View>
+                <View style={styles.streakContainer}>
+                    <Ionicons name="flame" size={20} color="#FF6B6B" />
+                    <Text style={styles.streakText}>{currentStreak} gün</Text>
+                </View>
+            </View>
+
+            <View style={styles.goalProgress}>
+                <ProgressBar
+                    progress={dailyGoalPercentage / 100}
+                    width={null}
+                    color="#FF4500"
+                    unfilledColor="#D3D3D3"
+                    borderWidth={0}
+                    height={12}
+                    borderRadius={6}
+                />
+                <Text style={styles.goalPercentage}>%{dailyGoalPercentage}</Text>
+            </View>
+
+            <View style={styles.goalStats}>
+                <View style={styles.goalStat}>
+                    <Text style={styles.goalStatValue}>{todayStats.distance}km</Text>
+                    <Text style={styles.goalStatLabel}>Bugün</Text>
+                </View>
+                <View style={styles.goalStat}>
+                    <Text style={styles.goalStatValue}>{DAILY_GOAL_KM}km</Text>
+                    <Text style={styles.goalStatLabel}>Hedef</Text>
+                </View>
+            </View>
+
+            {showConfetti && (
+                <View style={styles.confettiContainer}>
+                    <LottieView
+                        source={require('../../assets/animations/confetti.json')}
+                        autoPlay
+                        loop={false}
+                        style={styles.confetti}
+                        onAnimationFinish={() => setShowConfetti(false)}
+                    />
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+
+    // Streak'i güncelleme fonksiyonu
+    const updateStreak = async () => {
+        if (!userId) return;
+
+        try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+            const userData = userDoc.data();
+
+            let newStreak = 1; // Varsayılan olarak 1'den başlat
+
+            const lastDate = userData.lastCompletionDate?.toDate();
+
+            if (lastDate) {
+                const lastDateNormalized = new Date(lastDate);
+                lastDateNormalized.setHours(0, 0, 0, 0);
+
+                // Bugünün tarihinden bir önceki günü hesapla
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                yesterday.setHours(0, 0, 0, 0);
+
+                if (lastDateNormalized.getTime() === yesterday.getTime()) {
+                    // Dün tamamlanmış, streak'i artır
+                    newStreak = (userData.currentStreak || 0) + 1;
+                } else if (lastDateNormalized.getTime() === today.getTime()) {
+                    // Bugün zaten tamamlanmış, mevcut streak'i koru
+                    newStreak = userData.currentStreak || 1;
+                } else {
+                    // Son tamamlama tarihi dün veya bugün değilse, streak sıfırlanır
+                    newStreak = 1;
+                }
+            }
+
+            // Firebase'i güncelle
+            await updateDoc(userRef, {
+                currentStreak: newStreak,
+                lastCompletionDate: serverTimestamp(),
+                [`streakHistory.${today.toISOString().split('T')[0]}`]: {
+                    streak: newStreak,
+                    completionTime: serverTimestamp()
+                }
+            });
+
+            // Local state'i güncelle
+            setCurrentStreak(newStreak);
+            setLastCompletionDate(today);
+
+            // Hedef tamamlandığında konfeti göster
+            if (!showConfetti) {
+                setShowConfetti(true);
+            }
+        } catch (error) {
+            console.error('Streak güncellenirken hata:', error);
+        }
+    };
+
+    // Yenileme fonksiyonu
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            // Yenilenecek verileri burada çağıralım
+            await Promise.all([
+                fetchWeather(),
+                fetchUserData(getAuth().currentUser),
+                // Diğer yenilenecek veriler...
+            ]);
+        } catch (error) {
+            console.error('Yenileme sırasında hata:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
+
     return (
         <ScrollView
             style={styles.container}
             contentContainerStyle={{ paddingBottom: 80 }}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor="#4CAF50"
+                    colors={["#4CAF50"]}
+                />
+            }
         >
             <View style={styles.header}>
                 <View style={styles.profileSection}>
@@ -642,23 +876,11 @@ const HomePage = ({ navigation }) => {
             </View>
 
             <View style={styles.content}>
+                <CityExplorerCard navigation={navigation} />
+
                 {weather && <WeatherCard weather={weather} />}
 
-                <View style={styles.goalCard}>
-                    <Text style={styles.goalTitle}>Günlük Hedef</Text>
-                    <View style={styles.goalProgress}>
-                        <ProgressBar
-                            progress={dailyGoalPercentage / 100}
-                            width={null}
-                            color="#FF4500"
-                            unfilledColor="#D3D3D3"
-                            borderWidth={0}
-                            height={12}
-                            borderRadius={6}
-                        />
-                        <Text style={styles.goalPercentage}>%{dailyGoalPercentage}</Text>
-                    </View>
-                </View>
+                {renderGoalCard()}
 
                 {quickAccessContainer}
 
@@ -856,8 +1078,9 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '800',
         color: '#2C3E50',
-        marginBottom: 15,
+        marginBottom: 0,
         letterSpacing: 0.5,
+        lineHeight: 24,
     },
     goalProgress: {
         fontSize: 16,
@@ -1001,6 +1224,62 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 3,
+        position: 'relative',
+        zIndex: 1,
+    },
+    goalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    streakContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF5F5',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    streakText: {
+        marginLeft: 6,
+        color: '#FF6B6B',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    goalStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 15,
+        paddingTop: 15,
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+    },
+    goalStat: {
+        alignItems: 'center',
+    },
+    goalStatValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#2C3E50',
+    },
+    goalStatLabel: {
+        fontSize: 12,
+        color: '#95A5A6',
+        marginTop: 4,
+    },
+    confettiContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 10,
+        pointerEvents: 'none',
+    },
+    confetti: {
+        width: '100%',
+        height: '100%',
     },
     quickAccessContainer: {
         flexDirection: 'row',
@@ -1133,6 +1412,99 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 12,
+    },
+    goalTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        position: 'relative',
+        zIndex: 9999,
+    },
+    infoButton: {
+        padding: 0,
+        marginLeft: 4,
+        height: 24,
+        marginTop: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    tooltipContainer: {
+        position: 'absolute',
+        top: 40,
+        left: 0,
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        padding: 0,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+        zIndex: 9999,
+        width: 280,
+    },
+    tooltipArrow: {
+        position: 'absolute',
+        top: -8,
+        left: 20,
+        width: 0,
+        height: 0,
+        backgroundColor: 'transparent',
+        borderStyle: 'solid',
+        borderLeftWidth: 8,
+        borderRightWidth: 8,
+        borderBottomWidth: 8,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#FFF',
+        transform: [{ translateY: -1 }],
+    },
+    tooltipContent: {
+        padding: 15,
+    },
+    tooltipHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
+        paddingBottom: 8,
+        marginBottom: 10,
+    },
+    tooltipTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#2C3E50',
+        marginBottom: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
+        paddingBottom: 8,
+    },
+    tooltipSection: {
+        marginTop: 8,
+    },
+    tooltipSubtitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#34495E',
+        marginBottom: 4,
+    },
+    tooltipText: {
+        fontSize: 12,
+        color: '#7F8C8D',
+        marginBottom: 2,
+        lineHeight: 18,
+    },
+    closeButton: {
+        padding: 4,
+    },
+    tooltipOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'transparent',
+        zIndex: 9998,
     },
 });
 

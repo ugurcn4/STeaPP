@@ -2,24 +2,37 @@ import { db, storage } from '../../firebaseConfig';
 import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, deleteDoc, writeBatch, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
-export const uploadStory = async (userId, storyFile) => {
+// Önbellek için basit bir Map yapısı
+const storyCache = new Map();
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 dakika
+
+export const uploadStory = async (userId, storyFile, storyData = {}) => {
     try {
         // Storage'a hikayeyi yükle
         const storyRef = ref(storage, `stories/${userId}/${Date.now()}`);
         await uploadBytes(storyRef, storyFile);
         const storyUrl = await getDownloadURL(storyRef);
 
-        // Firestore'a hikaye bilgilerini kaydet
-        const storyDoc = await addDoc(collection(db, 'stories'), {
+        // Hikaye verilerini hazırla
+        const storyDoc = {
             userId,
             storyUrl,
             createdAt: Timestamp.now(),
-            expiresAt: Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)), // 24 saat sonra
-            viewedBy: [], // Kimler görüntüledi
-            likes: [], // Beğenenler
-        });
+            expiresAt: Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+            viewedBy: [],
+            likes: [],
+            text: storyData.text || '',
+            textPosition: storyData.textPosition || { x: 0, y: 0 },
+            textColor: storyData.textColor || '#FFFFFF',
+            fontSize: storyData.fontSize || 20,
+            location: storyData.location || null,
+            music: storyData.music || null,
+        };
 
-        return { success: true, storyId: storyDoc.id };
+        // Firestore'a hikaye bilgilerini kaydet
+        const docRef = await addDoc(collection(db, 'stories'), storyDoc);
+
+        return { success: true, storyId: docRef.id };
     } catch (error) {
         console.error('Hikaye yükleme hatası:', error);
         return { success: false, error: error.message };
@@ -28,9 +41,14 @@ export const uploadStory = async (userId, storyFile) => {
 
 export const getStories = async (userIds) => {
     try {
-        // userIds boşsa boş dizi döndür
         if (!userIds || userIds.length === 0) {
             return [];
+        }
+
+        const cacheKey = userIds.sort().join('_');
+        const cachedData = storyCache.get(cacheKey);
+        if (cachedData && (Date.now() - cachedData.timestamp < CACHE_EXPIRY)) {
+            return cachedData.stories;
         }
 
         const storiesRef = collection(db, 'stories');
@@ -42,13 +60,17 @@ export const getStories = async (userIds) => {
         );
 
         const querySnapshot = await getDocs(q);
-        const stories = [];
+        const stories = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            textPosition: doc.data().textPosition || { x: 0, y: 0 },
+            textColor: doc.data().textColor || '#FFFFFF',
+            fontSize: doc.data().fontSize || 20,
+        }));
 
-        querySnapshot.forEach((doc) => {
-            stories.push({
-                id: doc.id,
-                ...doc.data()
-            });
+        storyCache.set(cacheKey, {
+            stories,
+            timestamp: Date.now()
         });
 
         return stories;
@@ -258,5 +280,44 @@ export const markStoryAsViewed = async (storyId, userId) => {
     } catch (error) {
         console.error('Hikaye görüntüleme kaydı hatası:', error);
         return false;
+    }
+};
+
+// Önbelleği temizle
+export const clearStoryCache = () => {
+    storyCache.clear();
+};
+
+// Hikayeyi sil
+export const deleteStory = async (storyId) => {
+    try {
+        // Hikaye dokümanını al
+        const storyRef = doc(db, 'stories', storyId);
+        const storyDoc = await getDoc(storyRef);
+
+        if (!storyDoc.exists()) {
+            throw new Error('Hikaye bulunamadı');
+        }
+
+        const storyData = storyDoc.data();
+
+        // Storage'dan medyayı sil
+        if (storyData.storyUrl) {
+            const storageRef = ref(storage, storyData.storyUrl);
+            try {
+                await deleteObject(storageRef);
+            } catch (error) {
+                console.error('Storage medya silme hatası:', error);
+                // Medya zaten silinmiş olabilir, devam et
+            }
+        }
+
+        // Firestore'dan hikayeyi sil
+        await deleteDoc(storyRef);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Hikaye silme hatası:', error);
+        return { success: false, error: error.message };
     }
 }; 

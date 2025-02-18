@@ -295,23 +295,6 @@ export const startLiveLocationSharing = async (userId) => {
 };
 
 /**
- * Kullanıcının konumunu locations koleksiyonuna ekler.
- * @param {string} userId - Kullanıcı ID'si
- * @param {Object} location - Konum bilgisi (latitude, longitude, timestamp)
- */
-export const addLocation = async (userId, location) => {
-    try {
-        await db
-            .collection('users')
-            .doc(userId)
-            .collection('locations')
-            .add(location);
-    } catch (error) {
-        console.error('Konum eklenirken hata oluştu:', error);
-    }
-};
-
-/**
  * Kullanıcıya başkaları tarafından paylaşılan konumları getirir.
  * @param {string} userId - Kullanıcı ID'si
  * @returns {Promise<Array>} - Paylaşılan konumlar listesi

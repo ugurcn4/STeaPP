@@ -8,30 +8,79 @@ import {
     sendPasswordResetEmail as firebaseSendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { getFirebaseDb } from '../../firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Kullanıcı giriş işlemleri
-export const login = createAsyncThunk('user/login', async ({ email, password }) => {
+export const login = createAsyncThunk('user/login', async ({ email, password }, { rejectWithValue }) => {
     try {
         const auth = getAuth();
-        const userInfos = await signInWithEmailAndPassword(auth, email, password);
-        const user = userInfos.user;
-        const token = user.stsTokenManager.accessToken;
-        const userData = {
-            token,
-            user: user,
-        };
-        // AsyncStorage kullanarak kullanıcı bilgilerini cihazda saklama 
-        await AsyncStorage.setItem('userToken', token);
 
-        return userData;
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        if (!user) {
+            throw new Error('Kullanıcı bilgileri alınamadı');
+        }
+
+        const token = await user.getIdToken();
+
+        // Firestore'dan kullanıcı bilgilerini al
+        const db = getFirebaseDb();
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+
+        if (!userDoc.exists()) {
+            console.error('Firestore kullanıcı dokümanı bulunamadı');
+            throw new Error('Kullanıcı bilgileri eksik');
+        }
+
+        const userData = userDoc.data();
+
+        const userDataToStore = {
+            token,
+            user: {
+                uid: user.uid,
+                email: user.email,
+                emailVerified: user.emailVerified,
+                username: userData.informations?.name || email.split('@')[0]
+            }
+        };
+
+        // AsyncStorage'a kaydet
+        await Promise.all([
+            AsyncStorage.setItem('userToken', token),
+            AsyncStorage.setItem('userData', JSON.stringify(userDataToStore))
+        ]);
+
+        return userDataToStore;
     } catch (error) {
-        throw error;
+        console.error('Giriş hatası:', error.code, error.message);
+
+        let errorMessage = 'Giriş yapılırken bir hata oluştu';
+
+        switch (error.code) {
+            case 'auth/invalid-email':
+                errorMessage = 'Geçersiz e-posta adresi';
+                break;
+            case 'auth/user-disabled':
+                errorMessage = 'Bu hesap devre dışı bırakılmış';
+                break;
+            case 'auth/user-not-found':
+                errorMessage = 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı';
+                break;
+            case 'auth/wrong-password':
+                errorMessage = 'Hatalı şifre';
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin';
+                break;
+        }
+
+        return rejectWithValue(errorMessage);
     }
 });
 
-// Kullanıcı otomatik giriş işlemleri 
+// Otomatik giriş işlemleri
 export const autoLogin = createAsyncThunk('user/autoLogin', async () => {
     try {
         const token = await AsyncStorage.getItem('userToken');
@@ -47,49 +96,97 @@ export const autoLogin = createAsyncThunk('user/autoLogin', async () => {
 });
 
 // Kullanıcı çıkış işlemleri
-export const logout = createAsyncThunk('user/logout', async () => {
+export const logout = createAsyncThunk('user/logout', async (_, { rejectWithValue }) => {
     try {
         const auth = getAuth();
         await signOut(auth);
-        await AsyncStorage.removeItem('userToken');
+        // Tüm local storage verilerini temizle
+        await AsyncStorage.multiRemove(['userToken', 'userData']);
+        return null;
     } catch (error) {
-        throw error;
+        console.error('Çıkış hatası:', error);
+        return rejectWithValue('Çıkış yapılırken bir hata oluştu');
     }
 });
 
 // Kullanıcı Kayıt İşlemleri
-export const register = createAsyncThunk('user/register', async ({ email, password, username }) => {
+export const register = createAsyncThunk('user/register', async ({ email, password, username }, { rejectWithValue }) => {
     try {
         const auth = getAuth();
-        const userInfos = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userInfos.user;
-        const token = user.stsTokenManager.accessToken;
-        await sendEmailVerification(user);
-        await AsyncStorage.setItem('userToken', token);
+
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        if (!user) {
+            throw new Error('Kullanıcı oluşturulamadı');
+        }
+
+        const token = await user.getIdToken();
 
         // Kullanıcı bilgilerini Firestore'a kaydetme
+        const db = getFirebaseDb();
         const userDoc = doc(db, 'users', user.uid);
-        await setDoc(userDoc, {
+        const userData = {
             informations: {
                 name: username,
                 email: email,
-                interests: [], // Kullanıcı ilgi alanları
+                interests: [],
                 settings: {
-                    visibility: 'public', // Profil görünürlüğü: public, private
-                    notifications: true // Bildirim ayarları
+                    visibility: 'public',
+                    notifications: true
                 }
             },
-            friends: [], // Kullanıcının arkadaş listesi
+            friends: [],
             friendRequests: {
-                sent: [], // Gönderilen arkadaşlık istekleri
-                received: [] // Alınan arkadaşlık istekleri
+                sent: [],
+                received: []
             },
-            createdAt: new Date(), // Kullanıcı oluşturulma tarihi
-        });
+            createdAt: new Date(),
+        };
 
-        return { token, user: { ...user, username } };
+        await setDoc(userDoc, userData);
+
+        // E-posta doğrulama gönder
+        await sendEmailVerification(user);
+
+        const userDataToStore = {
+            token,
+            user: {
+                uid: user.uid,
+                email: user.email,
+                username: username,
+                emailVerified: user.emailVerified
+            }
+        };
+
+        // AsyncStorage'a kaydet
+        await Promise.all([
+            AsyncStorage.setItem('userToken', token),
+            AsyncStorage.setItem('userData', JSON.stringify(userDataToStore))
+        ]);
+
+        return userDataToStore;
     } catch (error) {
-        throw error;
+        console.error('Kayıt hatası:', error.code, error.message);
+
+        let errorMessage = 'Kayıt işlemi sırasında bir hata oluştu';
+
+        switch (error.code) {
+            case 'auth/email-already-in-use':
+                errorMessage = 'Bu e-posta adresi zaten kullanımda';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Geçersiz e-posta adresi';
+                break;
+            case 'auth/operation-not-allowed':
+                errorMessage = 'E-posta/şifre girişi devre dışı bırakılmış';
+                break;
+            case 'auth/weak-password':
+                errorMessage = 'Şifre çok zayıf';
+                break;
+        }
+
+        return rejectWithValue(errorMessage);
     }
 });
 
@@ -142,7 +239,10 @@ const userSlice = createSlice({
             })
             .addCase(login.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.error.message;
+                state.isAuth = false;
+                state.error = action.payload || 'Giriş yapılırken bir hata oluştu';
+                state.user = null;
+                state.token = null;
             })
             .addCase(autoLogin.pending, (state) => {
                 state.loading = true;
@@ -151,7 +251,9 @@ const userSlice = createSlice({
             .addCase(autoLogin.fulfilled, (state, action) => {
                 state.loading = false;
                 state.isAuth = true;
-                state.token = action.payload;
+                state.user = action.payload.user;
+                state.token = action.payload.token;
+                state.error = null;
             })
             .addCase(autoLogin.rejected, (state, action) => {
                 state.loading = false;
@@ -163,10 +265,7 @@ const userSlice = createSlice({
                 state.loading = true;
             })
             .addCase(logout.fulfilled, (state) => {
-                state.loading = false;
-                state.isAuth = false;
-                state.token = null;
-                state.error = null;
+                return { ...initialState };
             })
             .addCase(logout.rejected, (state, action) => {
                 state.loading = false;
@@ -174,18 +273,22 @@ const userSlice = createSlice({
             })
             .addCase(register.pending, (state) => {
                 state.loading = true;
+                state.error = null;
                 state.isAuth = false;
             })
             .addCase(register.fulfilled, (state, action) => {
                 state.loading = false;
                 state.isAuth = true;
-                state.token = action.payload.token;
                 state.user = action.payload.user;
+                state.token = action.payload.token;
+                state.error = null;
             })
-            .addCase(register.rejected, (state) => {
+            .addCase(register.rejected, (state, action) => {
                 state.loading = false;
                 state.isAuth = false;
-                state.error = 'Geçersiz E-Posta veya Şifre';
+                state.user = null;
+                state.token = null;
+                state.error = action.payload || 'Kayıt işlemi başarısız oldu';
             })
             .addCase(sendPasswordResetEmail.pending, (state) => {
                 state.status = 'Yükleniyor';

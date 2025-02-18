@@ -10,12 +10,10 @@ import {
     StatusBar,
     SafeAreaView,
     ActivityIndicator,
-    TouchableWithoutFeedback,
-    Keyboard,
     ScrollView
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { login, autoLogin } from '../redux/userSlice';
+import { login } from '../redux/userSlice';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -28,10 +26,6 @@ const LoginPage = ({ navigation }) => {
     const dispatch = useDispatch();
 
     useEffect(() => {
-        dispatch(autoLogin());
-    }, []);
-
-    useEffect(() => {
         setLoading(loginStatus === 'loading');
     }, [loginStatus]);
 
@@ -41,19 +35,31 @@ const LoginPage = ({ navigation }) => {
         });
     }, [navigation]);
 
-    const handleLogin = () => {
-        setLoading(true);
-        dispatch(login({ email, password }))
-            .unwrap()
-            .catch(() => {
-                setLoading(false);
-                Toast.show({
-                    type: 'error',
-                    text1: 'Giriş Başarısız',
-                    text2: 'Lütfen bilgilerinizi kontrol edin',
-                    position: 'top',
-                });
+    const handleLogin = async () => {
+        if (!email || !password) {
+            Toast.show({
+                type: 'error',
+                text1: 'Hata',
+                text2: 'E-posta ve şifre alanları boş bırakılamaz',
+                position: 'top',
             });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await dispatch(login({ email, password })).unwrap();
+        } catch (error) {
+            console.error('Giriş hatası:', error);
+            Toast.show({
+                type: 'error',
+                text1: 'Giriş Başarısız',
+                text2: error || 'Lütfen bilgilerinizi kontrol edin',
+                position: 'top',
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSocialLogin = (provider) => {

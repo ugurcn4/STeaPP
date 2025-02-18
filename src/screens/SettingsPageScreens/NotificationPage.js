@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useSelector } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { lightTheme, darkTheme } from '../../themes';
 import { useNotifications } from '../../Notifications/useNotifications';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NotificationsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -24,37 +25,62 @@ const NotificationsPage = ({ navigation }) => {
 
     const sendTestNotification = async () => {
         try {
-            const { status } = await Notifications.getPermissionsAsync();
+            // Önce izinleri detaylı kontrol et
+            const permissionStatus = await Notifications.getPermissionsAsync();
 
-            if (status !== 'granted') {
-                Alert.alert(
-                    "İzin Gerekli",
-                    "Bildirim göndermek için izin gerekiyor.",
-                    [{ text: "Tamam", style: "default" }]
-                );
-                return;
+            if (permissionStatus.status !== 'granted') {
+                // İzin yoksa, izin iste
+                const { status } = await Notifications.requestPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert(
+                        "İzin Gerekli",
+                        "Bildirim göndermek için izin gerekiyor. Lütfen ayarlardan bildirimlere izin verin.",
+                        [
+                            {
+                                text: "Ayarlara Git",
+                                onPress: () => Linking.openSettings()
+                            },
+                            {
+                                text: "İptal",
+                                style: "cancel"
+                            }
+                        ]
+                    );
+                    return;
+                }
             }
 
             if (settings.allNotifications) {
-                await Notifications.scheduleNotificationAsync({
+                // Test bildirimi oluştur
+                const notification = {
                     content: {
                         title: "Test Bildirimi",
-                        body: "Bildirimler başarıyla çalışıyor! 🎉",
-                        sound: true,
-                        priority: 'high',
-                        vibrate: true,
+                        body: "Bu bir test bildirimidir! 🔔",
+                        data: { type: 'test' },
+                        sound: 'default',
+                        priority: 'max',
+                        vibrate: [0, 250, 250, 250],
+                        badge: 1,
                     },
-                    trigger: null,
-                });
+                    trigger: null // Hemen gönder
+                };
 
+                // Bildirimi gönder
+                const notificationId = await Notifications.scheduleNotificationAsync(notification);
+
+                // Başarılı mesajı
                 Alert.alert(
-                    "Başarılı",
-                    "Test bildirimi gönderildi!",
+                    "Bildirim Gönderildi",
+                    `Bildirim ID: ${notificationId}\nLütfen bildirim gelip gelmediğini kontrol edin.`,
                     [{ text: "Tamam", style: "default" }]
                 );
+
+                // Mevcut bildirimleri kontrol et
+                const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+
             } else {
                 Alert.alert(
-                    "Bildirim Hatası",
+                    "Bildirimler Kapalı",
                     "Bildirimleri test etmek için önce 'Tüm Bildirimler' ayarını açın.",
                     [{ text: "Tamam", style: "default" }]
                 );
@@ -63,7 +89,7 @@ const NotificationsPage = ({ navigation }) => {
             console.error('Test bildirimi gönderme hatası:', error);
             Alert.alert(
                 "Hata",
-                "Bildirim gönderilirken bir hata oluştu: " + error.message,
+                `Bildirim gönderilirken bir hata oluştu:\n${error.message}`,
                 [{ text: "Tamam", style: "default" }]
             );
         }
@@ -170,6 +196,45 @@ const NotificationsPage = ({ navigation }) => {
                 />
                 <Text style={styles.testButtonText}>
                     Test Bildirimi Gönder
+                </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={[
+                    styles.testButton,
+                    { marginTop: 10, backgroundColor: '#2196F3' }
+                ]}
+                onPress={async () => {
+                    try {
+                        const { getAuth } = await import('firebase/auth');
+                        const { doc, getDoc, getFirestore } = await import('firebase/firestore');
+                        const storedToken = await AsyncStorage.getItem('pushToken');
+                        const auth = getAuth();
+                        const currentUser = auth.currentUser;
+                        const db = getFirestore();
+
+                        if (currentUser) {
+                            const userRef = doc(db, 'users', currentUser.uid);
+                            const userDoc = await getDoc(userRef);
+                            const userData = userDoc.data();
+
+                            Alert.alert(
+                                'Token Bilgileri',
+                                `AsyncStorage Token: ${storedToken || 'Bulunamadı'}\n\nFirestore Tokens: ${JSON.stringify(userData.fcmTokens || {}, null, 2)}`
+                            );
+                        }
+                    } catch (error) {
+                        Alert.alert('Hata', 'Token bilgileri alınırken hata oluştu: ' + error.message);
+                    }
+                }}
+            >
+                <Ionicons
+                    name="information-circle"
+                    size={24}
+                    color="#FFFFFF"
+                />
+                <Text style={styles.testButtonText}>
+                    Token Bilgilerini Göster
                 </Text>
             </TouchableOpacity>
 

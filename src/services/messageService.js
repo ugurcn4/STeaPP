@@ -20,9 +20,12 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Platform } from 'react-native';
 
 // Yeni mesaj gönderme
-export const sendMessage = async (senderId, receiverId, message) => {
+export const sendMessage = async (senderId, receiverId, message, type = 'text', storyData = null) => {
     try {
-        const chatId = [senderId, receiverId].sort().join('_');
+
+        // ChatId'yi her zaman aynı formatta oluştur
+        const participants = [senderId, receiverId].sort();
+        const chatId = `${participants[0]}_${participants[1]}`;
 
         // Chat dokümanını kontrol et ve oluştur
         const chatRef = doc(db, 'chats', chatId);
@@ -30,11 +33,30 @@ export const sendMessage = async (senderId, receiverId, message) => {
 
         const timestamp = Timestamp.now();
 
+        const messageData = {
+            chatId,
+            senderId,
+            receiverId,
+            message,
+            timestamp,
+            read: false,
+            mediaType: type
+        };
+
+        // Eğer hikaye yanıtı ise, hikaye verilerini ekle
+        if (type === 'story_reply' && storyData) {
+
+            messageData.mediaType = 'story_reply';
+            messageData.storyUrl = storyData.storyUrl;
+            messageData.storyId = storyData.storyId;
+        }
+
+
         if (!chatDoc.exists()) {
             // Chat yoksa oluştur
             await setDoc(chatRef, {
                 participants: [senderId, receiverId],
-                lastMessage: { message },
+                lastMessage: { message, mediaType: type },  // type yerine mediaType kullan
                 lastMessageTime: timestamp,
                 unreadCount: {
                     [senderId]: 0,
@@ -44,21 +66,14 @@ export const sendMessage = async (senderId, receiverId, message) => {
         } else {
             // Varsa güncelle
             await updateDoc(chatRef, {
-                lastMessage: { message },
+                lastMessage: { message, mediaType: type },  // type yerine mediaType kullan
                 lastMessageTime: timestamp,
                 [`unreadCount.${receiverId}`]: increment(1)
             });
         }
 
         // Mesajı ekle
-        await addDoc(collection(db, 'messages'), {
-            chatId,
-            senderId,
-            receiverId,
-            message,
-            timestamp,
-            read: false
-        });
+        await addDoc(collection(db, 'messages'), messageData);
 
         return { success: true };
     } catch (error) {
@@ -69,20 +84,30 @@ export const sendMessage = async (senderId, receiverId, message) => {
 
 // Mesajları dinleme
 export const subscribeToMessages = (userId1, userId2, callback) => {
-    const chatId = [userId1, userId2].sort().join('_');
+    // ChatId'yi aynı formatta oluştur
+    const participants = [userId1, userId2].sort();
+    const chatId = `${participants[0]}_${participants[1]}`;
+
 
     const q = query(
         collection(db, 'messages'),
         where('chatId', '==', chatId),
-        orderBy('timestamp', 'asc')
+        orderBy('timestamp', 'desc')
     );
 
     return onSnapshot(q, (snapshot) => {
-        const messages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        callback(messages);
+        const messages = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                timestamp: data.timestamp
+            };
+        });
+
+        // Mesajları tarihe göre sırala (en yeni en üstte)
+        const sortedMessages = messages.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+        callback(sortedMessages);
     });
 };
 
@@ -370,5 +395,19 @@ export const getUnreadMessageCount = async (userId) => {
     } catch (error) {
         console.error('Okunmamış mesaj sayısı alınırken hata:', error);
         return 0;
+    }
+};
+
+// Story yanıtı gönderme
+export const sendStoryReply = async (senderId, receiverId, message, storyData) => {
+    try {
+        if (!storyData || !storyData.storyUrl || !storyData.storyId) {
+            throw new Error('Story verisi eksik');
+        }
+
+        return await sendMessage(senderId, receiverId, message, 'story_reply', storyData);
+    } catch (error) {
+        console.error('Story yanıtı gönderme hatası:', error);
+        return { success: false, error };
     }
 }; 

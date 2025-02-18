@@ -1,69 +1,38 @@
 {
   "expo": {
     "name": "STeaPP",
-    "slug": "STeaPP",
+    "slug": "steapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/new-logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/images/new-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ugurrucr.STeaPP",
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Fotoğraf yüklemek için galerinize erişim izni gerekiyor",
-        "NSCameraUsageDescription": "Fotoğraf çekmek için kamera izni gerekiyor"
-      },
-      "plugins": [
-        [
-          "expo-build-properties",
-          {
-            "ios": {
-              "useFrameworks": "dynamic",
-              "useModularHeaders": true,
-              "deploymentTarget": "13.0",
-              "pods": {
-                "FirebaseCoreInternal": {
-                  "modular_headers": true
-                },
-                "GoogleUtilities": {
-                  "modular_headers": true
-                },
-                "FirebaseCore": {
-                  "modular_headers": true
-                },
-                "FirebaseFirestore": {
-                  "modular_headers": true
-                },
-                "FirebaseCoreExtension": {
-                  "modular_headers": true
-                },
-                "FirebaseFirestoreInternal": {
-                  "modular_headers": true
-                },
-                "FirebaseAppCheckInterop": {
-                  "modular_headers": true
-                },
-                "FirebaseSharedSwift": {
-                  "modular_headers": true
-                },
-                "FirebaseStorage": {
-                  "modular_headers": true
-                }
-              }
-            }
-          }
-        ],
-        "@react-native-firebase/app"
-      ],
       "config": {
         "googleMapsApiKey": "AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8"
+      },
+      "bundleIdentifier": "com.ugurrucr.steapp",
+      "buildNumber": "1.0.0",
+      "icon": "./assets/images/new-logo.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
+        "NSLocationAlwaysUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
+        "NSCameraUsageDescription": "Fotoğraf çekmek ve hikaye paylaşmak için kamera izni gereklidir",
+        "NSPhotoLibraryUsageDescription": "Galerinizdeki fotoğrafları paylaşabilmek için izin gereklidir",
+        "NSPhotoLibraryAddUsageDescription": "Çektiğiniz fotoğrafları galeriye kaydetmek için izin gereklidir",
+        "NSMicrophoneUsageDescription": "Video çekerken ses kaydı yapabilmek için mikrofon izni gereklidir",
+        "NSUserTrackingUsageDescription": "Size daha iyi bir deneyim sunabilmek için izleme izni gereklidir",
+        "NSContactsUsageDescription": "Arkadaşlarınızı bulabilmek için rehber izni gereklidir",
+        "NSCalendarsUsageDescription": "Etkinlikleri takviminize ekleyebilmek için takvim izni gereklidir",
+        "NSMotionUsageDescription": "Hareket sensörlerini kullanabilmek için izin gereklidir"
       }
     },
     "android": {
@@ -71,7 +40,6 @@
         "foregroundImage": "./assets/images/new-logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ugurrucr.STeaPP",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8"
@@ -80,43 +48,67 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "VIBRATE",
         "RECEIVE_BOOT_COMPLETED",
-        "CAMERA"
-      ]
+        "SCHEDULE_EXACT_ALARM",
+        "ACCESS_NOTIFICATION_POLICY",
+        "POST_NOTIFICATIONS",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "ACCESS_NOTIFICATION_POLICY",
+        "POST_NOTIFICATIONS"
+      ],
+      "package": "com.ugurrucr.steapp",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "3107485e-043c-4f7d-ad0c-3146533c3dd8"
-      }
-    },
-    "runtimeVersion": "1.0.0",
-    "updates": {
-      "url": "https://u.expo.dev/3107485e-043c-4f7d-ad0c-3146533c3dd8"
-    },
     "plugins": [
+      "expo-build-properties",
       [
-        "expo-location",
+        "expo-notifications",
         {
-          "locationAlwaysAndWhenInUsePermission": "Yakındaki yerleri göstermek için konumunuza ihtiyacımız var."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Uygulamanın QR kod taraması yapabilmesi için kamera izni gerekiyor."
-        }
-      ],
-      [
-        "expo-barcode-scanner",
-        {
-          "cameraPermission": "QR kod taraması için kamera izni gerekiyor."
+          "icon": "./assets/images/new-logo.png",
+          "color": "#ffffff"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "379cc6f7-cc9f-4c0c-86db-369c71ad4d70"
+      }
+    },
+    "owner": "ugurrucr",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/379cc6f7-cc9f-4c0c-86db-369c71ad4d70"
+    },
+    "notification": {
+      "icon": "./assets/images/new-logo.png",
+      "color": "#ffffff",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsedTitle": "Yeni Bildirim"
+    }
   }
 }

@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { RblSection } from '../components/';
 import { logout } from '../redux/userSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { RadioButton } from 'react-native-paper';
 import { setTheme } from '../redux/themeSlice';
 import { lightTheme, darkTheme } from '../themes';
-import { CommonActions } from '@react-navigation/native';
 
 // Shadow Wrapper Component
 const ShadowWrapper = ({ children, style }) => {
@@ -51,6 +48,12 @@ const SettingsPage = ({ navigation }) => {
             iconColor: '#32CD32'
         },
         {
+            title: "Güncellemeler",
+            iconName: "cloud-download-outline",
+            screen: "Updates",
+            iconColor: '#4CAF50'
+        },
+        {
             title: "Yardım ve Destek",
             iconName: "help-circle-outline",
             screen: "YardimDestek",
@@ -85,16 +88,12 @@ const SettingsPage = ({ navigation }) => {
                 { text: "Hayır", onPress: () => { } },
                 {
                     text: "Evet",
-                    onPress: () => {
-                        dispatch(logout());
-                        navigation.dispatch(
-                            CommonActions.reset({
-                                index: 0,
-                                routes: [
-                                    { name: 'Auth', params: { screen: 'Giriş Yap' } }
-                                ],
-                            })
-                        );
+                    onPress: async () => {
+                        await dispatch(logout());
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'Auth' }]
+                        });
                     }
                 }
             ],

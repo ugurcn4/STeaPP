@@ -64,17 +64,18 @@ const ChatScreen = ({ route, navigation }) => {
             setIsLoading(true);
             const uid = await getCurrentUserUid();
             setCurrentUserId(uid);
+
+            // chatId'yi doğru formatta oluştur
             const chatId = [uid, friend.id].sort().join('_');
 
             const unsubscribeMessages = subscribeToMessages(
                 uid,
                 friend.id,
                 (newMessages) => {
-                    const reversedMessages = [...newMessages].reverse();
                     if (!initialLoad && messages.length < newMessages.length) {
                         setNewMessageReceived(true);
                     }
-                    setMessages(reversedMessages);
+                    setMessages(newMessages);
                     markChatAsRead(chatId, uid);
                     setInitialLoad(false);
                     setIsLoading(false);
@@ -100,7 +101,7 @@ const ChatScreen = ({ route, navigation }) => {
 
     useEffect(() => {
         if (newMessageReceived && flatListRef.current) {
-            flatListRef.current.scrollToEnd({ animated: true });
+            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
             setNewMessageReceived(false);
         }
     }, [newMessageReceived]);
@@ -359,8 +360,59 @@ const ChatScreen = ({ route, navigation }) => {
 
     const renderMessage = ({ item }) => {
         const isMine = item.senderId === currentUserId;
-
         const renderMessageContent = () => {
+            // Story yanıtı kontrolü
+            if (item.mediaType === 'story_reply') {
+
+
+                return (
+                    <View>
+                        <Text style={[
+                            styles.messageText,
+                            isMine ? styles.myMessageText : styles.theirMessageText
+                        ]}>
+                            {item.message}
+                        </Text>
+                        <TouchableOpacity
+                            style={[
+                                styles.storyReplyContainer,
+                                isMine ? styles.myStoryReply : styles.theirStoryReply
+                            ]}
+                            onPress={() => {
+                                if (item.storyId) {
+                                    // navigation.navigate('StoryDetail', { storyId: item.storyId });
+                                }
+                            }}
+                        >
+                            <Image
+                                source={{ uri: item.storyUrl }}
+                                style={styles.storyThumbnail}
+                                resizeMode="cover"
+                            />
+                            <Text style={[
+                                styles.storyReplyText,
+                                isMine ? styles.myStoryReplyText : styles.theirStoryReplyText
+                            ]}>
+                                Hikayeye yanıt
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                );
+            }
+
+            // Normal metin mesajı
+            if (!item.mediaType || item.mediaType === 'text') {
+                return (
+                    <Text style={[
+                        styles.messageText,
+                        isMine ? styles.myMessageText : styles.theirMessageText
+                    ]}>
+                        {item.message}
+                    </Text>
+                );
+            }
+
+            // Ses mesajı
             if (item.audioUrl) {
                 return (
                     <TouchableOpacity
@@ -401,6 +453,7 @@ const ChatScreen = ({ route, navigation }) => {
                 );
             }
 
+            // Medya mesajı
             if (item.mediaUrl) {
                 switch (item.mediaType) {
                     case 'image':
@@ -432,6 +485,7 @@ const ChatScreen = ({ route, navigation }) => {
                 }
             }
 
+            // Varsayılan olarak metin mesajını göster
             return (
                 <Text style={[
                     styles.messageText,
@@ -439,36 +493,6 @@ const ChatScreen = ({ route, navigation }) => {
                 ]}>
                     {item.message}
                 </Text>
-            );
-        };
-
-        const renderReadStatus = () => {
-            if (!isMine) return null;
-
-            return (
-                <View style={styles.readStatusContainer}>
-                    <View style={styles.readStatusWrapper}>
-                        {item.read ? (
-                            <Ionicons
-                                name="checkmark-done-outline"
-                                size={16}
-                                color="rgba(255,255,255,0.9)"
-                            />
-                        ) : (
-                            <Ionicons
-                                name="checkmark-outline"
-                                size={16}
-                                color="rgba(255,255,255,0.7)"
-                            />
-                        )}
-                    </View>
-                    <Text style={[styles.timeText, styles.myTimeText]}>
-                        {item.timestamp.toDate().toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        })}
-                    </Text>
-                </View>
             );
         };
 
@@ -483,7 +507,29 @@ const ChatScreen = ({ route, navigation }) => {
                 ]}>
                     {renderMessageContent()}
                     {isMine ? (
-                        renderReadStatus()
+                        <View style={styles.readStatusContainer}>
+                            <View style={styles.readStatusWrapper}>
+                                {item.read ? (
+                                    <Ionicons
+                                        name="checkmark-done-outline"
+                                        size={16}
+                                        color="rgba(255,255,255,0.9)"
+                                    />
+                                ) : (
+                                    <Ionicons
+                                        name="checkmark-outline"
+                                        size={16}
+                                        color="rgba(255,255,255,0.7)"
+                                    />
+                                )}
+                            </View>
+                            <Text style={[styles.timeText, styles.myTimeText]}>
+                                {item.timestamp.toDate().toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}
+                            </Text>
+                        </View>
                     ) : (
                         <Text style={[styles.timeText, styles.theirTimeText]}>
                             {item.timestamp.toDate().toLocaleTimeString([], {
@@ -559,8 +605,15 @@ const ChatScreen = ({ route, navigation }) => {
                         placeholder={isRecording ? `Kaydediliyor... ${recordingDuration}s` : "Mesaj yaz..."}
                         placeholderTextColor="#666"
                         multiline
-                        maxHeight={100}
                         editable={!isRecording}
+                        scrollEnabled={false}
+                        textAlignVertical="center"
+                        onContentSizeChange={(e) => {
+                            const { height } = e.nativeEvent.contentSize;
+                            e.target.setNativeProps({
+                                height: Math.min(Math.max(35, height), 100)
+                            });
+                        }}
                     />
                 </View>
 
@@ -640,19 +693,21 @@ const ChatScreen = ({ route, navigation }) => {
                     data={messages}
                     renderItem={renderMessage}
                     keyExtractor={item => item.id}
-                    contentContainerStyle={styles.messagesList}
+                    contentContainerStyle={[
+                        styles.messagesList,
+                        messages.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+                    ]}
                     inverted={true}
                     ListEmptyComponent={renderEmptyMessage}
                     showsVerticalScrollIndicator={false}
-                    onContentSizeChange={() => {
-                        if (initialLoad || newMessageReceived) {
-                            flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                        }
-                    }}
-                    onLayout={() => {
-                        if (initialLoad) {
-                            flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                        }
+                    onEndReachedThreshold={0.1}
+                    initialNumToRender={20}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    removeClippedSubviews={true}
+                    maintainVisibleContentPosition={{
+                        minIndexForVisible: 0,
+                        autoscrollToTopThreshold: 10
                     }}
                 />
             </View>
@@ -798,15 +853,15 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: 'rgba(0,0,0,0.05)',
         backgroundColor: '#FFF',
-        height: Platform.OS === 'ios' ? 90 : 70,
+        minHeight: Platform.OS === 'ios' ? 90 : 70,
+        maxHeight: 200,
     },
     inputBar: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-end',
         padding: 12,
         paddingBottom: Platform.OS === 'ios' ? 32 : 12,
         backgroundColor: '#FFF',
-        height: '100%',
     },
     attachButton: {
         width: 40,
@@ -821,14 +876,17 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         marginHorizontal: 8,
         paddingHorizontal: 16,
-        paddingVertical: Platform.OS === 'ios' ? 10 : 6,
-        maxHeight: 100,
+        paddingVertical: Platform.OS === 'ios' ? 8 : 4,
         justifyContent: 'center',
+        minHeight: 40,
     },
     input: {
         fontSize: 16,
-        maxHeight: 100,
         color: '#1A1A1A',
+        maxHeight: 120,
+        paddingTop: 0,
+        paddingBottom: 0,
+        textAlignVertical: 'center',
     },
     sendButton: {
         width: 40,
@@ -967,6 +1025,36 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 12,
         color: '#7F8C8D',
+    },
+    storyReplyContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        padding: 8,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+    },
+    myStoryReply: {
+        backgroundColor: 'rgba(255,255,255,0.15)',
+    },
+    theirStoryReply: {
+        backgroundColor: 'rgba(0,0,0,0.08)',
+    },
+    storyThumbnail: {
+        width: 48,
+        height: 48,
+        borderRadius: 8,
+        marginRight: 8,
+    },
+    storyReplyText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    myStoryReplyText: {
+        color: 'rgba(255,255,255,0.9)',
+    },
+    theirStoryReplyText: {
+        color: 'rgba(0,0,0,0.7)',
     },
 });
 

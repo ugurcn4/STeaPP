@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
-import { Entypo, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from '../../firebaseConfig';
 import * as ImagePicker from 'expo-image-picker';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -49,11 +48,21 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         const user = auth.currentUser;
         if (user) {
             const getUserData = async () => {
-                const docRef = doc(db, 'users', user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setUserInfo(docSnap.data());
-                    setUserData(docSnap.data());
+                try {
+                    if (!db) {
+                        await initializeFirebase();
+                        db = getFirebaseDb();
+                        storage = getFirebaseStorage();
+                    }
+                    const docRef = doc(db, 'users', user.uid);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        setUserInfo(docSnap.data());
+                        setUserData(docSnap.data());
+                    }
+                } catch (error) {
+                    console.error('Kullanıcı verileri alınırken hata:', error);
+                    showToast('error', 'Hata', 'Kullanıcı verileri alınamadı');
                 }
             };
             getUserData();
@@ -67,6 +76,11 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         }
 
         try {
+            if (!db) {
+                await initializeFirebase();
+                db = getFirebaseDb();
+                storage = getFirebaseStorage();
+            }
             const userDoc = doc(db, `users/${user.uid}`);
             const userSnapshot = await getDoc(userDoc);
 
@@ -171,12 +185,18 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         if (!result.canceled) {
             const { uri } = result.assets[0];
             setImageUri(uri);
-            setUploading(true); // Yüklemeyi başlatıyoruz
-            setProgress(0); // İlerlemeyi sıfırlıyoruz
+            setUploading(true);
+            setProgress(0);
 
             const user = getAuth().currentUser;
             if (user) {
                 try {
+                    if (!storage) {
+                        await initializeFirebase();
+                        storage = getFirebaseStorage();
+                        db = getFirebaseDb();
+                    }
+
                     const response = await fetch(uri);
                     const blob = await response.blob();
                     const storageRef = ref(storage, `profile_pictures/${user.uid}`);
@@ -186,26 +206,32 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         'state_changed',
                         (snapshot) => {
                             const prog = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                            setProgress(prog); // Yükleme ilerlemesini güncelliyoruz
+                            setProgress(prog);
                         },
                         (error) => {
                             showToast('error', 'Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
+                            setUploading(false);
                         },
                         async () => {
-                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            const userDoc = doc(db, `users/${user.uid}`);
-                            await setDoc(userDoc, { profilePicture: downloadURL }, { merge: true });
-                            setUserData((prevData) => ({
-                                ...prevData,
-                                profilePicture: downloadURL,
-                            }));
-                            showToast('success', 'Başarılı', 'Profil fotoğrafınız güncellendi.');
-                            setUploading(false); // Yükleme tamamlandı
+                            try {
+                                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                                const userDoc = doc(db, `users/${user.uid}`);
+                                await setDoc(userDoc, { profilePicture: downloadURL }, { merge: true });
+                                setUserData((prevData) => ({
+                                    ...prevData,
+                                    profilePicture: downloadURL,
+                                }));
+                                showToast('success', 'Başarılı', 'Profil fotoğrafınız güncellendi.');
+                            } catch (error) {
+                                showToast('error', 'Hata', 'Profil fotoğrafı güncellenirken bir hata oluştu.');
+                            } finally {
+                                setUploading(false);
+                            }
                         }
                     );
                 } catch (error) {
                     showToast('error', 'Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
-                    setUploading(false); // Hata durumunda yükleme durumu false yapılıyor
+                    setUploading(false);
                 }
             }
         }

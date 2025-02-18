@@ -44,11 +44,7 @@ import {
 } from '../helpers/locationHelpers';
 import Toast from 'react-native-toast-message';
 import FriendProfileModal from '../modals/friendProfileModal';
-import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { getFriendDetails } from '../helpers/friendHelpers';
-import { LocationTypes } from '../types/locationTypes';
-import Stories from '../components/Stories';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -64,7 +60,6 @@ const FriendsPage = ({ navigation }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [requestStatus, setRequestStatus] = useState({});
     const [friendRequests, setFriendRequests] = useState([]);
     const [sentRequests, setSentRequests] = useState([]);
     const [friends, setFriends] = useState([]);
@@ -339,7 +334,7 @@ const FriendsPage = ({ navigation }) => {
                     onPress={() => handleFriendAction(user.id)}
                     disabled={buttonConfig.disabled}
                 >
-                    <Text style={styles.searchActionButtonText}>
+                    <Text style={[styles.searchActionButtonText, buttonConfig.disabled && { opacity: 0.7 }]}>
                         {buttonConfig.text}
                     </Text>
                 </TouchableOpacity>
@@ -2053,6 +2048,18 @@ const styles = StyleSheet.create({
     },
     friendsList: {
         padding: 16,
+    },
+    addButton: {
+        backgroundColor: '#2196F3',
+    },
+    pendingButton: {
+        backgroundColor: '#FFA000',
+    },
+    friendButton: {
+        backgroundColor: '#4CAF50',
+    },
+    acceptButton: {
+        backgroundColor: '#4CAF50',
     },
 });
 

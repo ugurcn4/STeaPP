@@ -16,24 +16,35 @@ export const getPlaceFromCoordinates = async (latitude, longitude) => {
             let city = '';
             let district = '';
 
-            for (const component of addressComponents) {
-                if (component.types.includes('administrative_area_level_1')) {
-                    city = component.long_name; // İl
-                }
-                if (component.types.includes('administrative_area_level_2')) {
-                    district = component.long_name; // İlçe
-                }
+            // İl için sadece administrative_area_level_1'i kullan
+            const province = addressComponents.find(comp =>
+                comp.types.includes('administrative_area_level_1')
+            );
+            if (province) {
+                city = province.long_name;
             }
 
-            // Eğer ilçe bulunamadıysa mahalle bilgisini kullan
+            // İlçe için administrative_area_level_2'yi kullan
+            const districtComp = addressComponents.find(comp =>
+                comp.types.includes('administrative_area_level_2')
+            );
+            if (districtComp) {
+                district = districtComp.long_name;
+            }
+
+            // İlçe bulunamadıysa diğer seçenekleri dene
             if (!district) {
                 const subLocality = addressComponents.find(comp =>
+                    comp.types.includes('sublocality_level_1') ||
                     comp.types.includes('sublocality') ||
                     comp.types.includes('neighborhood')
                 );
                 if (subLocality) {
                     district = subLocality.long_name;
                 }
+            }            // Merkez kelimesini kaldır
+            if (district) {
+                district = district.replace(' Merkez', '');
             }
 
             return {
@@ -43,7 +54,8 @@ export const getPlaceFromCoordinates = async (latitude, longitude) => {
         }
         return { city: 'Bilinmeyen Şehir', district: 'Bilinmeyen Bölge' };
     } catch (error) {
-        console.error('Konum bilgisi alınamadı:', error);
+        console.error('Konum bilgisi alınırken hata:', error);
+        console.error('Hata detayı:', error.response?.data || error.message);
         return { city: 'Bilinmeyen Şehir', district: 'Bilinmeyen Bölge' };
     }
 };

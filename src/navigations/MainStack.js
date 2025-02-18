@@ -2,6 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import CustomNavBar from '../components/CustomNavBar';
 import NotificationPage from '../screens/SettingsPageScreens/NotificationPage';
+import NotificationsListScreen from '../screens/NotificationsListScreen';
 import PermissionsPage from '../screens/SettingsPageScreens/PermissionsPage';
 import PrivacyPage from '../screens/SettingsPageScreens/PrivacyPage';
 import HelpSupportPage from '../screens/SettingsPageScreens/HelpSupportPage';
@@ -20,10 +21,12 @@ import StoryView from '../screens/StoryView';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ImageViewer from '../screens/ImageViewer';
+import CityExplorer from '../screens/CityExplorer';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { Platform } from 'react-native';
 import DirectMessagesScreen from '../screens/DirectMessagesScreen';
 import QRCodeScreen from '../screens/QRCodeScreen';
+import StoryEditor from '../screens/StoryEditor';
+import UpdatesPage from '../screens/SettingsPageScreens/UpdatesPage';
 
 const Stack = createNativeStackNavigator();
 
@@ -86,6 +89,15 @@ const MainStack = () => {
             <Stack.Screen
                 name="Bildirimler"
                 component={NotificationPage}
+            />
+            <Stack.Screen
+                name="BildirimListesi"
+                component={NotificationsListScreen}
+                options={{
+                    headerShown: true,
+                    title: 'Bildirimler',
+                    headerBackTitleVisible: false,
+                }}
             />
             <Stack.Screen
                 name="Izinler"
@@ -200,8 +212,24 @@ const MainStack = () => {
                     cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
                 }}
             />
+            <Stack.Screen
+                name="CityExplorer"
+                component={CityExplorer}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="StoryEditor"
+                component={StoryEditor}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="Updates"
+                component={UpdatesPage}
+                options={{ headerShown: false }}
+            />
         </Stack.Navigator>
     );
+
 };
 
 export default MainStack; 

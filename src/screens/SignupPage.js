@@ -26,6 +26,7 @@ const SignupPage = ({ navigation }) => {
     const [errorMessage, setErrorMessage] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showVerifyPassword, setShowVerifyPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const dispatch = useDispatch();
     const { Loading } = useSelector(state => state.user);
@@ -36,14 +37,96 @@ const SignupPage = ({ navigation }) => {
         });
     }, [navigation]);
 
-    const handleRegister = () => {
-        if (password !== verifyPassword) {
-            setErrorMessage('Şifreler uyuşmuyor');
+    // Kullanıcı adı doğrulama
+    const validateUsername = (username) => {
+        // Türkçe karakterler ve diğer geçerli karakterler için regex
+        const usernameRegex = /^[a-zA-ZğĞüÜşŞıİöÖçÇ0-9_]{3,20}$/;
+        if (!usernameRegex.test(username)) {
+            return 'Kullanıcı adı 3-20 karakter arasında olmalı ve sadece harf, rakam ve alt çizgi içerebilir';
+        }
+        return '';
+    };
+
+    // Email doğrulama
+    const validateEmail = (email) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return 'Geçerli bir e-posta adresi giriniz';
+        }
+        return '';
+    };
+
+    // Şifre doğrulama
+    const validatePassword = (password) => {
+        if (password.length < 6) {
+            return 'Şifre en az 6 karakter olmalıdır';
+        }
+        if (!/[A-Z]/.test(password)) {
+            return 'Şifre en az bir büyük harf içermelidir';
+        }
+        if (!/[0-9]/.test(password)) {
+            return 'Şifre en az bir rakam içermelidir';
+        }
+        return '';
+    };
+
+    const handleRegister = async () => {
+        setIsLoading(true);
+        setErrorMessage('');
+
+        // Tüm alanların dolu olduğunu kontrol et
+        if (!username || !email || !password || !verifyPassword) {
+            setErrorMessage('Lütfen tüm alanları doldurunuz');
+            setIsLoading(false);
             return;
         }
+
+        // Kullanıcı adı doğrulama
+        const usernameError = validateUsername(username);
+        if (usernameError) {
+            setErrorMessage(usernameError);
+            setIsLoading(false);
+            return;
+        }
+
+        // Email doğrulama
+        const emailError = validateEmail(email);
+        if (emailError) {
+            setErrorMessage(emailError);
+            setIsLoading(false);
+            return;
+        }
+
+        // Şifre doğrulama
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            setErrorMessage(passwordError);
+            setIsLoading(false);
+            return;
+        }
+
+        // Şifre eşleşme kontrolü
+        if (password !== verifyPassword) {
+            setErrorMessage('Şifreler uyuşmuyor');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            await dispatch(register({ email, password, username })).unwrap();
+            // Başarılı kayıt durumunda otomatik olarak yönlendirilecek
+        } catch (error) {
+            setErrorMessage('Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Input değişikliklerinde hata mesajını temizle
+    const handleInputChange = (setter) => (value) => {
         setErrorMessage('');
-        dispatch(register({ email, password, username }));
-    }
+        setter(value);
+    };
 
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -69,7 +152,7 @@ const SignupPage = ({ navigation }) => {
                                     style={styles.input}
                                     placeholder="Kullanıcı Adı"
                                     value={username}
-                                    onChangeText={setUserName}
+                                    onChangeText={handleInputChange(setUserName)}
                                     autoCapitalize="none"
                                     placeholderTextColor="#A0A0A0"
                                 />
@@ -78,7 +161,7 @@ const SignupPage = ({ navigation }) => {
                                     style={styles.input}
                                     placeholder="E-posta"
                                     value={email}
-                                    onChangeText={setEmail}
+                                    onChangeText={handleInputChange(setEmail)}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     placeholderTextColor="#A0A0A0"
@@ -89,7 +172,7 @@ const SignupPage = ({ navigation }) => {
                                         style={[styles.input, styles.passwordInput]}
                                         placeholder="Şifre"
                                         value={password}
-                                        onChangeText={setPassword}
+                                        onChangeText={handleInputChange(setPassword)}
                                         secureTextEntry={!showPassword}
                                         placeholderTextColor="#A0A0A0"
                                     />
@@ -110,7 +193,7 @@ const SignupPage = ({ navigation }) => {
                                         style={[styles.input, styles.passwordInput]}
                                         placeholder="Şifreyi Doğrula"
                                         value={verifyPassword}
-                                        onChangeText={setVerifyPassword}
+                                        onChangeText={handleInputChange(setVerifyPassword)}
                                         secureTextEntry={!showVerifyPassword}
                                         placeholderTextColor="#A0A0A0"
                                     />
@@ -131,11 +214,11 @@ const SignupPage = ({ navigation }) => {
                                 ) : null}
 
                                 <TouchableOpacity
-                                    style={styles.signUpButton}
+                                    style={[styles.signUpButton, isLoading && styles.signUpButtonDisabled]}
                                     onPress={handleRegister}
-                                    disabled={Loading}
+                                    disabled={isLoading}
                                 >
-                                    {Loading ? (
+                                    {isLoading ? (
                                         <ActivityIndicator color="#FFF" />
                                     ) : (
                                         <Text style={styles.signUpButtonText}>KAYIT OL</Text>
@@ -282,6 +365,9 @@ const styles = StyleSheet.create({
     termsLink: {
         color: '#FF6B6B',
         fontWeight: '500',
+    },
+    signUpButtonDisabled: {
+        opacity: 0.7,
     },
 });
 

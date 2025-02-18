@@ -1,6 +1,5 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
+import { initializeApp } from "firebase/app";
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -14,32 +13,23 @@ const firebaseConfig = {
     appId: "1:54620040129:web:79be3774262e51ccf55d40"
 };
 
-let app;
-let auth;
+// Firebase uygulamasını başlat
+const app = initializeApp(firebaseConfig);
 
-// Firebase app'i bir kere başlat
-if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-    // Auth'u AsyncStorage ile başlat
-    auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage)
-    });
-} else {
-    app = getApp();
-    auth = getAuth(app);
-}
+// Auth servisini başlat
+const auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+});
 
-// Diğer servisleri başlat
+// Firestore ve Storage servislerini başlat
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-console.log('Firebase servisleri başlatıldı:', {
-    appInitialized: !!app,
-    authInitialized: !!auth,
-    dbInitialized: !!db,
-    storageInitialized: !!storage
-});
+// Servisleri dışa aktar
+export { app, auth, db, storage };
 
-// Exports
-export { auth, db, storage };
-export default app;
+// Eski getter fonksiyonlarını geriye dönük uyumluluk için tut
+export const getFirebaseApp = () => app;
+export const getFirebaseAuth = () => auth;
+export const getFirebaseDb = () => db;
+export const getFirebaseStorage = () => storage;

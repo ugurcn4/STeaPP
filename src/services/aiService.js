@@ -5,6 +5,14 @@ import { getWeatherInfo } from './weatherService';
 
 const API_KEY = process.env.REACT_APP_HUGGING_FACE_API_KEY;
 
+// API anahtarını kontrol eden yardımcı fonksiyon
+const checkAPIKey = () => {
+    if (!API_KEY) {
+        throw new Error('HuggingFace API anahtarı bulunamadı');
+    }
+    return true;
+};
+
 const getWeatherPrompt = (weather) => {
     const weatherConditions = {
         'clear': 'güneşli',
@@ -16,53 +24,6 @@ const getWeatherPrompt = (weather) => {
 
     return weatherConditions[weather.toLowerCase()] || 'normal';
 };
-
-const MOCK_RECOMMENDATIONS = [
-    {
-        id: 1,
-        title: 'Tarihi Merkez Turu',
-        description: 'Şehrin tarihi dokusunu keşfedin',
-        duration: '2 saat',
-        distance: '3.5 km',
-        places: [
-            'Tarihi Çarşı',
-            'Eski Cami',
-            'Kent Müzesi',
-            'Tarihi Konaklar'
-        ],
-        image: 'https://picsum.photos/400/200',
-        type: 'historical'
-    },
-    {
-        id: 2,
-        title: 'Park ve Bahçeler Rotası',
-        description: 'Yeşil alanları keşfedin',
-        duration: '1.5 saat',
-        distance: '2.8 km',
-        places: [
-            'Şehir Parkı',
-            'Botanik Bahçesi',
-            'Göl Kenarı Yürüyüş Yolu'
-        ],
-        image: 'https://picsum.photos/400/201',
-        type: 'nature'
-    },
-    {
-        id: 3,
-        title: 'Lezzet Durağı',
-        description: 'Yerel lezzetleri tadın',
-        duration: '3 saat',
-        distance: '2.2 km',
-        places: [
-            'Tarihi Lokanta',
-            'Meşhur Tatlıcı',
-            'Yerel Kahvaltı Mekanı'
-        ],
-        image: 'https://picsum.photos/400/202',
-        type: 'food'
-    }
-];
-
 
 // Cache sistemi ekleyelim
 const recommendationCache = new Map();
@@ -243,16 +204,48 @@ const toRad = (value) => value * Math.PI / 180;
 
 export const getAIResponse = async (message, coords) => {
     try {
+        // Önce API anahtarını kontrol edelim
+        checkAPIKey();
+
         const locationInfo = await getPlaceFromCoordinates(coords.latitude, coords.longitude);
         const weatherResponse = await getWeatherInfo(coords);
         const weatherDesc = getWeatherPrompt(weatherResponse.condition);
 
-        // Direkt olarak akıllı yanıt sistemini kullanalım
-        return generateSmartResponse(message, locationInfo, weatherDesc, weatherResponse.temperature);
+        // API anahtarını açıkça belirtelim
+        const hf = new HfInference(API_KEY);
+
+        const prompt = `Sen bir seyahat asistanısın. Şu anda ${locationInfo.district}, ${locationInfo.city}'de ${weatherDesc} bir hava var ve sıcaklık ${weatherResponse.temperature}°C. Kullanıcı şunu sordu: "${message}". Lütfen bu bilgileri kullanarak detaylı ve yardımcı bir yanıt ver.`;
+
+        const response = await hf.textGeneration({
+            model: 'facebook/m2m100_418M',
+            inputs: prompt,
+            parameters: {
+                max_new_tokens: 1000,
+                temperature: 0.7,
+                top_p: 0.9,
+                do_sample: true,
+                return_full_text: false,
+                repetition_penalty: 1.2
+            }
+        });
+
+        if (response.generated_text && response.generated_text.trim()) {
+            return response.generated_text.trim();
+        }
+
+        throw new Error('AI yanıtı alınamadı');
 
     } catch (error) {
-        console.error('Yanıt oluşturma hatası:', error);
-        return 'Üzgünüm, şu anda yanıt oluşturamıyorum. Lütfen daha sonra tekrar deneyin.';
+        console.error('AI yanıt hatası:', error);
+
+        // Daha detaylı hata mesajları
+        if (error.message.includes('API anahtarı')) {
+            return 'API anahtarı eksik veya geçersiz. Lütfen sistem yöneticinize başvurun.';
+        } else if (error.message.includes('Invalid username or password')) {
+            return 'HuggingFace API kimlik doğrulaması başarısız. Lütfen API anahtarınızı kontrol edin.';
+        }
+
+        return 'Üzgünüm, şu anda AI yanıtı oluşturulamıyor. Lütfen daha sonra tekrar deneyin.';
     }
 };
 

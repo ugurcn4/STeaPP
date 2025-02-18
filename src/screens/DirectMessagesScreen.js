@@ -16,11 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { getRecentChats } from '../services/messageService';
+import NewChatModal from '../components/NewChatModal';
 
 const DirectMessagesScreen = ({ navigation, route }) => {
     const [chats, setChats] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [isNewChatModalVisible, setIsNewChatModalVisible] = useState(false);
 
     useEffect(() => {
         let unsubscribe;
@@ -52,12 +54,12 @@ const DirectMessagesScreen = ({ navigation, route }) => {
     }, [route.params]);
 
     const handleNewChat = () => {
-        navigation.navigate('Friends', {
-            mode: 'selectForChat',
-            onSelect: (selectedFriend) => {
-                navigation.navigate('Chat', { friend: selectedFriend });
-            }
-        });
+        setIsNewChatModalVisible(true);
+    };
+
+    const handleSelectFriend = (friend) => {
+        setIsNewChatModalVisible(false);
+        navigation.navigate('Chat', { friend });
     };
 
     const renderHeader = () => (
@@ -105,6 +107,8 @@ const DirectMessagesScreen = ({ navigation, route }) => {
                     return '📷 Fotoğraf';
                 case 'document':
                     return '📎 Dosya';
+                case 'story_reply':
+                    return '💫 Hikayeye yanıt';
                 default:
                     return message.message || 'Yeni sohbet';
             }
@@ -207,6 +211,12 @@ const DirectMessagesScreen = ({ navigation, route }) => {
                         keyExtractor={item => item.chatId}
                         ListEmptyComponent={renderEmptyComponent}
                         contentContainerStyle={styles.listContainer}
+                    />
+
+                    <NewChatModal
+                        visible={isNewChatModalVisible}
+                        onClose={() => setIsNewChatModalVisible(false)}
+                        onSelectFriend={handleSelectFriend}
                     />
                 </View>
             </PanGestureHandler>
