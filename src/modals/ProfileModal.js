@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import FastImage from 'react-native-fast-image';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -356,9 +357,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 style={styles.avatarContainer}
                                 onPress={() => setImageModalVisible(true)}
                             >
-                                <Image
+                                <FastImage
                                     source={getProfileImageUri()}
                                     style={styles.avatarImage}
+                                    resizeMode={FastImage.resizeMode.cover}
                                 />
                                 <View style={styles.editIconContainer}>
                                     <MaterialCommunityIcons
@@ -666,9 +668,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         <TouchableOpacity style={styles.closeButtonImage} onPress={() => setImageModalVisible(false)}>
                             <Text style={styles.closeButtonTextImage}>X</Text>
                         </TouchableOpacity>
-                        <Image
+                        <FastImage
                             style={styles.largeImage}
-                            source={getProfileImageUri()} // Burada kullanıcı profil fotoğrafını gösterecek
+                            source={getProfileImageUri()}
+                            resizeMode={FastImage.resizeMode.contain}
                         />
                         {/* Yükleme Durumu */}
                         {uploading && (

@@ -9,7 +9,8 @@ import {
     StatusBar,
     Platform,
     TouchableOpacity,
-    Animated
+    Animated,
+    ActivityIndicator
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import Stories from '../components/Stories';
@@ -23,12 +24,18 @@ import { useSelector, useDispatch } from 'react-redux';
 import { fetchNotifications, markNotificationAsRead } from '../redux/slices/notificationSlice';
 import NotificationItem from '../components/NotificationItem';
 import FastImage from 'react-native-fast-image';
+import { fetchPosts, toggleLikePost, addComment, deleteComment } from '../services/postService';
+import { getAuth } from 'firebase/auth';
 
 const ActivitiesScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [friends, setFriends] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [activeTab, setActiveTab] = useState('activities'); // 'activities' veya 'notifications'
+    const [posts, setPosts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const auth = getAuth();
+    const currentUser = auth.currentUser; // Firebase'den current user'ı alalım
 
     const dispatch = useDispatch();
     const {
@@ -38,9 +45,25 @@ const ActivitiesScreen = ({ navigation }) => {
     } = useSelector(state => state.notifications);
     const userId = useSelector(state => state.auth.user?.id);
 
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
     useEffect(() => {
+        const initializeData = async () => {
+            try {
+                const currentUid = await getCurrentUserUid();
+
+                if (currentUid) {
+                    dispatch(fetchNotifications(currentUid));
+                }
+            } catch (error) {
+                // Hata durumunda sessizce devam et
+            }
+        };
+
+        initializeData();
         fetchFriends();
         checkAndDeleteExpiredStories();
+
         const interval = setInterval(checkAndDeleteExpiredStories, 60 * 60 * 1000);
 
         const loadUnreadCount = async () => {
@@ -51,17 +74,12 @@ const ActivitiesScreen = ({ navigation }) => {
                     setUnreadCount(count);
                 }
             } catch (error) {
-                console.error('Okunmamış mesaj sayısı alınamadı:', error);
+                // Hata durumunda sessizce devam et
             }
         };
 
         loadUnreadCount();
         const unreadInterval = setInterval(loadUnreadCount, 30000);
-
-        // Bildirimleri yükle
-        if (userId) {
-            dispatch(fetchNotifications(userId));
-        }
 
         navigation.setOptions({
             cardStyle: { backgroundColor: '#fff' },
@@ -77,6 +95,139 @@ const ActivitiesScreen = ({ navigation }) => {
             clearInterval(unreadInterval);
         };
     }, [navigation, userId, dispatch]);
+
+    useEffect(() => {
+        loadPosts();
+    }, []);
+
+    const loadPosts = async () => {
+        try {
+            setLoading(true);
+            if (!currentUser?.uid) return;
+
+            const fetchedPosts = await fetchPosts(currentUser.uid);
+            setPosts(fetchedPosts);
+        } catch (error) {
+            console.error('Gönderiler yüklenirken hata:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLikePress = async (postId) => {
+        if (!currentUser?.uid) {
+            return;
+        }
+
+        try {
+            const isLiked = await toggleLikePost(postId, currentUser.uid);
+            setPosts(currentPosts =>
+                currentPosts.map(post => {
+                    if (post.id === postId) {
+                        // Mevcut beğeni sayısını al
+                        const currentLikes = post.stats?.likes || 0;
+                        // Beğeni durumuna göre sayıyı güncelle (0'dan küçük olamaz)
+                        const newLikes = Math.max(0, currentLikes + (isLiked ? 1 : -1));
+
+                        return {
+                            ...post,
+                            likedBy: isLiked
+                                ? [...(post.likedBy || []), currentUser.uid]
+                                : (post.likedBy || []).filter(id => id !== currentUser.uid),
+                            stats: {
+                                ...post.stats,
+                                likes: newLikes
+                            }
+                        };
+                    }
+                    return post;
+                })
+            );
+        } catch (error) {
+            console.error('Beğeni hatası:', error);
+        }
+    };
+
+    const handleCommentSubmit = async (postId, comment, replyToId = null) => {
+        // Boş yorum kontrolü
+        if (!comment || comment.trim() === '') {
+            return;
+        }
+
+        // İşlem devam ederken yeni yorum eklemeyi engelle
+        if (isSubmittingComment) {
+            return;
+        }
+
+        try {
+            setIsSubmittingComment(true); // İşlem başladı
+
+            if (comment === 'delete') {
+                // Yorum silme işlemi
+                await deleteComment(postId, replyToId, currentUser.uid);
+                // Yorumları güncelle
+                setPosts(currentPosts =>
+                    currentPosts.map(post => {
+                        if (post.id === postId) {
+                            return {
+                                ...post,
+                                comments: post.comments.filter(c => c.id !== replyToId),
+                                stats: {
+                                    ...post.stats,
+                                    comments: (post.stats?.comments || 1) - 1
+                                }
+                            };
+                        }
+                        return post;
+                    })
+                );
+            } else {
+                // Normal yorum ekleme işlemi
+                const newComment = await addComment(postId, currentUser.uid, comment, replyToId);
+                setPosts(currentPosts =>
+                    currentPosts.map(post => {
+                        if (post.id === postId) {
+                            if (replyToId) {
+                                // Yanıt ekleme durumu
+                                const updatedComments = post.comments.map(c => {
+                                    if (c.id === replyToId) {
+                                        return {
+                                            ...c,
+                                            replies: [...(c.replies || []), newComment]
+                                        };
+                                    }
+                                    return c;
+                                });
+                                return {
+                                    ...post,
+                                    comments: updatedComments,
+                                    stats: {
+                                        ...post.stats,
+                                        comments: (post.stats?.comments || 0) + 1
+                                    }
+                                };
+                            } else {
+                                // Yeni yorum ekleme durumu
+                                return {
+                                    ...post,
+                                    comments: [...(post.comments || []), newComment],
+                                    stats: {
+                                        ...post.stats,
+                                        comments: (post.stats?.comments || 0) + 1
+                                    }
+                                };
+                            }
+                        }
+                        return post;
+                    })
+                );
+            }
+        } catch (error) {
+            console.error('Yorum işlemi hatası:', error);
+        } finally {
+            setIsSubmittingComment(false); // İşlem bitti
+        }
+    };
 
     const fetchFriends = async () => {
         try {
@@ -119,174 +270,48 @@ const ActivitiesScreen = ({ navigation }) => {
         }
     };
 
-    // Örnek aktiviteler
-    const sampleActivities = [
-        {
-            id: 1,
-            type: 'location',
-            userName: 'Ahmet Yılmaz',
-            userAvatar: 'https://randomuser.me/api/portraits/men/1.jpg',
-            timestamp: '2 saat önce',
-            locationName: 'Starbucks Coffee',
-            address: 'Bağdat Caddesi No:123',
-            locationImage: 'https://images.unsplash.com/photo-1453614512568-c4024d13c247',
-            participantCount: 4,
-            likes: 12,
-            comments: 3
-        },
-        {
-            id: 2,
-            type: 'event',
-            userName: 'Ayşe Demir',
-            userAvatar: 'https://randomuser.me/api/portraits/women/1.jpg',
-            timestamp: '3 saat önce',
-            eventName: 'Yoga in the Park',
-            date: 'Yarın, 09:00',
-            eventImage: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b',
-            participants: [
-                { avatar: 'https://randomuser.me/api/portraits/women/2.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/men/2.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/women/3.jpg' }
-            ],
-            participantCount: 15,
-            likes: 24,
-            comments: 5
-        },
-        {
-            id: 3,
-            type: 'achievement',
-            userName: 'Mehmet Kaya',
-            userAvatar: 'https://randomuser.me/api/portraits/men/3.jpg',
-            timestamp: '5 saat önce',
-            icon: 'trophy',
-            title: 'Koşu Rekoru!',
-            description: '10 km koşuyu 45 dakikada tamamladı',
-            likes: 45,
-            comments: 8
-        },
-        {
-            id: 4,
-            type: 'location',
-            userName: 'Zeynep Şahin',
-            userAvatar: 'https://randomuser.me/api/portraits/women/4.jpg',
-            timestamp: '6 saat önce',
-            locationName: 'Fitness Time Gym',
-            address: 'Ataşehir',
-            locationImage: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48',
-            participantCount: 12,
-            likes: 18,
-            comments: 4
-        },
-        {
-            id: 5,
-            type: 'event',
-            userName: 'Can Yılmaz',
-            userAvatar: 'https://randomuser.me/api/portraits/men/5.jpg',
-            timestamp: '8 saat önce',
-            eventName: 'Bisiklet Turu',
-            date: 'Cumartesi, 10:00',
-            eventImage: 'https://images.unsplash.com/photo-1541625602330-2277a4c46182',
-            participants: [
-                { avatar: 'https://randomuser.me/api/portraits/men/6.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/women/6.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/men/7.jpg' }
-            ],
-            participantCount: 25,
-            likes: 32,
-            comments: 7
-        },
-        {
-            id: 6,
-            type: 'achievement',
-            userName: 'Elif Demir',
-            userAvatar: 'https://randomuser.me/api/portraits/women/7.jpg',
-            timestamp: '10 saat önce',
-            icon: 'fitness',
-            title: 'Yeni Seviye!',
-            description: 'Fitness hedefine ulaştı - 30 gün kesintisiz antrenman',
-            likes: 56,
-            comments: 12
-        },
-        {
-            id: 7,
-            type: 'location',
-            userName: 'Burak Şahin',
-            userAvatar: 'https://randomuser.me/api/portraits/men/8.jpg',
-            timestamp: '12 saat önce',
-            locationName: 'Sunset Beach Club',
-            address: 'Çeşme Marina',
-            locationImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
-            participantCount: 8,
-            likes: 42,
-            comments: 6
-        },
-        {
-            id: 8,
-            type: 'event',
-            userName: 'Deniz Yıldız',
-            userAvatar: 'https://randomuser.me/api/portraits/women/9.jpg',
-            timestamp: '1 gün önce',
-            eventName: 'Kitap Kulübü Buluşması',
-            date: 'Pazar, 15:00',
-            eventImage: 'https://images.unsplash.com/photo-1526243741027-444d633d7365',
-            participants: [
-                { avatar: 'https://randomuser.me/api/portraits/women/10.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/men/10.jpg' },
-                { avatar: 'https://randomuser.me/api/portraits/women/11.jpg' }
-            ],
-            participantCount: 12,
-            likes: 28,
-            comments: 15
-        },
-        {
-            id: 9,
-            type: 'achievement',
-            userName: 'Ali Kara',
-            userAvatar: 'https://randomuser.me/api/portraits/men/11.jpg',
-            timestamp: '1 gün önce',
-            icon: 'medal',
-            title: 'Maraton Tamamlandı!',
-            description: 'İlk yarı maratonunu 1 saat 45 dakikada tamamladı',
-            likes: 89,
-            comments: 23
-        },
-        {
-            id: 10,
-            type: 'location',
-            userName: 'Selin Ak',
-            userAvatar: 'https://randomuser.me/api/portraits/women/12.jpg',
-            timestamp: '1 gün önce',
-            locationName: 'Summit Cafe & Restaurant',
-            address: 'Nişantaşı',
-            locationImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4',
-            participantCount: 6,
-            likes: 34,
-            comments: 8
-        }
-    ];
 
     const handleNotificationPress = async (notification) => {
+
         if (notification.status === 'unread') {
-            dispatch(markNotificationAsRead(notification._id));
+            dispatch(markNotificationAsRead(notification.id));
         }
 
         // Bildirim tipine göre yönlendirme
         switch (notification.type) {
             case 'friendRequest':
                 navigation.navigate('FriendRequests', {
-                    userId: notification.data.senderId
+                    userId: notification.data?.senderId
                 });
                 break;
             case 'message':
                 navigation.navigate('DirectMessages', {
                     screen: 'Chat',
-                    params: { conversationId: notification.data.conversationId }
+                    params: {
+                        conversationId: notification.data?.chatId || notification.chatId,
+                        otherUserId: notification.data?.senderId || notification.senderId
+                    }
                 });
                 break;
             case 'activity':
                 // İlgili aktiviteye yönlendir
                 break;
+            default:
         }
+    };
+
+    const handlePostUpdate = (updatedPost) => {
+        setPosts(currentPosts =>
+            currentPosts.map(post =>
+                post.id === updatedPost.id ? updatedPost : post
+            )
+        );
+    };
+
+    const handlePostDelete = (postId) => {
+        setPosts(currentPosts =>
+            currentPosts.filter(post => post.id !== postId)
+        );
     };
 
     const renderHeader = () => (
@@ -317,8 +342,18 @@ const ActivitiesScreen = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
             <View style={styles.headerRight}>
-                <Ionicons name="add-circle-outline" size={24} color="#000" style={styles.headerIcon} />
-                <Ionicons name="heart-outline" size={24} color="#000" style={styles.headerIcon} />
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('CreatePost')}
+                    style={styles.headerIcon}
+                >
+                    <Ionicons name="add-circle-outline" size={24} color="#000" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('LikedPosts')}
+                    style={styles.headerIcon}
+                >
+                    <Ionicons name="heart-outline" size={24} color="#000" />
+                </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => navigation.navigate('DirectMessages')}
                     style={styles.messageIconContainer}
@@ -349,6 +384,7 @@ const ActivitiesScreen = ({ navigation }) => {
 
                     <ScrollView
                         style={styles.content}
+                        contentContainerStyle={styles.scrollContent}
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}
@@ -360,28 +396,41 @@ const ActivitiesScreen = ({ navigation }) => {
                     >
                         {activeTab === 'activities' ? (
                             <>
-                                {/* Stories */}
                                 <Stories friends={friends} navigation={navigation} />
-
-                                {/* Separator */}
                                 <View style={styles.separator} />
-
-                                {/* Activities */}
-                                {sampleActivities.map(activity => (
-                                    <Activity key={activity.id} activity={activity} />
+                                {/* Aktiviteler Listesi */}
+                                {posts.map(post => (
+                                    <Activity
+                                        key={post.id}
+                                        activity={post}
+                                        onLikePress={() => handleLikePress(post.id)}
+                                        onCommentPress={(comment, replyToId) => {
+                                            handleCommentSubmit(post.id, comment, replyToId);
+                                        }}
+                                        isLiked={post.likedBy?.includes(currentUser?.uid)}
+                                        currentUserId={currentUser?.uid}
+                                        onUpdate={handlePostUpdate}
+                                        onDelete={handlePostDelete}
+                                        navigation={navigation}
+                                    />
                                 ))}
                             </>
                         ) : (
                             <>
                                 {notificationsLoading ? (
                                     <View style={styles.centerContainer}>
-                                        <ActivityIndicator size="large" color="#2196F3" />
+                                        <ActivityIndicator size="large" color="#25D220" />
                                     </View>
                                 ) : notifications && notifications.length > 0 ? (
                                     notifications.map(notification => (
                                         <NotificationItem
                                             key={notification.id}
-                                            notification={notification}
+                                            notification={{
+                                                ...notification,
+                                                title: notification.title || 'Yeni Bildirim',
+                                                body: notification.body || '',
+                                                type: notification.type || 'message'
+                                            }}
                                             onPress={() => handleNotificationPress(notification)}
                                         />
                                     ))
@@ -448,10 +497,14 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
     },
+    scrollContent: {
+        paddingBottom: 80,
+    },
     separator: {
         height: 0.5,
         backgroundColor: '#DBDBDB',
-        marginVertical: 10,
+        marginBottom: 0,
+        marginTop: 0,
     },
     activityPlaceholder: {
         flex: 1,
@@ -513,6 +566,90 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#666',
         textAlign: 'center',
+    },
+    activityCard: {
+        backgroundColor: '#fff',
+        borderRadius: 15,
+        marginHorizontal: 12,
+        marginVertical: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        overflow: 'hidden',
+    },
+    activityHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+    },
+    userInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarImage: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: '#E91E63',
+    },
+    userTextContainer: {
+        marginLeft: 10,
+    },
+    username: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#333',
+    },
+    timestamp: {
+        fontSize: 12,
+        color: '#666',
+        marginTop: 2,
+    },
+    moreButton: {
+        padding: 5,
+    },
+    contentContainer: {
+        position: 'relative',
+    },
+    activityImage: {
+        width: '100%',
+        height: 300,
+        borderRadius: 8,
+    },
+    contentOverlay: {
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        padding: 12,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+    },
+    contentText: {
+        fontSize: 14,
+        color: '#333',
+        lineHeight: 20,
+    },
+    activityFooter: {
+        padding: 12,
+    },
+    interactionContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    interactionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 8,
+    },
+    interactionCount: {
+        marginLeft: 5,
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
     },
 });
 

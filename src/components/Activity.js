@@ -1,285 +1,850 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, TextInput, Platform } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { formatDistanceToNow } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import { LinearGradient } from 'expo-linear-gradient';
+import CommentsModal from './CommentsModal';
+import { subscribeToPost, deletePost, toggleArchivePost, createArchiveGroup, updatePostArchiveGroups, fetchArchiveGroups, quickSavePost } from '../services/postService';
+import ArchiveGroupModal from '../modals/ArchiveGroupModal';
+import Toast from 'react-native-toast-message';
 
-const Activity = ({ activity }) => {
-    const navigation = useNavigation();
+const { width } = Dimensions.get('window');
 
-    const handleMessagePress = () => {
-        const friend = {
-            id: activity.userId,
-            name: activity.userName,
-            profilePicture: activity.userAvatar,
-            informations: {
-                name: activity.userName,
-                profilePicture: activity.userAvatar
-            },
-            isOnline: false,
-            lastSeen: null
-        };
+const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserId, onUpdate, onDelete, navigation }) => {
+    const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+    const [isCommentsModalVisible, setIsCommentsModalVisible] = useState(false);
+    const maxLength = 100; // Maksimum karakter sayısı
+    const [localLiked, setLocalLiked] = useState(isLiked);
+    const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+    const [heartPosition, setHeartPosition] = useState({ x: 0, y: 0 });
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(0)).current;
+    const [lastTap, setLastTap] = useState(null);
+    const DOUBLE_TAP_DELAY = 300; // milisaniye cinsinden çift tıklama aralığı
+    const [showOptions, setShowOptions] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+    const isOwner = activity.userId === currentUserId;
+    const [isArchived, setIsArchived] = useState(activity.archivedBy?.includes(currentUserId));
+    const [showArchiveModal, setShowArchiveModal] = useState(false);
+    const [archiveGroups, setArchiveGroups] = useState([]);
+    const [selectedGroups, setSelectedGroups] = useState(activity.archiveGroups || []);
+    const [showNewGroupForm, setShowNewGroupForm] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
+    const [newGroupEmoji, setNewGroupEmoji] = useState('📁');
+    const [newGroupDesc, setNewGroupDesc] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
-        navigation.navigate('DirectMessages', {
-            screen: 'MessagesHome',
-            params: {
-                initialChat: friend
+    useEffect(() => {
+        setLocalLiked(isLiked);
+    }, [isLiked]);
+
+    useEffect(() => {
+        // Post'u gerçek zamanlı dinle
+        const unsubscribe = subscribeToPost(activity.id, (updatedPost) => {
+            if (onUpdate) {
+                onUpdate(updatedPost);
             }
         });
+
+        return () => unsubscribe();
+    }, [activity.id]);
+
+    useEffect(() => {
+        if (showArchiveModal) {
+            loadArchiveGroups();
+        }
+    }, [showArchiveModal]);
+
+    const handleLikePress = () => {
+        setLocalLiked(!localLiked);
+        onLikePress();
     };
 
-    const renderActivityContent = () => {
-        switch (activity.type) {
-            case 'location':
-                return (
-                    <View style={styles.locationContainer}>
-                        <Image source={{ uri: activity.locationImage }} style={styles.locationImage} />
-                        <View style={styles.locationInfo}>
-                            <Text style={styles.locationName}>{activity.locationName}</Text>
-                            <Text style={styles.locationAddress}>{activity.address}</Text>
-                            <View style={styles.statsContainer}>
-                                <Ionicons name="people" size={16} color="#666" />
-                                <Text style={styles.statsText}>{activity.participantCount} kişi burada</Text>
-                            </View>
-                        </View>
+    const renderDescription = () => {
+        if (!activity.description) return null;
+
+        if (activity.description.length <= maxLength || isDescriptionExpanded) {
+            return (
+                <Text style={styles.description}>
+                    <Text style={styles.username}>{activity.user.name}</Text>
+                    {" "}{activity.description}
+                </Text>
+            );
+        }
+
+        return (
+            <View>
+                <Text style={styles.description}>
+                    <Text style={styles.username}>{activity.user.name}</Text>
+                    {" "}{activity.description.slice(0, maxLength)}...{" "}
+                    <Text
+                        style={styles.seeMore}
+                        onPress={() => setIsDescriptionExpanded(true)}
+                    >
+                        devamını gör
+                    </Text>
+                </Text>
+            </View>
+        );
+    };
+
+    const renderComments = () => {
+        if (!activity.comments || activity.comments.length === 0) return null;
+
+        return (
+            <View style={styles.commentsContainer}>
+                {activity.comments.slice(0, 2).map((comment, index) => (
+                    <View key={comment.id} style={styles.commentItem}>
+                        <Text style={styles.commentText}>
+                            <Text style={styles.commentUsername}>{comment.user.name}</Text>
+                            {" "}{comment.text}
+                        </Text>
                     </View>
-                );
-            case 'event':
-                return (
-                    <View style={styles.eventContainer}>
-                        <Image source={{ uri: activity.eventImage }} style={styles.eventImage} />
-                        <View style={styles.eventInfo}>
-                            <Text style={styles.eventName}>{activity.eventName}</Text>
-                            <Text style={styles.eventDate}>{activity.date}</Text>
-                            <View style={styles.participantsContainer}>
-                                <View style={styles.avatarStack}>
-                                    {activity.participants.slice(0, 3).map((participant, index) => (
-                                        <Image
-                                            key={index}
-                                            source={{ uri: participant.avatar }}
-                                            style={[styles.participantAvatar, { right: index * 15 }]}
-                                        />
-                                    ))}
-                                </View>
-                                <Text style={styles.participantCount}>+{activity.participantCount} katılımcı</Text>
-                            </View>
-                        </View>
-                    </View>
-                );
-            case 'achievement':
-                return (
-                    <View style={styles.achievementContainer}>
-                        <View style={styles.achievementIconContainer}>
-                            <Ionicons name={activity.icon} size={32} color="#FFD700" />
-                        </View>
-                        <View style={styles.achievementInfo}>
-                            <Text style={styles.achievementTitle}>{activity.title}</Text>
-                            <Text style={styles.achievementDescription}>{activity.description}</Text>
-                        </View>
-                    </View>
-                );
-            default:
-                return null;
+                ))}
+                {activity.comments.length > 2 && (
+                    <TouchableOpacity onPress={handleCommentPress}>
+                        <Text style={styles.viewAllComments}>
+                            {activity.comments.length} yorumun tümünü gör
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
+
+    const handleCommentPress = () => {
+        setIsCommentsModalVisible(true);
+    };
+
+    const handleCloseComments = () => {
+        setIsCommentsModalVisible(false);
+    };
+
+    const handleAddComment = (comment, replyToId) => {
+        onCommentPress(comment, replyToId);
+    };
+
+    const handleDeleteComment = async (commentId) => {
+        try {
+            // Silme işlemini parent komponente ilet
+            await onCommentPress('delete', commentId);
+        } catch (error) {
+            console.error('Yorum silme hatası:', error);
         }
     };
 
+    const handleImagePress = (event) => {
+        const now = Date.now();
+
+        if (lastTap && (now - lastTap) < DOUBLE_TAP_DELAY) {
+            // Çift tıklama algılandı
+            setLastTap(null); // Reset
+
+            // Tıklama pozisyonunu kaydet
+            setHeartPosition({
+                x: event.nativeEvent.locationX,
+                y: event.nativeEvent.locationY
+            });
+
+            // Kalp animasyonunu göster
+            setShowHeartAnimation(true);
+
+            // Opaklık ve ölçek animasyonlarını başlat
+            Animated.parallel([
+                Animated.sequence([
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 200,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(fadeAnim, {
+                        toValue: 0,
+                        duration: 200,
+                        delay: 500,
+                        useNativeDriver: true,
+                    }),
+                ]),
+                Animated.sequence([
+                    Animated.spring(scaleAnim, {
+                        toValue: 1,
+                        friction: 3,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(scaleAnim, {
+                        toValue: 0,
+                        duration: 200,
+                        delay: 500,
+                        useNativeDriver: true,
+                    }),
+                ]),
+            ]).start(() => {
+                setShowHeartAnimation(false);
+                scaleAnim.setValue(0);
+            });
+
+            // Beğenilmemişse beğeni işlemini gerçekleştir
+            if (!localLiked) {
+                handleLikePress();
+            }
+        } else {
+            setLastTap(now);
+        }
+    };
+
+    const handleOptionsPress = (event) => {
+        // Butonun konumunu al
+        const { pageX, pageY } = event.nativeEvent;
+        setMenuPosition({ x: pageX, y: pageY });
+        setShowOptions(true);
+    };
+
+    const handleDeletePress = () => {
+        setShowOptions(false);
+        Alert.alert(
+            'Gönderiyi Sil',
+            'Bu gönderiyi silmek istediğinizden emin misiniz?',
+            [
+                {
+                    text: 'İptal',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Sil',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deletePost(activity.id);
+                            if (onDelete) {
+                                onDelete(activity.id);
+                            }
+                        } catch (error) {
+                            Alert.alert('Hata', error.message);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleArchivePress = async () => {
+        if (isSaving) return; // Çift tıklamayı önle
+
+        try {
+            setIsSaving(true);
+            const defaultCollection = await quickSavePost(activity.id, currentUserId);
+
+            // UI'ı güncelle
+            setIsArchived(true);
+            setSelectedGroups([defaultCollection.id]);
+
+            // Başarılı kaydetme bildirimi göster
+            Toast.show({
+                type: 'success',
+                text1: 'Kaydedildi',
+                text2: `"${defaultCollection.name}" koleksiyonuna eklendi`,
+                position: 'bottom',
+                visibilityTime: 2000,
+            });
+        } catch (error) {
+            console.error('Kaydetme hatası:', error);
+            Toast.show({
+                type: 'error',
+                text1: 'Hata',
+                text2: 'Gönderi kaydedilirken bir hata oluştu',
+                position: 'bottom',
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleArchiveLongPress = () => {
+        setShowArchiveModal(true);
+    };
+
+    const loadArchiveGroups = async () => {
+        try {
+            const groups = await fetchArchiveGroups(currentUserId);
+            setArchiveGroups(groups);
+            setSelectedGroups(activity.archiveGroups || []);
+        } catch (error) {
+            console.error('Arşiv grupları yüklenirken hata:', error);
+        }
+    };
+
+    const handleCreateGroup = async (groupData) => {
+        try {
+            const newGroup = await createArchiveGroup(currentUserId, groupData);
+            // Yeni grubu state'e ekle
+            setArchiveGroups(prev => [...prev, newGroup]);
+            return newGroup; // Oluşturulan grubu dön
+        } catch (error) {
+            console.error('Grup oluşturma hatası:', error);
+            throw error; // Hatayı yukarı ilet
+        }
+    };
+
+    const handleSaveArchiveGroups = async (groupIds) => {
+        try {
+            if (!Array.isArray(groupIds)) {
+                console.error('Geçersiz grup ID listesi');
+                return;
+            }
+
+            // 1. Grup bilgisini güncelle
+            await updatePostArchiveGroups(activity.id, currentUserId, groupIds);
+
+            // 2. UI'ı güncelle
+            setIsArchived(true);
+            setSelectedGroups(groupIds);
+
+            // 3. Modal'ı kapat
+            setShowArchiveModal(false);
+        } catch (error) {
+            console.error('Arşivleme hatası:', error);
+            Alert.alert('Hata', 'Koleksiyon kaydedilirken bir hata oluştu');
+        }
+    };
+
+    const fetchGroups = async () => {
+        try {
+            const groups = await fetchArchiveGroups(currentUserId);
+            setArchiveGroups(groups);
+        } catch (error) {
+            console.error('Grupları getirme hatası:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchGroups();
+    }, []);
+
     return (
         <View style={styles.activityCard}>
-            <View style={styles.header}>
-                <View style={styles.userInfo}>
-                    <Image source={{ uri: activity.userAvatar }} style={styles.userAvatar} />
-                    <View>
-                        <Text style={styles.userName}>{activity.userName}</Text>
-                        <Text style={styles.timestamp}>{activity.timestamp}</Text>
+            <View style={styles.activityHeader}>
+                <View style={styles.userInfoContainer}>
+                    <FastImage
+                        source={{
+                            uri: activity.user.avatar || 'https://via.placeholder.com/40'
+                        }}
+                        style={styles.avatarImage}
+                    />
+                    <View style={styles.userTextContainer}>
+                        <Text style={styles.username}>{activity.user.name}</Text>
+                        <Text style={styles.timestamp}>
+                            {formatDistanceToNow(activity.createdAt, { addSuffix: true, locale: tr })}
+                        </Text>
                     </View>
                 </View>
-                <TouchableOpacity>
-                    <Ionicons name="ellipsis-horizontal" size={20} color="#666" />
-                </TouchableOpacity>
             </View>
-            {renderActivityContent()}
-            <View style={styles.footer}>
-                <TouchableOpacity style={styles.actionButton}>
-                    <Ionicons name="heart-outline" size={24} color="#666" />
-                    <Text style={styles.actionText}>{activity.likes} Beğeni</Text>
-                </TouchableOpacity>
+
+            <TouchableWithoutFeedback onPress={handleImagePress}>
+                <View style={styles.imageContainer}>
+                    <FastImage
+                        source={{ uri: activity.imageUrl }}
+                        style={styles.activityImage}
+                        resizeMode={FastImage.resizeMode.cover}
+                    />
+                    <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.3)']}
+                        style={styles.imageGradient}
+                    />
+                    {showHeartAnimation && (
+                        <Animated.View
+                            style={[
+                                styles.heartAnimation,
+                                {
+                                    left: heartPosition.x - 50,
+                                    top: heartPosition.y - 50,
+                                    opacity: fadeAnim,
+                                    transform: [
+                                        { scale: scaleAnim }
+                                    ]
+                                }
+                            ]}
+                        >
+                            <Ionicons name="heart" size={100} color="#fff" />
+                        </Animated.View>
+                    )}
+                </View>
+            </TouchableWithoutFeedback>
+
+            <View style={styles.contentContainer}>
+                <View style={styles.interactionContainer}>
+                    <View style={styles.leftInteractions}>
+                        <View style={styles.likeContainer}>
+                            <TouchableOpacity
+                                style={[styles.likeButton, localLiked && styles.likeButtonActive]}
+                                onPress={handleLikePress}
+                            >
+                                <Ionicons
+                                    name={localLiked ? "heart" : "heart-outline"}
+                                    size={24}
+                                    color={localLiked ? "#E91E63" : "#666"}
+                                />
+                            </TouchableOpacity>
+
+                            <View style={styles.likeDivider} />
+
+                            <TouchableOpacity
+                                style={styles.likeCountButton}
+                                onPress={() => navigation.navigate('LikedBy', {
+                                    postId: activity.id,
+                                    likedBy: activity.likedBy || []
+                                })}
+                            >
+                                <Text style={[
+                                    styles.interactionCount,
+                                    localLiked && styles.interactionCountActive
+                                ]}>
+                                    {activity.stats?.likes || 0}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.commentContainer}>
+                            <TouchableOpacity
+                                style={styles.commentButton}
+                                onPress={() => setIsCommentsModalVisible(true)}
+                            >
+                                <Ionicons
+                                    name="chatbubble-outline"
+                                    size={22}
+                                    color="#2196F3"
+                                />
+                            </TouchableOpacity>
+
+                            <View style={styles.commentDivider} />
+
+                            <TouchableOpacity
+                                style={styles.commentCountButton}
+                                onPress={() => setIsCommentsModalVisible(true)}
+                            >
+                                <Text style={styles.interactionCount}>
+                                    {activity.stats?.comments || 0}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.bookmarkButton}
+                        onPress={handleArchivePress}
+                        onLongPress={handleArchiveLongPress}
+                        delayLongPress={500}
+                        disabled={isSaving}
+                    >
+                        <Ionicons
+                            name={isArchived ? "bookmark" : "bookmark-outline"}
+                            size={22}
+                            color={isArchived ? "#2196F3" : "#666"}
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Yeni beğeni özeti bölümü */}
+                {activity.likedBy && activity.likedBy.length > 0 && (
+                    <TouchableOpacity
+                        style={styles.likeSummaryContainer}
+                        onPress={() => navigation.navigate('LikedBy', {
+                            postId: activity.id,
+                            likedBy: activity.likedBy || []
+                        })}
+                    >
+                        <Text style={styles.likeSummaryTextLight}>
+                            {(() => {
+                                // Tek beğeni varsa
+                                if (activity.likedBy.length === 1) {
+                                    if (activity.likedBy[0] === currentUserId) {
+                                        return (
+                                            <Text>
+                                                <Text style={styles.likeSummaryTextBold}>Siz</Text>
+                                                <Text style={styles.likeSummaryTextLight}> beğendiniz</Text>
+                                            </Text>
+                                        );
+                                    }
+                                    return (
+                                        <Text>
+                                            <Text style={styles.likeSummaryTextBold}>
+                                                {activity.user?.name || 'Kullanıcı'}
+                                            </Text>
+                                            <Text style={styles.likeSummaryTextLight}> beğendi</Text>
+                                        </Text>
+                                    );
+                                }
+
+                                // Birden fazla beğeni varsa
+                                const isCurrentUserFirst = activity.likedBy[0] === currentUserId;
+                                const firstLiker = isCurrentUserFirst ? 'Siz' : (activity.firstLikerName || activity.user?.name || 'Kullanıcı');
+                                const otherCount = activity.likedBy.length - 1;
+
+                                return (
+                                    <Text>
+                                        <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
+                                        <Text style={styles.likeSummaryTextLight}> ve </Text>
+                                        <Text style={styles.likeSummaryTextBold}>{otherCount}</Text>
+                                        <Text style={styles.likeSummaryTextLight}> kişi beğendi</Text>
+                                    </Text>
+                                );
+                            })()}
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
+                <View style={styles.descriptionContainer}>
+                    {renderDescription()}
+                </View>
+
+                {activity.tags && activity.tags.length > 0 && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.tagsContainer}
+                    >
+                        {activity.tags.map((tag, index) => (
+                            <View key={index} style={styles.tagContainer}>
+                                <Text style={styles.tag}>#{tag}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
+                )}
+
+                {/* Yorumlar bölümü */}
+                {renderComments()}
+            </View>
+
+            <CommentsModal
+                visible={isCommentsModalVisible}
+                onClose={handleCloseComments}
+                comments={activity.comments || []}
+                onAddComment={handleAddComment}
+                currentUserId={currentUserId}
+                postUserId={activity.userId}
+                onDelete={handleDeleteComment}
+            />
+
+            {/* Options Button */}
+            <TouchableOpacity
+                style={styles.optionsButton}
+                onPress={handleOptionsPress}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+                <Ionicons name="ellipsis-horizontal" size={20} color="#000" />
+            </TouchableOpacity>
+
+            {/* Context Menu Modal */}
+            <Modal
+                visible={showOptions}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowOptions(false)}
+            >
                 <TouchableOpacity
-                    style={styles.messageButton}
-                    onPress={handleMessagePress}
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowOptions(false)}
                 >
-                    <Ionicons name="chatbubble-outline" size={20} color="#2196F3" />
+                    <View style={[
+                        styles.contextMenu,
+                        {
+                            position: 'absolute',
+                            right: width - menuPosition.x + 10,
+                            top: menuPosition.y - 20,
+                        }
+                    ]}>
+                        {isOwner && (
+                            <TouchableOpacity
+                                style={styles.contextMenuItem}
+                                onPress={handleDeletePress}
+                            >
+                                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                                <Text style={styles.contextMenuTextDelete}>Sil</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={styles.contextMenuItem}
+                            onPress={() => setShowOptions(false)}
+                        >
+                            <Ionicons name="close-outline" size={20} color="#666" />
+                            <Text style={styles.contextMenuTextCancel}>Kapat</Text>
+                        </TouchableOpacity>
+                    </View>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                    <Ionicons name="share-outline" size={24} color="#666" />
-                    <Text style={styles.actionText}>Paylaş</Text>
-                </TouchableOpacity>
-            </View>
+            </Modal>
+            <ArchiveGroupModal
+                visible={showArchiveModal}
+                onClose={() => setShowArchiveModal(false)}
+                archiveGroups={archiveGroups}
+                selectedGroups={selectedGroups}
+                onSelectGroups={setSelectedGroups}
+                onCreateGroup={handleCreateGroup}
+                onSave={handleSaveArchiveGroups}
+                userId={currentUserId}
+                onGroupsUpdated={fetchGroups}
+            />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     activityCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        marginHorizontal: 16,
-        marginVertical: 8,
-        padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        backgroundColor: '#FFFFFF',
+        borderRadius: 0,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
         shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
-    header: {
+    activityHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+    },
+    userInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarImage: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 12,
+        borderWidth: 2,
+        borderColor: '#E91E63',
+    },
+    userTextContainer: {
+        flexDirection: 'column',
+    },
+    username: {
+        fontWeight: '700',
+        fontSize: 15,
+        color: '#262626',
+    },
+    timestamp: {
+        fontSize: 12,
+        color: '#8E8E8E',
+        marginTop: 2,
+    },
+    imageContainer: {
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    activityImage: {
+        width: width,
+        height: width,
+    },
+    imageGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 100,
+    },
+    contentContainer: {
+        padding: 16,
+    },
+    interactionContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 12,
     },
-    userInfo: {
+    leftInteractions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 16,
     },
-    userAvatar: {
-        width: 40,
-        height: 40,
+    interactionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        padding: 8,
+        paddingHorizontal: 12,
         borderRadius: 20,
-        marginRight: 12,
+        gap: 6,
     },
-    userName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#262626',
-    },
-    timestamp: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 2,
-    },
-    locationContainer: {
-        borderRadius: 8,
-        overflow: 'hidden',
-    },
-    locationImage: {
-        width: '100%',
-        height: 200,
-        borderRadius: 8,
-    },
-    locationInfo: {
-        padding: 12,
-    },
-    locationName: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#262626',
-    },
-    locationAddress: {
+    interactionCount: {
         fontSize: 14,
         color: '#666',
-        marginTop: 4,
+        fontWeight: '500',
+        marginLeft: 4,
     },
-    statsContainer: {
+    interactionCountActive: {
+        color: '#E91E63',
+    },
+    description: {
+        fontSize: 14,
+        color: '#262626',
+        lineHeight: 20,
+    },
+    seeMore: {
+        color: '#8E8E8E',
+        fontWeight: '600',
+    },
+    descriptionContainer: {
+        marginVertical: 12,
+        paddingHorizontal: 4,
+    },
+    tagsContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
         marginTop: 8,
     },
-    statsText: {
-        marginLeft: 6,
-        fontSize: 14,
-        color: '#666',
-    },
-    eventContainer: {
-        flexDirection: 'row',
-        backgroundColor: '#F8F8F8',
-        borderRadius: 8,
-        overflow: 'hidden',
-    },
-    eventImage: {
-        width: 100,
-        height: 100,
-    },
-    eventInfo: {
-        flex: 1,
-        padding: 12,
-    },
-    eventName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#262626',
-    },
-    eventDate: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
-    },
-    participantsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 8,
-    },
-    avatarStack: {
-        flexDirection: 'row',
+    tagContainer: {
+        backgroundColor: '#F5F5F5',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
         marginRight: 8,
     },
-    participantAvatar: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#FFF',
-        position: 'absolute',
+    tag: {
+        fontSize: 13,
+        color: '#2196F3',
+        fontWeight: '500',
     },
-    participantCount: {
+    bookmarkButton: {
+        padding: 4,
+    },
+    commentsContainer: {
+        marginTop: 8,
+        paddingHorizontal: 4,
+    },
+    commentItem: {
+        marginVertical: 2,
+    },
+    commentText: {
         fontSize: 14,
-        color: '#666',
-        marginLeft: 45,
+        color: '#262626',
+        lineHeight: 18,
     },
-    achievementContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF9E6',
-        borderRadius: 8,
-        padding: 12,
-    },
-    achievementIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#FFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    achievementTitle: {
-        fontSize: 16,
+    commentUsername: {
         fontWeight: '600',
         color: '#262626',
     },
-    achievementDescription: {
+    viewAllComments: {
+        color: '#8E8E8E',
         fontSize: 14,
-        color: '#666',
         marginTop: 4,
     },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#EFEFEF',
+    heartAnimation: {
+        position: 'absolute',
+        width: 100,
+        height: 100,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999,
     },
-    actionButton: {
+    optionsButton: {
+        padding: 8,
+        position: 'absolute',
+        right: 8,
+        top: 8,
+        zIndex: 1,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    contextMenu: {
+        backgroundColor: 'white',
+        borderRadius: 8,
+        padding: 4,
+        minWidth: 120,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+        maxWidth: width - 32,
+    },
+    contextMenuItem: {
         flexDirection: 'row',
         alignItems: 'center',
+        padding: 12,
+        borderRadius: 6,
     },
-    actionText: {
-        marginLeft: 6,
+    contextMenuTextDelete: {
+        color: '#FF3B30',
+        fontSize: 15,
+        marginLeft: 8,
+        fontWeight: '500',
+    },
+    contextMenuTextCancel: {
+        color: '#666',
+        fontSize: 15,
+        marginLeft: 8,
+        fontWeight: '500',
+    },
+    likeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 20,
+        padding: 4,
+    },
+    likeButton: {
+        padding: 8,
+        borderRadius: 16,
+    },
+    likeButtonActive: {
+        backgroundColor: '#FFE8EC',
+    },
+    likeDivider: {
+        width: 1,
+        height: 20,
+        backgroundColor: '#ddd',
+        marginHorizontal: 4,
+    },
+    likeCountButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 16,
+    },
+    commentContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 20,
+        padding: 4,
+    },
+    commentButton: {
+        padding: 8,
+        borderRadius: 16,
+    },
+    commentDivider: {
+        width: 1,
+        height: 20,
+        backgroundColor: '#ddd',
+        marginHorizontal: 4,
+    },
+    commentCountButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 16,
+    },
+    likeSummaryContainer: {
+        paddingVertical: 6,
+        paddingHorizontal: 4,
+        marginTop: -4,
+    },
+    likeSummaryTextLight: {
         fontSize: 14,
         color: '#666',
+        fontWeight: '400',
     },
-    messageButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    likeSummaryTextBold: {
+        fontSize: 14,
+        color: '#262626',
+        fontWeight: '600',
     },
 });
 

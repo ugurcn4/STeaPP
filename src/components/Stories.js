@@ -15,6 +15,7 @@ import { getCurrentUserUid } from '../services/friendFunctions';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import FastImage from 'react-native-fast-image';
 
 const Stories = ({ friends, navigation }) => {
     const [stories, setStories] = useState([]);
@@ -219,10 +220,12 @@ const Stories = ({ friends, navigation }) => {
                         styles.storyRing,
                         myStories.length > 0 ? styles.activeStoryRing : styles.inactiveStoryRing
                     ]}>
-                        <Image
-                            source={{ uri: getProfilePicture(currentUser) }}
+                        <FastImage
+                            source={{
+                                uri: getProfilePicture(currentUser),
+                                priority: FastImage.priority.high
+                            }}
                             style={styles.storyImage}
-                            loading="eager" // Öncelikli yükleme
                         />
                         <View style={styles.plusIconContainer}>
                             <Ionicons name="add-circle" size={20} color="#2196F3" />
@@ -246,10 +249,12 @@ const Stories = ({ friends, navigation }) => {
                             styles.storyRing,
                             viewedStories.has(friend.id) ? styles.viewedStoryRing : styles.activeStoryRing
                         ]}>
-                            <Image
-                                source={{ uri: getProfilePicture(friend) }}
+                            <FastImage
+                                source={{
+                                    uri: getProfilePicture(friend),
+                                    priority: FastImage.priority.normal
+                                }}
                                 style={styles.storyImage}
-                                loading="eager" // Öncelikli yükleme
                             />
                         </View>
                         <Text style={styles.storyText} numberOfLines={1}>

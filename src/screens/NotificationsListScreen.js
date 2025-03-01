@@ -81,7 +81,7 @@ const NotificationsListScreen = () => {
     if (loading && !refreshing && notifications.length === 0) {
         return (
             <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <ActivityIndicator size="large" color="#25D220" />
             </View>
         );
     }

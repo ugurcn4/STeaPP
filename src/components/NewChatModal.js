@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { getFriends } from '../services/friendService';
 import { getCurrentUserUid } from '../services/friendFunctions';
+import FastImage from 'react-native-fast-image';
 
 const NewChatModal = ({ visible, onClose, onSelectFriend }) => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -52,13 +53,22 @@ const NewChatModal = ({ visible, onClose, onSelectFriend }) => {
             style={styles.friendItem}
             onPress={() => onSelectFriend(item)}
         >
-            <Image
+            <FastImage
                 source={
                     item.profilePicture
-                        ? { uri: item.profilePicture }
-                        : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.informations?.name || '')}&background=random` }
+                        ? {
+                            uri: item.profilePicture,
+                            priority: FastImage.priority.normal,
+                            cache: FastImage.cacheControl.immutable
+                        }
+                        : {
+                            uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.informations?.name || '')}&background=random`,
+                            priority: FastImage.priority.normal,
+                            cache: FastImage.cacheControl.web
+                        }
                 }
                 style={styles.avatar}
+                resizeMode={FastImage.resizeMode.cover}
             />
             <View style={styles.friendInfo}>
                 <Text style={styles.friendName}>

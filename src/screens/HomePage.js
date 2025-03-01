@@ -12,6 +12,7 @@ import WeatherCard from './HomePageCards/WeatherCard';
 import { haversine } from '../helpers/locationUtils';
 import LottieView from 'lottie-react-native';
 import CityExplorerCard from './HomePageCards/CityExplorerCard';
+import FastImage from 'react-native-fast-image';
 
 // motivationMessages'ı component dışında tanımlayalım
 const motivationMessages = [
@@ -373,11 +374,17 @@ const HomePage = ({ navigation }) => {
 
     const getProfileImageUri = () => {
         if (userData?.profilePicture) {
-            return { uri: userData.profilePicture };
+            return {
+                uri: userData.profilePicture,
+                priority: FastImage.priority.normal,
+                cache: FastImage.cacheControl.immutable
+            };
         } else {
             const initials = userName?.slice(0, 2).toUpperCase() || "PP";
             return {
                 uri: `https://ui-avatars.com/api/?name=${initials}&background=4CAF50&color=fff&size=128`,
+                priority: FastImage.priority.normal,
+                cache: FastImage.cacheControl.web
             };
         }
     };
@@ -830,11 +837,12 @@ const HomePage = ({ navigation }) => {
                                 </Animated.View>
                                 <View style={styles.avatarContainer}>
                                     {isLoading ? (
-                                        <ActivityIndicator size="small" color="#4CAF50" />
+                                        <ActivityIndicator size="small" color="#25D220" />
                                     ) : (
-                                        <Image
+                                        <FastImage
                                             source={getProfileImageUri()}
                                             style={styles.avatarImage}
+                                            resizeMode={FastImage.resizeMode.cover}
                                             onError={() => {
                                                 const initials = userName?.slice(0, 2).toUpperCase() || "PP";
                                                 setUserData(prev => ({

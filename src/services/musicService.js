@@ -65,9 +65,9 @@ export const getTrackDetails = async (trackId) => {
 
 export const getPopularTracks = async () => {
     try {
-        const response = await axios.get(`${DEEZER_API_URL}/chart/0/tracks`, {
+        const response = await axios.get(`${DEEZER_API_URL}/chart/tr/tracks`, {
             params: {
-                limit: 20
+                limit: 30
             }
         });
 

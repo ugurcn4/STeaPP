@@ -6,6 +6,7 @@ import FriendsPage from './FriendsPage';
 import MapPage from './MapPage';
 import SettingsPage from './SettingsPage';
 import ActivitiesScreen from './ActivitiesScreen';
+import OnboardingScreen from './OnboardingScreens/OnboardingScreen';
 
 export {
     HomePage,
@@ -15,4 +16,5 @@ export {
     MapPage,
     SettingsPage,
     ActivitiesScreen,
+    OnboardingScreen,
 };

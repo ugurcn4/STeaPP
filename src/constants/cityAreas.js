@@ -86,6 +86,6 @@ export const CITY_AREAS = {
 // Şehir rozetleri için gerekli yüzdeler (güncellendi)
 export const BADGE_THRESHOLDS = {
     bronze: 1,  // %1 ve üzeri keşif
-    silver: 3,  // %3 ve üzeri keşif
-    gold: 5     // %5 ve üzeri keşif
+    silver: 5,  // %5 ve üzeri keşif
+    gold: 10     // %10 ve üzeri keşif
 }; 

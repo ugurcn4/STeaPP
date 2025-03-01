@@ -247,7 +247,7 @@ const PhotosPage = ({ navigation }) => {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <ActivityIndicator size="large" color="#25D220" />
                 <Text style={styles.loadingText}>Fotoğraflar yükleniyor...</Text>
             </View>
         );
@@ -294,7 +294,7 @@ const PhotosPage = ({ navigation }) => {
                     ListFooterComponent={
                         loading && hasMore ? (
                             <View style={styles.loadingMore}>
-                                <ActivityIndicator size="small" color="#4CAF50" />
+                                <ActivityIndicator size="small" color="#25D220" />
                                 <Text style={styles.loadingMoreText}>
                                     Daha fazla yükleniyor...
                                 </Text>

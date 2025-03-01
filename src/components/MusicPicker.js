@@ -234,7 +234,7 @@ const MusicPicker = ({ onSelect, onClose }) => {
             </View>
 
             {isLoading ? (
-                <ActivityIndicator style={styles.loader} color="#2196F3" />
+                <ActivityIndicator style={styles.loader} color="#25D220" />
             ) : (
                 <FlatList
                     data={searchResults}

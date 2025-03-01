@@ -75,9 +75,6 @@ const NotificationsPage = ({ navigation }) => {
                     [{ text: "Tamam", style: "default" }]
                 );
 
-                // Mevcut bildirimleri kontrol et
-                const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-
             } else {
                 Alert.alert(
                     "Bildirimler Kapalı",
@@ -98,7 +95,7 @@ const NotificationsPage = ({ navigation }) => {
     if (loading) {
         return (
             <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <ActivityIndicator size="large" color="#25D220" />
             </View>
         );
     }
@@ -199,53 +196,14 @@ const NotificationsPage = ({ navigation }) => {
                 </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-                style={[
-                    styles.testButton,
-                    { marginTop: 10, backgroundColor: '#2196F3' }
-                ]}
-                onPress={async () => {
-                    try {
-                        const { getAuth } = await import('firebase/auth');
-                        const { doc, getDoc, getFirestore } = await import('firebase/firestore');
-                        const storedToken = await AsyncStorage.getItem('pushToken');
-                        const auth = getAuth();
-                        const currentUser = auth.currentUser;
-                        const db = getFirestore();
-
-                        if (currentUser) {
-                            const userRef = doc(db, 'users', currentUser.uid);
-                            const userDoc = await getDoc(userRef);
-                            const userData = userDoc.data();
-
-                            Alert.alert(
-                                'Token Bilgileri',
-                                `AsyncStorage Token: ${storedToken || 'Bulunamadı'}\n\nFirestore Tokens: ${JSON.stringify(userData.fcmTokens || {}, null, 2)}`
-                            );
-                        }
-                    } catch (error) {
-                        Alert.alert('Hata', 'Token bilgileri alınırken hata oluştu: ' + error.message);
-                    }
-                }}
-            >
-                <Ionicons
-                    name="information-circle"
-                    size={24}
-                    color="#FFFFFF"
-                />
-                <Text style={styles.testButtonText}>
-                    Token Bilgilerini Göster
-                </Text>
-            </TouchableOpacity>
-
             {error && (
                 <Text style={styles.errorText}>
                     {error}
                 </Text>
             )}
 
-            <Text style={[styles.note, { color: currentTheme.text }]}>
-                Not: Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
+            <Text style={[styles.warningText, { color: currentTheme.text }]}>
+                Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
             </Text>
         </View>
     );
@@ -288,12 +246,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         flex: 1,
     },
-    note: {
-        fontSize: 14,
-        fontStyle: 'italic',
-        marginTop: 20,
-        opacity: 0.7,
-    },
     errorText: {
         color: 'red',
         fontSize: 14,
@@ -315,6 +267,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         marginLeft: 10,
+    },
+    warningText: {
+        fontSize: 14,
+        textAlign: 'center',
+        marginTop: 20,
+        paddingHorizontal: 20,
+        opacity: 0.8
     },
 });
 

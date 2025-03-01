@@ -14,17 +14,23 @@ import {
     Alert,
     Linking,
     ActionSheetIOS,
-    StatusBar
+    StatusBar,
+    AppState,
+    Vibration,
+    Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
     sendMessage,
     subscribeToMessages,
     markChatAsRead,
-    updateOnlineStatus,
-    subscribeToUserOnlineStatus,
     sendMediaMessage,
-    sendVoiceMessage
+    sendVoiceMessage,
+    addMessageToFavorites,
+    deleteMessage,
+    deleteMessageForEveryone,
+    reportMessage,
+    getFavoriteMessages
 } from '../services/messageService';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { BlurView } from 'expo-blur';
@@ -33,15 +39,26 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import {
+    updateOnlineStatus,
+    subscribeToUserStatus,
+    initializeOnlineStatusTracking
+} from '../services/onlineStatusService';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import FastImage from 'react-native-fast-image';
+
 
 const { width } = Dimensions.get('window');
 
 const ChatScreen = ({ route, navigation }) => {
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState('');
-    const { friend } = route.params;
+    const [inputHeight, setInputHeight] = useState(20);
+    const [friendData, setFriendData] = useState(route.params.friend);
     const flatListRef = useRef();
-    const [isOnline, setIsOnline] = useState(true);
+    const [isOnline, setIsOnline] = useState(false);
     const [friendProfileVisible, setFriendProfileVisible] = useState(false);
     const [lastSeen, setLastSeen] = useState(null);
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -54,6 +71,10 @@ const ChatScreen = ({ route, navigation }) => {
     const [initialLoad, setInitialLoad] = useState(true);
     const [newMessageReceived, setNewMessageReceived] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const inputRef = useRef(null);
+    const [selectedMessage, setSelectedMessage] = useState(null);
+    const [favoritesModalVisible, setFavoritesModalVisible] = useState(false);
+    const [favoriteMessages, setFavoriteMessages] = useState([]);
 
     useEffect(() => {
         navigation.setOptions({
@@ -65,43 +86,106 @@ const ChatScreen = ({ route, navigation }) => {
             const uid = await getCurrentUserUid();
             setCurrentUserId(uid);
 
-            // chatId'yi doğru formatta oluştur
-            const chatId = [uid, friend.id].sort().join('_');
+            // Çevrimiçi durumu izlemeyi başlat
+            initializeOnlineStatusTracking(uid);
+
+            // Kullanıcıyı çevrimiçi yap
+            await updateOnlineStatus(uid, true);
+
+            // Friend bilgilerini güncelle
+            const friendRef = doc(db, 'users', friendData.id);
+            const friendSnapshot = await getDoc(friendRef);
+            if (friendSnapshot.exists()) {
+                const data = friendSnapshot.data();
+                setFriendData(prevData => ({
+                    ...prevData,
+                    friends: data.friends || [],
+                }));
+            }
+
+            const chatId = [uid, friendData.id].sort().join('_');
+
+            // Chat ekranına girildiğinde okunmamış mesajları kontrol et
+            const markUnreadMessages = async () => {
+                const q = query(
+                    collection(db, 'messages'),
+                    where('chatId', '==', chatId),
+                    where('receiverId', '==', uid),
+                    where('read', '==', false)
+                );
+
+                const snapshot = await getDocs(q);
+                if (!snapshot.empty) {
+                    await markChatAsRead(chatId, uid);
+                }
+            };
+
+            // İlk yüklemede okunmamış mesajları işaretle
+            await markUnreadMessages();
 
             const unsubscribeMessages = subscribeToMessages(
                 uid,
-                friend.id,
+                friendData.id,
                 (newMessages) => {
-                    if (!initialLoad && messages.length < newMessages.length) {
+                    const sortedMessages = newMessages.sort((a, b) =>
+                        b.timestamp.toMillis() - a.timestamp.toMillis()
+                    );
+
+                    if (!initialLoad && messages.length < sortedMessages.length) {
                         setNewMessageReceived(true);
+                        // Yeni mesaj geldiğinde ve alıcıysak okundu olarak işaretle
+                        const hasNewUnreadMessages = sortedMessages.some(
+                            msg => msg.receiverId === uid && !msg.read &&
+                                (!messages.length || msg.timestamp > messages[0].timestamp)
+                        );
+
+                        if (hasNewUnreadMessages) {
+                            markChatAsRead(chatId, uid);
+                        }
                     }
-                    setMessages(newMessages);
-                    markChatAsRead(chatId, uid);
+
+                    setMessages(sortedMessages);
                     setInitialLoad(false);
                     setIsLoading(false);
                 }
             );
 
-            const unsubscribeOnlineStatus = subscribeToUserOnlineStatus(
-                friend.id,
-                ({ isOnline, lastSeen }) => {
-                    setIsOnline(isOnline);
-                    setLastSeen(lastSeen);
+            // Arkadaşın çevrimiçi durumunu dinle
+            const unsubscribeOnlineStatus = subscribeToUserStatus(
+                friendData.id,
+                ({ isOnline: online, lastSeen: last }) => {
+                    setIsOnline(online);
+                    setLastSeen(last);
                 }
             );
 
+            // Uygulama durumu değişikliklerini dinle
+            const appStateSubscription = AppState.addEventListener('change', nextAppState => {
+                if (nextAppState === 'active') {
+                    updateOnlineStatus(uid, true);
+                } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+                    updateOnlineStatus(uid, false);
+                }
+            });
             return () => {
-                unsubscribeMessages();
+                if (unsubscribeMessages) {
+                    unsubscribeMessages();
+                }
                 unsubscribeOnlineStatus();
+                appStateSubscription.remove();
+                // Çıkış yaparken çevrimdışı yap
+                updateOnlineStatus(uid, false);
+                if (unsubscribeCallListener) {
+                    unsubscribeCallListener();
+                }
             };
         };
 
         loadMessages();
-    }, [friend]);
+    }, [friendData.id, navigation]);
 
     useEffect(() => {
-        if (newMessageReceived && flatListRef.current) {
-            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        if (newMessageReceived) {
             setNewMessageReceived(false);
         }
     }, [newMessageReceived]);
@@ -119,11 +203,25 @@ const ChatScreen = ({ route, navigation }) => {
         checkPermissions();
     }, []);
 
+    useEffect(() => {
+        const loadFavorites = async () => {
+            if (currentUserId) {
+                try {
+                    const favorites = await getFavoriteMessages(currentUserId);
+                    setFavoriteMessages(favorites);
+                } catch (error) {
+                    console.error('Favoriler yüklenirken hata:', error);
+                }
+            }
+        };
+        loadFavorites();
+    }, [currentUserId]);
+
     const handleSendMessage = async () => {
         if (!messageText.trim()) return;
 
         const uid = await getCurrentUserUid();
-        await sendMessage(uid, friend.id, messageText.trim());
+        await sendMessage(uid, friendData.id, messageText.trim());
         setMessageText('');
     };
 
@@ -224,7 +322,7 @@ const ChatScreen = ({ route, navigation }) => {
         try {
             const response = await fetch(uri);
             const blob = await response.blob();
-            await sendMediaMessage(currentUserId, friend.id, blob, type);
+            await sendMediaMessage(currentUserId, friendData.id, blob, type);
         } catch (error) {
             console.error('Medya yükleme hatası:', error);
             Alert.alert('Hata', 'Medya gönderilemedi');
@@ -287,7 +385,7 @@ const ChatScreen = ({ route, navigation }) => {
             const blob = await response.blob();
             blob.duration = recordingDuration;
 
-            await sendVoiceMessage(currentUserId, friend.id, blob);
+            await sendVoiceMessage(currentUserId, friendData.id, blob);
 
             setRecording(null);
             setRecordingDuration(0);
@@ -358,13 +456,172 @@ const ChatScreen = ({ route, navigation }) => {
         }
     };
 
+    const handleMessageLongPress = (message) => {
+        Vibration.vibrate(50); // Hafif titreşim efekti
+        setSelectedMessage(message);
+
+        if (Platform.OS === 'ios') {
+            const options = ['İptal', 'Favorilere Ekle', 'Benden Sil'];
+
+            // Eğer mesajı gönderen kişiysek "Herkesten Sil" seçeneğini ekle
+            if (message.senderId === currentUserId) {
+                options.push('Herkesten Sil');
+            } else {
+                options.push('Mesajı Şikayet Et');
+            }
+
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options,
+                    destructiveButtonIndex: message.senderId === currentUserId ? [2, 3] : [2],
+                    cancelButtonIndex: 0,
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) {
+                        handleAddToFavorites(message);
+                    } else if (buttonIndex === 2) {
+                        handleDeleteMessage(message);
+                    } else if (buttonIndex === 3) {
+                        if (message.senderId === currentUserId) {
+                            handleDeleteMessageForEveryone(message);
+                        } else {
+                            handleReportMessage(message);
+                        }
+                    }
+                }
+            );
+        } else {
+            // Android için Alert kullan
+            const options = [
+                {
+                    text: 'Favorilere Ekle',
+                    onPress: () => handleAddToFavorites(message)
+                },
+                {
+                    text: 'Benden Sil',
+                    onPress: () => handleDeleteMessage(message),
+                    style: 'destructive'
+                }
+            ];
+
+            // Mesajı gönderen kişiysek "Herkesten Sil" seçeneğini ekle
+            if (message.senderId === currentUserId) {
+                options.push({
+                    text: 'Herkesten Sil',
+                    onPress: () => handleDeleteMessageForEveryone(message),
+                    style: 'destructive'
+                });
+            } else {
+                options.push({
+                    text: 'Mesajı Şikayet Et',
+                    onPress: () => handleReportMessage(message),
+                    style: 'destructive'
+                });
+            }
+
+            options.push({
+                text: 'İptal',
+                style: 'cancel'
+            });
+
+            Alert.alert('Mesaj Seçenekleri', '', options);
+        }
+    };
+
+    const handleAddToFavorites = async (message) => {
+        try {
+            await addMessageToFavorites(currentUserId, message);
+            Alert.alert('Başarılı', 'Mesaj favorilere eklendi');
+        } catch (error) {
+            console.error('Favorilere ekleme hatası:', error);
+            Alert.alert('Hata', 'Mesaj favorilere eklenemedi');
+        }
+    };
+
+    const handleDeleteMessage = (message) => {
+        const options = [
+            {
+                text: 'İptal',
+                style: 'cancel'
+            },
+            {
+                text: 'Benden Sil',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteMessage(message.id, currentUserId);
+                    } catch (error) {
+                        console.error('Mesaj silme hatası:', error);
+                        Alert.alert('Hata', 'Mesaj silinemedi');
+                    }
+                }
+            }
+        ];
+
+        // Sadece mesajı gönderen kişi herkesten silebilir
+        if (message.senderId === currentUserId) {
+            options.push({
+                text: 'Herkesten Sil',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteMessageForEveryone(message.id);
+                    } catch (error) {
+                        console.error('Mesaj silme hatası:', error);
+                        Alert.alert('Hata', 'Mesaj silinemedi');
+                    }
+                }
+            });
+        }
+
+        Alert.alert(
+            'Mesajı Sil',
+            'Bu mesajı silmek istediğinizden emin misiniz?',
+            options
+        );
+    };
+
+    const handleReportMessage = (message) => {
+        Alert.alert(
+            'Mesajı Şikayet Et',
+            'Bu mesajı şikayet etmek istediğinizden emin misiniz?',
+            [
+                {
+                    text: 'İptal',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Şikayet Et',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await reportMessage(message.id);
+                            Alert.alert('Başarılı', 'Mesaj şikayet edildi');
+                        } catch (error) {
+                            console.error('Mesaj şikayet hatası:', error);
+                            Alert.alert('Hata', 'Mesaj şikayet edilemedi');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleDeleteMessageForEveryone = async (message) => {
+        try {
+            await deleteMessageForEveryone(message.id);
+        } catch (error) {
+            console.error('Mesaj silme hatası:', error);
+            Alert.alert('Hata', 'Mesaj silinemedi');
+        }
+    };
+
     const renderMessage = ({ item }) => {
         const isMine = item.senderId === currentUserId;
+        const isFavorite = favoriteMessages.some(fav => fav.messageId === item.id);
         const renderMessageContent = () => {
             // Story yanıtı kontrolü
             if (item.mediaType === 'story_reply') {
-
-
                 return (
                     <View>
                         <Text style={[
@@ -497,49 +754,65 @@ const ChatScreen = ({ route, navigation }) => {
         };
 
         return (
-            <View style={[
-                styles.messageContainer,
-                isMine ? styles.myMessage : styles.theirMessage
-            ]}>
+            <TouchableOpacity
+                onLongPress={() => handleMessageLongPress(item)}
+                delayLongPress={200}
+                activeOpacity={0.7}
+            >
                 <View style={[
-                    styles.messageBubble,
-                    isMine ? styles.myMessageBubble : styles.theirMessageBubble
+                    styles.messageContainer,
+                    isMine ? styles.myMessage : styles.theirMessage
                 ]}>
-                    {renderMessageContent()}
-                    {isMine ? (
-                        <View style={styles.readStatusContainer}>
-                            <View style={styles.readStatusWrapper}>
-                                {item.read ? (
-                                    <Ionicons
-                                        name="checkmark-done-outline"
-                                        size={16}
-                                        color="rgba(255,255,255,0.9)"
-                                    />
-                                ) : (
-                                    <Ionicons
-                                        name="checkmark-outline"
-                                        size={16}
-                                        color="rgba(255,255,255,0.7)"
-                                    />
-                                )}
-                            </View>
-                            <Text style={[styles.timeText, styles.myTimeText]}>
-                                {item.timestamp.toDate().toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
-                            </Text>
+                    <View style={[
+                        styles.messageBubble,
+                        isMine ? styles.myMessageBubble : styles.theirMessageBubble
+                    ]}>
+                        {renderMessageContent()}
+                        <View style={styles.messageFooter}>
+                            {isFavorite && (
+                                <Ionicons
+                                    name="star"
+                                    size={14}
+                                    color={isMine ? "rgba(255,255,255,0.9)" : "#666"}
+                                    style={styles.favoriteIcon}
+                                />
+                            )}
+                            {isMine ? (
+                                <View style={styles.readStatusContainer}>
+                                    <View style={styles.readStatusWrapper}>
+                                        {item.read ? (
+                                            <Ionicons
+                                                name="checkmark-done-outline"
+                                                size={16}
+                                                color="rgba(255,255,255,0.9)"
+                                            />
+                                        ) : (
+                                            <Ionicons
+                                                name="checkmark-outline"
+                                                size={16}
+                                                color="rgba(255,255,255,0.7)"
+                                            />
+                                        )}
+                                    </View>
+                                    <Text style={[styles.timeText, styles.myTimeText]}>
+                                        {item.timestamp.toDate().toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <Text style={[styles.timeText, styles.theirTimeText]}>
+                                    {item.timestamp.toDate().toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </Text>
+                            )}
                         </View>
-                    ) : (
-                        <Text style={[styles.timeText, styles.theirTimeText]}>
-                            {item.timestamp.toDate().toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}
-                        </Text>
-                    )}
+                    </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
@@ -551,37 +824,42 @@ const ChatScreen = ({ route, navigation }) => {
                         style={styles.backButton}
                         onPress={() => navigation.goBack()}
                     >
-                        <Ionicons name="chevron-back" size={28} color="#2196F3" />
+                        <Ionicons name="chevron-back" size={28} color="#25D220" />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         style={styles.userInfo}
                         onPress={() => setFriendProfileVisible(true)}
                     >
-                        <Image
+                        <FastImage
                             source={
-                                friend.profilePicture
-                                    ? { uri: friend.profilePicture }
-                                    : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name)}&background=random` }
+                                friendData.profilePicture
+                                    ? {
+                                        uri: friendData.profilePicture,
+                                        priority: FastImage.priority.normal,
+                                    }
+                                    : {
+                                        uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(friendData.name)}&background=random`,
+                                        priority: FastImage.priority.normal,
+                                    }
                             }
                             style={styles.profileImage}
+                            resizeMode={FastImage.resizeMode.cover}
                         />
                         <View style={styles.userTextInfo}>
                             <Text style={styles.userName} numberOfLines={1}>
-                                {friend.informations?.name || friend.name || 'İsimsiz'}
+                                {friendData.informations?.name || friendData.name || 'İsimsiz'}
                             </Text>
                             {renderUserStatus()}
                         </View>
                     </TouchableOpacity>
 
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity
-                            style={styles.headerButton}
-                            onPress={() => {/* Video call */ }}
-                        >
-                            <Ionicons name="videocam" size={24} color="#2196F3" />
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={() => setFavoritesModalVisible(true)}
+                    >
+                        <Ionicons name="star-outline" size={24} color="#25D220" />
+                    </TouchableOpacity>
                 </View>
             </BlurView>
         </View>
@@ -597,22 +875,30 @@ const ChatScreen = ({ route, navigation }) => {
                     <Ionicons name="add-circle-outline" size={24} color="#666" />
                 </TouchableOpacity>
 
-                <View style={styles.inputWrapper}>
+                <View style={[styles.inputWrapper, { minHeight: Math.min(inputHeight + 24, 150) }]}>
                     <TextInput
-                        style={styles.input}
+                        ref={inputRef}
+                        style={[styles.input, { minHeight: Math.min(inputHeight, 120) }]}
                         value={messageText}
-                        onChangeText={setMessageText}
+                        onChangeText={(text) => {
+                            setMessageText(text);
+                            if (text.length === 0) {
+                                setInputHeight(20);
+                            } else {
+                                inputRef.current?.measure((x, y, width, height, pageX, pageY) => {
+                                    const newHeight = Math.max(20, height);
+                                    setInputHeight(newHeight);
+                                });
+                            }
+                        }}
                         placeholder={isRecording ? `Kaydediliyor... ${recordingDuration}s` : "Mesaj yaz..."}
                         placeholderTextColor="#666"
                         multiline
                         editable={!isRecording}
-                        scrollEnabled={false}
-                        textAlignVertical="center"
+                        scrollEnabled={inputHeight >= 120}
                         onContentSizeChange={(e) => {
-                            const { height } = e.nativeEvent.contentSize;
-                            e.target.setNativeProps({
-                                height: Math.min(Math.max(35, height), 100)
-                            });
+                            const newHeight = Math.max(20, e.nativeEvent.contentSize.height);
+                            setInputHeight(newHeight);
                         }}
                     />
                 </View>
@@ -644,14 +930,23 @@ const ChatScreen = ({ route, navigation }) => {
 
     const formatLastSeen = (timestamp) => {
         if (!timestamp) return '';
-        const date = timestamp.toDate();
+        const date = new Date(timestamp);
         const now = new Date();
         const diff = now - date;
 
         if (diff < 60000) return 'Az önce';
-        if (diff < 3600000) return `${Math.floor(diff / 60000)} dakika önce`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)} saat önce`;
-        return date.toLocaleDateString();
+        if (diff < 3600000) {
+            const minutes = Math.floor(diff / 60000);
+            return `${minutes} dakika önce`;
+        }
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            return `${hours} saat önce`;
+        }
+        return date.toLocaleDateString('tr-TR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
 
     const renderUserStatus = () => {
@@ -671,8 +966,8 @@ const ChatScreen = ({ route, navigation }) => {
         if (isLoading) return null;
 
         return (
-            <View style={styles.emptyContainer}>
-                <Ionicons name="lock-closed" size={24} color="#666" style={styles.lockIcon} />
+            <View style={[styles.emptyContainer, { transform: [{ scaleY: -1 }] }]}>
+                <Ionicons name="lock-closed" size={48} color="#666" style={styles.lockIcon} />
                 <Text style={styles.emptyTitle}>
                     Uçtan uca şifrelenmiş
                 </Text>
@@ -682,6 +977,74 @@ const ChatScreen = ({ route, navigation }) => {
             </View>
         );
     };
+
+    const FavoritesModal = ({ visible, onClose, favorites }) => (
+        <Modal
+            visible={visible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={onClose}
+        >
+            <View style={styles.modalContainer}>
+                <BlurView intensity={100} tint="light" style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                        <View style={styles.modalHeaderLeft}>
+                            <Ionicons name="star" size={24} color="#007AFF" />
+                            <Text style={styles.modalTitle}>Favori Mesajlar</Text>
+                        </View>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <Ionicons name="close" size={24} color="#666" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.searchContainer}>
+                        <Ionicons name="search-outline" size={20} color="#666" />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Favorilerde ara..."
+                            placeholderTextColor="#666"
+                        />
+                    </View>
+
+                    <FlatList
+                        data={favorites}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={styles.favoritesList}
+                        renderItem={({ item }) => (
+                            <View style={styles.favoriteItem}>
+                                {item.message && (
+                                    <Text style={styles.favoriteMessage}>{item.message}</Text>
+                                )}
+                                <Text style={styles.favoriteTime}>
+                                    {item.timestamp.toDate().toLocaleTimeString('tr-TR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </Text>
+                                <View style={styles.favoriteActions}>
+                                    <TouchableOpacity style={styles.favoriteAction}>
+                                        <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.favoriteAction}>
+                                        <Ionicons name="share-outline" size={20} color="#007AFF" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="star-outline" size={48} color="#666" />
+                                <Text style={styles.emptyTitle}>Henüz favori mesajınız yok</Text>
+                                <Text style={styles.emptyText}>
+                                    Bir mesaja uzun basıp "Favorilere Ekle" seçeneğini kullanarak favori mesajlarınızı ekleyebilirsiniz.
+                                </Text>
+                            </View>
+                        }
+                    />
+                </BlurView>
+            </View>
+        </Modal>
+    );
 
     return (
         <View style={styles.container}>
@@ -720,7 +1083,12 @@ const ChatScreen = ({ route, navigation }) => {
             <FriendProfileModal
                 visible={friendProfileVisible}
                 onClose={() => setFriendProfileVisible(false)}
-                friend={friend}
+                friend={friendData}
+            />
+            <FavoritesModal
+                visible={favoritesModalVisible}
+                onClose={() => setFavoritesModalVisible(false)}
+                favorites={favoriteMessages}
             />
         </View>
     );
@@ -812,8 +1180,16 @@ const styles = StyleSheet.create({
     },
     messageBubble: {
         padding: 12,
-        borderRadius: 18,
+        borderRadius: 20,
         maxWidth: '100%',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.08,
+        shadowRadius: 2,
+        elevation: 2,
     },
     myMessage: {
         alignSelf: 'flex-end',
@@ -822,12 +1198,23 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
     },
     myMessageBubble: {
-        backgroundColor: '#0084FF',
+        backgroundColor: '#25D220', // Daha koyu ve soft bir yeşil
         borderBottomRightRadius: 4,
+        borderTopLeftRadius: 24,
+        shadowColor: 'rgba(18, 140, 126, 0.15)', // Yeşil tona uygun gölge
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 1,
+        shadowRadius: 4,
     },
     theirMessageBubble: {
-        backgroundColor: '#E4E6EB',
+        backgroundColor: '#F8F9FA', // Biraz daha soft bir beyaz
         borderBottomLeftRadius: 4,
+        borderTopRightRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.08)',
     },
     messageText: {
         fontSize: 16,
@@ -835,16 +1222,18 @@ const styles = StyleSheet.create({
     },
     myMessageText: {
         color: '#FFFFFF',
+        fontWeight: '400', // Beyaz metin daha iyi okunabilirlik için normal kalınlıkta
     },
     theirMessageText: {
-        color: '#1A1A1A',
+        color: '#2C3E50', // Daha koyu bir metin rengi
+        fontWeight: '400',
     },
     timeText: {
         fontSize: 11,
         marginTop: 4,
     },
     myTimeText: {
-        color: 'rgba(255,255,255,0.7)',
+        color: 'rgba(255,255,255,0.9)',
     },
     theirTimeText: {
         color: '#65676B',
@@ -878,15 +1267,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: Platform.OS === 'ios' ? 8 : 4,
         justifyContent: 'center',
-        minHeight: 40,
     },
     input: {
         fontSize: 16,
         color: '#1A1A1A',
-        maxHeight: 120,
-        paddingTop: 0,
-        paddingBottom: 0,
-        textAlignVertical: 'center',
+        padding: 0,
+        textAlignVertical: 'top',
+        maxHeight: 120
     },
     sendButton: {
         width: 40,
@@ -1055,6 +1442,111 @@ const styles = StyleSheet.create({
     },
     theirStoryReplyText: {
         color: 'rgba(0,0,0,0.7)',
+    },
+    favoriteButton: {
+        padding: 8,
+        marginLeft: 8,
+    },
+    favoriteIcon: {
+        marginRight: 4,
+    },
+    messageFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        marginTop: 4,
+    },
+    modalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '90%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#EEE',
+    },
+    modalHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+    },
+    closeButton: {
+        padding: 4,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+        backgroundColor: '#F0F0F0',
+        margin: 12,
+        borderRadius: 10,
+    },
+    searchInput: {
+        flex: 1,
+        marginLeft: 8,
+        fontSize: 16,
+        color: '#000',
+    },
+    favoritesList: {
+        paddingBottom: 20,
+    },
+    favoriteItem: {
+        padding: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#E5E5EA',
+        backgroundColor: '#FFF',
+    },
+    favoriteMessage: {
+        fontSize: 16,
+        lineHeight: 22,
+        marginBottom: 6,
+    },
+    favoriteTime: {
+        fontSize: 12,
+        color: '#8E8E93',
+        marginBottom: 8,
+    },
+    favoriteActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 16,
+    },
+    favoriteAction: {
+        padding: 4,
+    },
+    emptyContainer: {
+        padding: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 300,
+    },
+    emptyTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        marginTop: 16,
+        marginBottom: 8,
+        color: '#000',
+    },
+    emptyText: {
+        fontSize: 15,
+        color: '#666',
+        textAlign: 'center',
+        lineHeight: 20,
+        paddingHorizontal: 32,
     },
 });
 

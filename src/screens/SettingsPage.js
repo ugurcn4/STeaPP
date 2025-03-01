@@ -54,6 +54,12 @@ const SettingsPage = ({ navigation }) => {
             iconColor: '#4CAF50'
         },
         {
+            title: "Tanıtım Ekranı",
+            iconName: "layers-outline",
+            screen: "Onboarding",
+            iconColor: '#9C27B0'
+        },
+        {
             title: "Yardım ve Destek",
             iconName: "help-circle-outline",
             screen: "YardimDestek",
@@ -106,7 +112,11 @@ const SettingsPage = ({ navigation }) => {
     };
 
     const handleNavigation = (screen) => {
-        navigation.navigate(screen);
+        if (screen === 'Onboarding') {
+            navigation.navigate(screen, { fromSettings: true });
+        } else {
+            navigation.navigate(screen);
+        }
     };
 
     const renderLogoutButton = () => (

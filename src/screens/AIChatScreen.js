@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity,
-    FlatList, KeyboardAvoidingView, Platform, Animated
+    FlatList, KeyboardAvoidingView, Platform, Animated,
+    Alert, Keyboard
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getAIResponse } from '../services/aiService';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUGGESTED_PROMPTS = [
     {
@@ -38,6 +40,10 @@ const AIChatScreen = () => {
     const flatListRef = useRef(null);
     const loadingDots = useRef(new Animated.Value(0)).current;
     const [location, setLocation] = useState(null);
+    const [isTyping, setIsTyping] = useState(false);
+    const [typingText, setTypingText] = useState('');
+    const typingAnimation = useRef(null);
+    const [messagesLoaded, setMessagesLoaded] = useState(false);
 
     const startLoadingAnimation = () => {
         Animated.sequence([
@@ -67,20 +73,40 @@ const AIChatScreen = () => {
         })();
     }, []);
 
+    useEffect(() => {
+        if (isTyping) {
+            let dots = '';
+            typingAnimation.current = setInterval(() => {
+                dots = dots.length >= 3 ? '' : dots + '.';
+                setTypingText(`Yazıyor${dots}`);
+            }, 500);
+        } else {
+            if (typingAnimation.current) {
+                clearInterval(typingAnimation.current);
+            }
+        }
+
+        return () => {
+            if (typingAnimation.current) {
+                clearInterval(typingAnimation.current);
+            }
+        };
+    }, [isTyping]);
+
     const sendMessage = async (text) => {
         if (!text.trim()) return;
 
-        const newMessage = {
+        const userMessage = {
             id: Date.now().toString(),
-            text,
+            text: text.trim(),
             isUser: true,
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, newMessage]);
+        // Önce kullanıcı mesajını ekle
+        setMessages(prev => [...prev, userMessage]);
         setInputText('');
-        setIsLoading(true);
-        startLoadingAnimation();
+        setIsTyping(true);
 
         try {
             let response;
@@ -89,28 +115,132 @@ const AIChatScreen = () => {
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude
                 };
-                response = await getAIResponse(text, coords);
+
+                // Son 5 mesajı geçmiş olarak gönder
+                const recentHistory = [...messages, userMessage].slice(-5);
+                response = await getAIResponse(text, coords, recentHistory);
             } else {
                 response = "Üzgünüm, konumunuza erişemediğim için size özel öneriler sunamıyorum. Lütfen konum izni verdiğinizden emin olun.";
             }
 
+            setIsTyping(false);
+
+            // AI yanıtını ekle
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 text: response,
                 isUser: false,
                 timestamp: new Date()
             }]);
+
         } catch (error) {
             console.error('AI yanıt hatası:', error);
+            setIsTyping(false);
+
+            // Hata mesajını ekle
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
                 isUser: false,
                 timestamp: new Date()
             }]);
-        } finally {
-            setIsLoading(false);
         }
+    };
+
+    // Sohbet geçmişini yükleme
+    useEffect(() => {
+        const loadMessages = async () => {
+            try {
+                const savedMessages = await AsyncStorage.getItem('chatHistory');
+                if (savedMessages) {
+                    // Mesajları yükle ve yüklendiğini işaretle
+                    setMessages(JSON.parse(savedMessages));
+                    setMessagesLoaded(true);
+                } else {
+                    // Mesaj yoksa da yüklendiğini işaretle
+                    setMessagesLoaded(true);
+                }
+            } catch (error) {
+                console.error('Sohbet geçmişi yüklenemedi:', error);
+                Alert.alert(
+                    'Hata',
+                    'Sohbet geçmişi yüklenirken bir sorun oluştu.'
+                );
+                // Hata durumunda da yüklendiğini işaretle
+                setMessagesLoaded(true);
+            }
+        };
+        loadMessages();
+    }, []);
+
+    // Mesajlar değiştiğinde kaydet - debounce ekleyelim
+    useEffect(() => {
+        const saveMessages = async () => {
+            try {
+                await AsyncStorage.setItem('chatHistory', JSON.stringify(messages));
+            } catch (error) {
+                console.error('Sohbet geçmişi kaydedilemedi:', error);
+            }
+        };
+
+        // Performans için debounce ekleyelim
+        const timeoutId = setTimeout(() => {
+            if (messages.length > 0) {
+                saveMessages();
+            }
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+    }, [messages]);
+
+    // Yeni mesaj eklendiğinde otomatik kaydırma için useEffect ekleyelim
+    // Ancak sadece mesajlar yüklendikten sonra çalışsın
+    useEffect(() => {
+        if (messages.length > 0 && messagesLoaded) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+        }
+    }, [messages, messagesLoaded]);
+
+    // Klavye açıldığında otomatik kaydırma
+    useEffect(() => {
+        const keyboardDidShowListener = Keyboard.addListener(
+            'keyboardDidShow',
+            () => {
+                if (messages.length > 0) {
+                    setTimeout(() => {
+                        flatListRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                }
+            }
+        );
+
+        return () => {
+            keyboardDidShowListener.remove();
+        };
+    }, [messages]);
+
+    // Sohbeti temizleme fonksiyonu
+    const clearChat = async () => {
+        Alert.alert(
+            'Sohbeti Temizle',
+            'Tüm sohbet geçmişi silinecek. Emin misiniz?',
+            [
+                {
+                    text: 'İptal',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Temizle',
+                    onPress: async () => {
+                        setMessages([]);
+                        await AsyncStorage.removeItem('chatHistory');
+                    },
+                    style: 'destructive'
+                }
+            ]
+        );
     };
 
     const renderSuggestedPrompt = ({ item }) => (
@@ -153,7 +283,13 @@ const AIChatScreen = () => {
                 colors={['#6C3EE8', '#4527A0']}
                 style={styles.header}
             >
-                <Text style={styles.headerTitle}>AI Asistan</Text>
+                <Text style={styles.headerTitle}>STeaPPY Asistan</Text>
+                <TouchableOpacity
+                    style={styles.menuButton}
+                    onPress={clearChat}
+                >
+                    <MaterialIcons name="more-vert" size={24} color="#FFF" />
+                </TouchableOpacity>
             </LinearGradient>
 
             <FlatList
@@ -162,7 +298,30 @@ const AIChatScreen = () => {
                 renderItem={renderMessage}
                 keyExtractor={item => item.id}
                 contentContainerStyle={styles.messagesList}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+                // İlk yükleme sırasında animasyonsuz, sonraki değişikliklerde animasyonlu
+                onContentSizeChange={() => {
+                    if (messagesLoaded) {
+                        flatListRef.current?.scrollToEnd({ animated: false });
+                    }
+                }}
+                // İlk yükleme sırasında animasyonsuz, sonraki değişikliklerde animasyonlu
+                onLayout={() => {
+                    if (messagesLoaded && messages.length > 0) {
+                        flatListRef.current?.scrollToEnd({ animated: false });
+                    }
+                }}
+                ListFooterComponent={() => (
+                    isTyping ? (
+                        <View style={styles.typingContainer}>
+                            <View style={styles.aiAvatar}>
+                                <MaterialIcons name="psychology" size={24} color="#6C3EE8" />
+                            </View>
+                            <View style={styles.typingBubble}>
+                                <Text style={styles.typingText}>{typingText}</Text>
+                            </View>
+                        </View>
+                    ) : null
+                )}
             />
 
             {messages.length === 0 && (
@@ -206,12 +365,19 @@ const styles = StyleSheet.create({
     },
     header: {
         padding: 16,
-        paddingTop: Platform.OS === 'ios' ? 60 : 16
+        paddingTop: Platform.OS === 'ios' ? 60 : 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center'
     },
     headerTitle: {
         color: '#FFF',
         fontSize: 20,
         fontWeight: 'bold'
+    },
+    menuButton: {
+        padding: 8,
+        marginRight: -8
     },
     messagesList: {
         padding: 16
@@ -308,6 +474,23 @@ const styles = StyleSheet.create({
         color: '#6C3EE8',
         fontSize: 14,
         fontWeight: '500'
+    },
+    typingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        marginLeft: 16
+    },
+    typingBubble: {
+        backgroundColor: '#F0E7FF',
+        padding: 12,
+        borderRadius: 16,
+        maxWidth: '70%',
+        marginLeft: 8
+    },
+    typingText: {
+        color: '#6C3EE8',
+        fontSize: 14
     }
 });
 

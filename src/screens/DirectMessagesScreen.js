@@ -1,52 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     FlatList,
     TouchableOpacity,
-    Image,
     SafeAreaView,
     StatusBar,
     Platform,
-    TextInput
+    TextInput,
+    Alert,
+    Animated
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { getCurrentUserUid } from '../services/friendFunctions';
-import { getRecentChats } from '../services/messageService';
+import { getRecentChats, deleteChat, deleteChatForEveryone } from '../services/messageService';
 import NewChatModal from '../components/NewChatModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import FastImage from 'react-native-fast-image';
 
 const DirectMessagesScreen = ({ navigation, route }) => {
     const [chats, setChats] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isNewChatModalVisible, setIsNewChatModalVisible] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState(null);
+    const [swipedChatId, setSwipedChatId] = useState(null);
+
+    useEffect(() => {
+        const getUserId = async () => {
+            const uid = await getCurrentUserUid();
+            setCurrentUserId(uid);
+        };
+        getUserId();
+    }, []);
 
     useEffect(() => {
         let unsubscribe;
+
         const loadChats = async () => {
+            if (!currentUserId) return;
+
             try {
-                const currentUserId = await getCurrentUserUid();
-                if (currentUserId) {
-                    unsubscribe = getRecentChats(currentUserId, (recentChats) => {
-                        setChats(recentChats);
-                        setIsLoading(false);
-                    });
+                const cachedChats = await AsyncStorage.getItem(`chats_${currentUserId}`);
+                if (cachedChats) {
+                    setChats(JSON.parse(cachedChats));
+                    setIsLoading(false);
                 }
+
+                unsubscribe = getRecentChats(currentUserId, (recentChats) => {
+                    setChats(recentChats);
+                    setIsLoading(false);
+                    AsyncStorage.setItem(`chats_${currentUserId}`, JSON.stringify(recentChats));
+                });
             } catch (error) {
                 console.error('Sohbetler yüklenirken hata:', error);
                 setIsLoading(false);
             }
         };
 
-        loadChats();
+        if (currentUserId) {
+            loadChats();
+        }
+
         return () => unsubscribe && unsubscribe();
-    }, []);
+    }, [currentUserId]);
 
     useEffect(() => {
-        // initialChat parametresi varsa, doğrudan Chat ekranına yönlendir
         const initialChat = route.params?.initialChat;
         if (initialChat) {
             navigation.navigate('Chat', { friend: initialChat });
@@ -62,6 +84,51 @@ const DirectMessagesScreen = ({ navigation, route }) => {
         navigation.navigate('Chat', { friend });
     };
 
+    const handleDeleteChat = (chatId) => {
+        Alert.alert(
+            'Sohbeti Sil',
+            'Bu sohbeti silmek istediğinizden emin misiniz?',
+            [
+                {
+                    text: 'İptal',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Benden Sil',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const result = await deleteChat(chatId, currentUserId);
+                            if (result.success) {
+                                setChats(prevChats => prevChats.filter(chat => chat.chatId !== chatId));
+                            } else {
+                                Alert.alert('Hata', 'Sohbet silinirken bir hata oluştu');
+                            }
+                        } catch (error) {
+                            Alert.alert('Hata', 'Sohbet silinirken bir hata oluştu');
+                        }
+                    }
+                },
+                {
+                    text: 'Herkesten Sil',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const result = await deleteChatForEveryone(chatId);
+                            if (result.success) {
+                                setChats(prevChats => prevChats.filter(chat => chat.chatId !== chatId));
+                            } else {
+                                Alert.alert('Hata', 'Sohbet silinirken bir hata oluştu');
+                            }
+                        } catch (error) {
+                            Alert.alert('Hata', 'Sohbet silinirken bir hata oluştu');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const renderHeader = () => (
         <View style={styles.headerContainer}>
             <BlurView intensity={100} style={styles.headerBlur}>
@@ -70,14 +137,14 @@ const DirectMessagesScreen = ({ navigation, route }) => {
                         style={styles.backButton}
                         onPress={() => navigation.goBack()}
                     >
-                        <Ionicons name="chevron-back" size={28} color="#2196F3" />
+                        <Ionicons name="chevron-back" size={28} color="#25D220" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Mesajlar</Text>
                     <TouchableOpacity
                         onPress={handleNewChat}
                         style={styles.newChatButton}
                     >
-                        <Ionicons name="create-outline" size={24} color="#0066FF" />
+                        <Ionicons name="create-outline" size={24} color="#25D220" />
                     </TouchableOpacity>
                 </View>
 
@@ -96,6 +163,23 @@ const DirectMessagesScreen = ({ navigation, route }) => {
     );
 
     const renderChatItem = ({ item }) => {
+        const rowTranslateAnimatedValue = new Animated.Value(0);
+
+        const animateRow = (toValue) => {
+            Animated.spring(rowTranslateAnimatedValue, {
+                toValue,
+                useNativeDriver: true,
+                tension: 50,
+                friction: 9
+            }).start(() => {
+                if (toValue === -100) {
+                    setSwipedChatId(item.chatId);
+                } else {
+                    setSwipedChatId(null);
+                }
+            });
+        };
+
         const renderLastMessage = () => {
             const message = item.lastMessage;
             if (!message) return 'Yeni sohbet';
@@ -115,64 +199,124 @@ const DirectMessagesScreen = ({ navigation, route }) => {
         };
 
         const formatTime = (timestamp) => {
-            if (!timestamp) return '';
-            const date = timestamp.toDate();
-            const now = new Date();
+            if (!timestamp || !timestamp.toDate) return '';
 
-            if (date.toDateString() === now.toDateString()) {
-                // Bugün ise saat göster
-                return date.toLocaleTimeString('tr-TR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            } else if (date.getFullYear() === now.getFullYear()) {
-                // Bu yıl ise gün ve ay göster
-                return date.toLocaleDateString('tr-TR', {
-                    day: 'numeric',
-                    month: 'long'
-                });
-            } else {
-                // Geçmiş yıllar için tarih göster
-                return date.toLocaleDateString('tr-TR', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                });
+            try {
+                const date = timestamp.toDate();
+                const now = new Date();
+
+                if (date.toDateString() === now.toDateString()) {
+                    return date.toLocaleTimeString('tr-TR', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } else if (date.getFullYear() === now.getFullYear()) {
+                    return date.toLocaleDateString('tr-TR', {
+                        day: 'numeric',
+                        month: 'long'
+                    });
+                } else {
+                    return date.toLocaleDateString('tr-TR', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                    });
+                }
+            } catch (error) {
+                return '';
             }
         };
 
         return (
-            <TouchableOpacity
-                style={styles.chatItem}
-                onPress={() => navigation.navigate('Chat', { friend: item.user })}
-            >
-                <Image
-                    source={
-                        item.user.profilePicture
-                            ? { uri: item.user.profilePicture }
-                            : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name)}&background=random` }
-                    }
-                    style={styles.avatar}
-                />
-                {item.user.isOnline && <View style={styles.onlineIndicator} />}
+            <View style={styles.chatItemContainer}>
+                <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteChat(item.chatId)}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.deleteButtonInner}>
+                        <Ionicons name="trash" size={28} color="#fff" />
+                    </View>
+                </TouchableOpacity>
 
-                <View style={styles.chatInfo}>
-                    <View style={styles.chatHeader}>
-                        <Text style={styles.userName}>{item.user.name}</Text>
-                        <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
-                    </View>
-                    <View style={styles.lastMessageContainer}>
-                        <Text style={styles.lastMessage} numberOfLines={1}>
-                            {renderLastMessage()}
-                        </Text>
-                        {item.unreadCount > 0 && (
-                            <View style={styles.unreadBadge}>
-                                <Text style={styles.unreadCount}>{item.unreadCount}</Text>
+                <PanGestureHandler
+                    onGestureEvent={({ nativeEvent }) => {
+                        const { translationX } = nativeEvent;
+                        if (translationX < 0 && translationX > -120) {
+                            rowTranslateAnimatedValue.setValue(translationX);
+                        }
+                    }}
+                    onHandlerStateChange={({ nativeEvent }) => {
+                        if (nativeEvent.state === State.END) {
+                            const { translationX, velocityX } = nativeEvent;
+
+                            if (translationX < -40 || velocityX < -500) {
+                                animateRow(-80);
+                            } else {
+                                animateRow(0);
+                            }
+                        }
+                    }}
+                >
+                    <Animated.View
+                        style={[
+                            styles.chatItem,
+                            {
+                                transform: [{
+                                    translateX: rowTranslateAnimatedValue
+                                }]
+                            }
+                        ]}
+                    >
+                        <TouchableOpacity
+                            style={styles.chatItemContent}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                if (swipedChatId === item.chatId) {
+                                    animateRow(0);
+                                } else {
+                                    navigation.navigate('Chat', { friend: item.user });
+                                }
+                            }}
+                        >
+                            <FastImage
+                                source={
+                                    item.user.profilePicture
+                                        ? {
+                                            uri: item.user.profilePicture,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.immutable
+                                        }
+                                        : {
+                                            uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name)}&background=random`,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.web
+                                        }
+                                }
+                                style={styles.avatar}
+                            />
+                            {item.user.isOnline && <View style={styles.onlineIndicator} />}
+
+                            <View style={styles.chatInfo}>
+                                <View style={styles.chatHeader}>
+                                    <Text style={styles.userName}>{item.user.name}</Text>
+                                    <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
+                                </View>
+                                <View style={styles.lastMessageContainer}>
+                                    <Text style={styles.lastMessage} numberOfLines={1}>
+                                        {renderLastMessage()}
+                                    </Text>
+                                    {item.unreadCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadCount}>{item.unreadCount}</Text>
+                                        </View>
+                                    )}
+                                </View>
                             </View>
-                        )}
-                    </View>
-                </View>
-            </TouchableOpacity>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </PanGestureHandler>
+            </View>
         );
     };
 
@@ -186,40 +330,46 @@ const DirectMessagesScreen = ({ navigation, route }) => {
         </View>
     );
 
-    const onGestureEvent = ({ nativeEvent }) => {
-        if (nativeEvent.state === State.END) {
-            // Soldan sağa çekme hareketi (pozitif x değeri)
-            if (nativeEvent.translationX > 50) {
-                navigation.goBack();
-            }
-        }
-    };
+    const filteredChats = useMemo(() => {
+        return chats.filter(chat =>
+            chat.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (chat.lastMessage?.message || '').toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [chats, searchQuery]);
+
+    const keyExtractor = useCallback((item) => item.chatId, []);
+
+    const getItemLayout = useCallback((data, index) => ({
+        length: 82,
+        offset: 82 * index,
+        index,
+    }), []);
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <PanGestureHandler
-                onHandlerStateChange={onGestureEvent}
-                activeOffsetX={[-20, 20]}
-            >
-                <View style={styles.container}>
-                    <StatusBar barStyle="dark-content" />
-                    {renderHeader()}
+            <View style={styles.container}>
+                <StatusBar barStyle="dark-content" />
+                {renderHeader()}
 
-                    <FlatList
-                        data={chats}
-                        renderItem={renderChatItem}
-                        keyExtractor={item => item.chatId}
-                        ListEmptyComponent={renderEmptyComponent}
-                        contentContainerStyle={styles.listContainer}
-                    />
+                <FlatList
+                    data={filteredChats}
+                    renderItem={renderChatItem}
+                    keyExtractor={keyExtractor}
+                    getItemLayout={getItemLayout}
+                    ListEmptyComponent={renderEmptyComponent}
+                    contentContainerStyle={styles.listContainer}
+                    removeClippedSubviews={true}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    initialNumToRender={10}
+                />
 
-                    <NewChatModal
-                        visible={isNewChatModalVisible}
-                        onClose={() => setIsNewChatModalVisible(false)}
-                        onSelectFriend={handleSelectFriend}
-                    />
-                </View>
-            </PanGestureHandler>
+                <NewChatModal
+                    visible={isNewChatModalVisible}
+                    onClose={() => setIsNewChatModalVisible(false)}
+                    onSelectFriend={handleSelectFriend}
+                />
+            </View>
         </GestureHandlerRootView>
     );
 };
@@ -269,12 +419,21 @@ const styles = StyleSheet.create({
     listContainer: {
         flexGrow: 1,
     },
+    chatItemContainer: {
+        backgroundColor: '#FF3B30',
+        overflow: 'hidden',
+        marginBottom: StyleSheet.hairlineWidth,
+        position: 'relative',
+    },
     chatItem: {
+        backgroundColor: '#fff',
+    },
+    chatItemContent: {
         flexDirection: 'row',
         padding: 16,
         alignItems: 'center',
-        borderBottomWidth: 0.5,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: '#fff',
+        minHeight: 82,
     },
     avatar: {
         width: 50,
@@ -361,6 +520,22 @@ const styles = StyleSheet.create({
     newChatButton: {
         padding: 8,
     },
+    deleteButton: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 80,
+        backgroundColor: '#FF3B30',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deleteButtonInner: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+    }
 });
 
 export default DirectMessagesScreen; 

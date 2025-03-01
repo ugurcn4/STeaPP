@@ -7,9 +7,32 @@ import {
     sendEmailVerification,
     sendPasswordResetEmail as firebaseSendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../../firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ref, set, serverTimestamp } from 'firebase/database';
+import { getFirebaseRtdb } from '../../firebaseConfig';
+import { setOfflineOnLogout } from '../services/onlineStatusService';
+
+const auth = getAuth();
+
+const initialState = {
+    isAuth: false,
+    user: null,
+    loading: false,
+    error: null,
+    settings: {
+        visibility: 'public',
+        notifications: true,
+        privacySettings: {
+            locationSharing: false,
+            activityStatus: true,
+            friendsList: true,
+            searchable: true,
+            dataCollection: true
+        }
+    }
+};
 
 // Kullanıcı giriş işlemleri
 export const login = createAsyncThunk('user/login', async ({ email, password }, { rejectWithValue }) => {
@@ -99,6 +122,14 @@ export const autoLogin = createAsyncThunk('user/autoLogin', async () => {
 export const logout = createAsyncThunk('user/logout', async (_, { rejectWithValue }) => {
     try {
         const auth = getAuth();
+        const currentUser = auth.currentUser;
+
+        if (currentUser) {
+            // Önce çevrimiçi durumunu false yap
+            await setOfflineOnLogout(currentUser.uid);
+        }
+
+        // Sonra çıkış yap
         await signOut(auth);
         // Tüm local storage verilerini temizle
         await AsyncStorage.multiRemove(['userToken', 'userData']);
@@ -149,6 +180,14 @@ export const register = createAsyncThunk('user/register', async ({ email, passwo
         // E-posta doğrulama gönder
         await sendEmailVerification(user);
 
+        // Realtime Database'de kullanıcının online durumunu ayarla
+        const rtdb = getFirebaseRtdb();
+        const userStatusRef = ref(rtdb, `/status/${user.uid}`);
+        await set(userStatusRef, {
+            state: 'online',
+            last_changed: serverTimestamp(),
+        });
+
         const userDataToStore = {
             token,
             user: {
@@ -165,7 +204,15 @@ export const register = createAsyncThunk('user/register', async ({ email, passwo
             AsyncStorage.setItem('userData', JSON.stringify(userDataToStore))
         ]);
 
-        return userDataToStore;
+        return {
+            token,
+            user: {
+                uid: user.uid,
+                email: user.email,
+                username: username,
+                emailVerified: user.emailVerified
+            }
+        };
     } catch (error) {
         console.error('Kayıt hatası:', error.code, error.message);
 
@@ -202,12 +249,83 @@ export const sendPasswordResetEmail = createAsyncThunk(
     }
 );
 
-const initialState = {
-    isAuth: false,
-    user: null,
-    loading: false,
-    error: null
-};
+// Gizlilik ayarlarını kaydetme işlemi
+export const savePrivacySettings = createAsyncThunk(
+    'user/savePrivacySettings',
+    async ({ userId, settings }, { rejectWithValue }) => {
+        try {
+            const db = getFirebaseDb();
+            const userRef = doc(db, 'users', userId);
+            await updateDoc(userRef, {
+                'settings.privacySettings': settings
+            });
+            return settings;
+        } catch (error) {
+            return rejectWithValue('Ayarlar kaydedilirken bir hata oluştu');
+        }
+    }
+);
+
+// Sosyal medya girişi için action
+export const socialLogin = createAsyncThunk(
+    'user/socialLogin',
+    async (userData, { rejectWithValue }) => {
+        try {
+            const db = getFirebaseDb();
+            const userDoc = doc(db, 'users', userData.user.uid);
+
+            // Kullanıcının email adresinden varsayılan kullanıcı adı oluştur
+            const defaultUsername = userData.user.email.split('@')[0];
+
+            // Firestore'da kullanıcı verilerini kontrol et
+            const userSnapshot = await getDoc(userDoc);
+
+            if (!userSnapshot.exists()) {
+                // Yeni kullanıcı için verileri oluştur
+                const newUserData = {
+                    informations: {
+                        name: defaultUsername,
+                        email: userData.user.email,
+                        interests: [],
+                        settings: {
+                            visibility: 'public',
+                            notifications: true
+                        }
+                    },
+                    friends: [],
+                    friendRequests: {
+                        sent: [],
+                        received: []
+                    },
+                    createdAt: new Date(),
+                };
+
+                await setDoc(userDoc, newUserData);
+
+                return {
+                    user: {
+                        ...userData.user,
+                        username: defaultUsername
+                    }
+                };
+            } else {
+                // Mevcut kullanıcı verilerini al
+                const existingUserData = userSnapshot.data();
+                const username = existingUserData.informations?.name || defaultUsername;
+
+                return {
+                    user: {
+                        ...userData.user,
+                        username: username
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('Social login error:', error);
+            return rejectWithValue(error.message);
+        }
+    }
+);
 
 const userSlice = createSlice({
     name: 'user',
@@ -222,6 +340,16 @@ const userSlice = createSlice({
         },
         clearError: (state) => {
             state.error = null;
+        },
+        updatePrivacySettings: (state, action) => {
+            const { setting, value } = action.payload;
+            state.settings.privacySettings[setting] = value;
+        },
+        setAllPrivacySettings: (state, action) => {
+            state.settings.privacySettings = action.payload;
+        },
+        updateVisibility: (state, action) => {
+            state.settings.visibility = action.payload;
         }
     },
     extraReducers: (builder) => {
@@ -233,7 +361,7 @@ const userSlice = createSlice({
             .addCase(login.fulfilled, (state, action) => {
                 state.loading = false;
                 state.isAuth = true;
-                state.user = action.payload.user;
+                state.user = auth.currentUser;
                 state.token = action.payload.token;
                 state.error = null;
             })
@@ -299,9 +427,43 @@ const userSlice = createSlice({
             .addCase(sendPasswordResetEmail.rejected, (state, action) => {
                 state.status = 'Hatalı';
                 state.error = action.payload;
+            })
+            .addCase(savePrivacySettings.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(savePrivacySettings.fulfilled, (state, action) => {
+                state.loading = false;
+                state.settings.privacySettings = action.payload;
+                state.error = null;
+            })
+            .addCase(savePrivacySettings.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
+            })
+            .addCase(socialLogin.pending, (state) => {
+                state.status = 'loading';
+                state.error = null;
+            })
+            .addCase(socialLogin.fulfilled, (state, action) => {
+                state.status = 'succeeded';
+                state.isAuth = true;
+                state.user = action.payload.user;
+                state.error = null;
+            })
+            .addCase(socialLogin.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload;
             });
     }
 });
 
-export const { setLoading, setError, clearError } = userSlice.actions;
+export const {
+    setLoading,
+    setError,
+    clearError,
+    updatePrivacySettings,
+    setAllPrivacySettings,
+    updateVisibility
+} = userSlice.actions;
 export default userSlice.reducer;

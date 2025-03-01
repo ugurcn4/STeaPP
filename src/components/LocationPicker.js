@@ -26,26 +26,52 @@ const LocationPicker = ({ onSelect, onClose }) => {
 
         setIsLoading(true);
         try {
-            // Kullanıcının mevcut konumunu al
+            let results = [];
+            const GOOGLE_PLACES_API_KEY = 'AIzaSyBPIoyzn8DG0lPvGD6M7yINMHLv9RYLe64';
+
+            // Önce konum izni kontrolü yap
             const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                throw new Error('Konum izni reddedildi');
+
+            // Mevcut konumu al (eğer izin verildiyse)
+            if (status === 'granted') {
+                const location = await Location.getCurrentPositionAsync({});
+                const placeInfo = await getPlaceFromCoordinates(
+                    location.coords.latitude,
+                    location.coords.longitude
+                );
+
+                results.push({
+                    id: 'current-location',
+                    name: 'Mevcut Konum',
+                    address: `${placeInfo.district}, ${placeInfo.city}`,
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude
+                });
             }
 
-            const location = await Location.getCurrentPositionAsync({});
-            const placeInfo = await getPlaceFromCoordinates(
-                location.coords.latitude,
-                location.coords.longitude
-            );
+            // Google Places Text Search API ile arama yap
+            const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_PLACES_API_KEY}&language=tr&region=tr`;
 
-            // Arama sonuçlarını oluştur
-            const results = [{
-                id: '1',
-                name: 'Mevcut Konum',
-                address: `${placeInfo.district}, ${placeInfo.city}`,
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude
-            }];
+            const response = await fetch(textSearchUrl);
+            const data = await response.json();
+
+            if (data.results) {
+                const placeResults = data.results.slice(0, 15).map((place, index) => {
+                    return {
+                        id: `search-${index}`,
+                        name: place.name,
+                        address: place.formatted_address,
+                        latitude: place.geometry.location.lat,
+                        longitude: place.geometry.location.lng,
+                        rating: place.rating,
+                        userRatingsTotal: place.user_ratings_total,
+                        placeId: place.place_id,
+                        types: place.types
+                    };
+                });
+
+                results = [...results, ...placeResults];
+            }
 
             setSearchResults(results);
         } catch (error) {
@@ -90,15 +116,34 @@ const LocationPicker = ({ onSelect, onClose }) => {
             onPress={() => handleSelect(item)}
         >
             <View style={styles.locationIcon}>
-                <Ionicons name="location" size={24} color="#2196F3" />
+                <Ionicons
+                    name={getIconForPlaceType(item.types)}
+                    size={24}
+                    color="#2196F3"
+                />
             </View>
             <View style={styles.locationInfo}>
                 <Text style={styles.locationName} numberOfLines={1}>
                     {item.name}
                 </Text>
-                <Text style={styles.locationAddress} numberOfLines={1}>
-                    {item.address}
-                </Text>
+                <View style={styles.locationDetails}>
+                    <Text style={styles.locationAddress} numberOfLines={1}>
+                        {item.address}
+                    </Text>
+                    {item.distance && (
+                        <Text style={styles.locationDistance}>
+                            • {item.distance}
+                        </Text>
+                    )}
+                </View>
+                {item.rating && (
+                    <View style={styles.ratingContainer}>
+                        <Ionicons name="star" size={14} color="#FFC107" />
+                        <Text style={styles.ratingText}>
+                            {item.rating} ({item.userRatingsTotal})
+                        </Text>
+                    </View>
+                )}
             </View>
         </TouchableOpacity>
     );
@@ -125,7 +170,7 @@ const LocationPicker = ({ onSelect, onClose }) => {
             </View>
 
             {isLoading ? (
-                <ActivityIndicator style={styles.loader} color="#2196F3" />
+                <ActivityIndicator style={styles.loader} color="#25D220" />
             ) : (
                 <FlatList
                     data={searchResults}
@@ -139,23 +184,58 @@ const LocationPicker = ({ onSelect, onClose }) => {
     );
 };
 
+// Mesafe hesaplama yardımcı fonksiyonu
+const getDistanceFromLatLonInMeters = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Dünya'nın yarıçapı (km)
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c * 1000; // Metre cinsinden mesafe
+};
+
+const deg2rad = (deg) => {
+    return deg * (Math.PI / 180);
+};
+
+const formatDistance = (meters) => {
+    if (meters < 1000) {
+        return `${Math.round(meters)}m`;
+    }
+    return `${(meters / 1000).toFixed(1)}km`;
+};
+
+// Yer türüne göre ikon seçimi
+const getIconForPlaceType = (types = []) => {
+    if (types.includes('restaurant')) return 'restaurant';
+    if (types.includes('cafe')) return 'cafe';
+    if (types.includes('store')) return 'storefront';
+    if (types.includes('park')) return 'leaf';
+    if (types.includes('school')) return 'school';
+    return 'location';
+};
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#333',
+        backgroundColor: '#fff',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#444',
+        borderBottomColor: '#eee',
+        backgroundColor: '#fff',
     },
     closeButton: {
         padding: 8,
     },
     title: {
-        color: '#FFF',
+        color: '#000',
         fontSize: 18,
         fontWeight: 'bold',
         marginLeft: 16,
@@ -165,7 +245,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         margin: 16,
         paddingHorizontal: 16,
-        backgroundColor: '#444',
+        backgroundColor: '#f5f5f5',
         borderRadius: 8,
     },
     searchIcon: {
@@ -174,7 +254,7 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         height: 40,
-        color: '#FFF',
+        color: '#000',
     },
     loader: {
         marginTop: 20,
@@ -185,7 +265,11 @@ const styles = StyleSheet.create({
     locationItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
+        padding: 12,
+        backgroundColor: '#fff',
+        marginHorizontal: 8,
+        marginVertical: 4,
+        borderRadius: 8,
     },
     locationIcon: {
         width: 40,
@@ -200,20 +284,40 @@ const styles = StyleSheet.create({
         marginLeft: 12,
     },
     locationName: {
-        color: '#FFF',
+        color: '#000',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '600',
+    },
+    locationDetails: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
     },
     locationAddress: {
-        color: '#999',
+        color: '#666',
         fontSize: 14,
-        marginTop: 2,
+        flex: 1,
     },
     separator: {
         height: 1,
         backgroundColor: '#444',
         marginLeft: 68,
     },
+    locationDistance: {
+        color: '#666',
+        fontSize: 12,
+        marginLeft: 8,
+    },
+    ratingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    ratingText: {
+        color: '#999',
+        fontSize: 12,
+        marginLeft: 4,
+    }
 });
 
 export default LocationPicker; 

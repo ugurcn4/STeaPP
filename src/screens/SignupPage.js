@@ -113,10 +113,17 @@ const SignupPage = ({ navigation }) => {
         }
 
         try {
-            await dispatch(register({ email, password, username })).unwrap();
-            // Başarılı kayıt durumunda otomatik olarak yönlendirilecek
+            const result = await dispatch(register({ email, password, username })).unwrap();
+
+            if (result && result.user) {
+                // Kayıt başarılı, ana sayfaya yönlendir
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'MainStack' }],
+                });
+            }
         } catch (error) {
-            setErrorMessage('Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.');
+            setErrorMessage(error || 'Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.');
         } finally {
             setIsLoading(false);
         }

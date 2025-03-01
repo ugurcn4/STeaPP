@@ -10,7 +10,6 @@ import {
     KeyboardAvoidingView,
     ScrollView,
     Platform,
-    ActivityIndicator,
 } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { sendPasswordResetEmail } from '../redux/userSlice';

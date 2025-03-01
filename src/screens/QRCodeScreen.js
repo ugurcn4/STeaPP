@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -8,24 +8,40 @@ import {
     Platform,
     SafeAreaView,
     StatusBar,
-    Image
+    Image,
+    ActivityIndicator,
+    Alert
 } from 'react-native';
 import { Camera } from 'expo-camera';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { BlurView } from 'expo-blur';
-import QRCode from 'react-native-qrcode-svg';
-
+import * as QRCodeComponent from 'react-native-qrcode-svg';
 
 const QRCodeScreen = ({ navigation }) => {
     const [isScanMode, setIsScanMode] = useState(false);
     const [hasPermission, setHasPermission] = useState(null);
     const [scanned, setScanned] = useState(false);
     const [qrValue, setQrValue] = useState('');
+    const [loading, setLoading] = useState(true);
+    const cameraRef = useRef(null);
+    const qrRef = useRef();
 
     const loadQRData = async () => {
-        const uid = await getCurrentUserUid();
-        setQrValue(`friendrequest:${uid}`);
+        try {
+            setLoading(true);
+            const uid = await getCurrentUserUid();
+            if (uid) {
+                setQrValue(`friendrequest:${uid}`);
+            } else {
+                Alert.alert('Hata', 'Kullanıcı bilgileri yüklenemedi. Lütfen tekrar deneyin.');
+            }
+        } catch (error) {
+            console.error('QR kod yükleme hatası:', error);
+            Alert.alert('Hata', 'QR kod oluşturulurken bir sorun oluştu.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -34,8 +50,13 @@ const QRCodeScreen = ({ navigation }) => {
 
     useEffect(() => {
         (async () => {
-            const { status } = await Camera.requestCameraPermissionsAsync();
-            setHasPermission(status === 'granted');
+            try {
+                const { status } = await Camera.requestCameraPermissionsAsync();
+                setHasPermission(status === 'granted');
+            } catch (error) {
+                console.error('Kamera izni hatası:', error);
+                setHasPermission(false);
+            }
         })();
     }, []);
 
@@ -46,15 +67,26 @@ const QRCodeScreen = ({ navigation }) => {
             });
         } catch (error) {
             console.error('Paylaşım hatası:', error);
+            Alert.alert('Paylaşım Hatası', 'QR kod paylaşılırken bir sorun oluştu.');
         }
     };
 
-    const handleBarCodeScanned = ({ data }) => {
+    const handleBarCodeScanned = ({ type, data }) => {
         setScanned(true);
-        if (data.startsWith('friendrequest:')) {
-            const friendUid = data.split(':')[1];
-            // Arkadaşlık isteği gönderme işlemi
-            navigation.navigate('FriendRequestConfirm', { friendUid });
+        if (data && data.startsWith('friendrequest:')) {
+            try {
+                const friendUid = data.split(':')[1];
+                if (friendUid) {
+                    navigation.navigate('FriendRequestConfirm', { friendUid });
+                } else {
+                    Alert.alert('Geçersiz QR Kod', 'Bu QR kod geçerli bir arkadaşlık isteği içermiyor.');
+                }
+            } catch (error) {
+                console.error('QR kod işleme hatası:', error);
+                Alert.alert('Hata', 'QR kod işlenirken bir sorun oluştu.');
+            }
+        } else {
+            Alert.alert('Geçersiz QR Kod', 'Bu QR kod geçerli bir arkadaşlık isteği içermiyor.');
         }
     };
 
@@ -79,12 +111,60 @@ const QRCodeScreen = ({ navigation }) => {
         </SafeAreaView>
     );
 
+    const renderQRCode = () => {
+        if (loading) {
+            return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#2196F3" />
+                    <Text style={styles.loadingText}>QR Kod Yükleniyor...</Text>
+                </View>
+            );
+        }
+
+        const userId = qrValue ? qrValue.split(':')[1] : '';
+
+        return (
+            <View style={styles.qrContainer}>
+                <View style={styles.qrWrapper}>
+                    <View style={styles.userIdContainer}>
+                        <Text style={styles.userIdTitle}>Arkadaşlık Kodun:</Text>
+                        <Text style={styles.userId}>{userId}</Text>
+                    </View>
+                </View>
+                <Text style={styles.instruction}>
+                    Bu kodu arkadaşına göster veya paylaş
+                </Text>
+                <TouchableOpacity style={styles.shareButtonAlt} onPress={handleShare}>
+                    <MaterialCommunityIcons name="share-variant" size={22} color="#fff" />
+                    <Text style={styles.shareButtonText}>Arkadaşlık Kodunu Paylaş</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    };
+
     const renderCamera = () => {
-        if (!hasPermission) return null;
+        if (!hasPermission) {
+            return (
+                <View style={styles.centerContent}>
+                    <MaterialIcons name="no-photography" size={64} color="#FF3B30" />
+                    <Text style={styles.errorText}>Kamera izni verilmedi</Text>
+                    <TouchableOpacity
+                        style={styles.permissionButton}
+                        onPress={async () => {
+                            const { status } = await Camera.requestCameraPermissionsAsync();
+                            setHasPermission(status === 'granted');
+                        }}
+                    >
+                        <Text style={styles.permissionButtonText}>İzin İste</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
 
         return (
             <View style={styles.cameraContainer}>
                 <Camera
+                    ref={cameraRef}
                     style={StyleSheet.absoluteFill}
                     type={1}
                     onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
@@ -93,7 +173,13 @@ const QRCodeScreen = ({ navigation }) => {
                     }}
                 >
                     <View style={styles.overlay}>
-                        <View style={styles.scanFrame} />
+                        <View style={styles.scanFrame}>
+                            <View style={styles.cornerTL} />
+                            <View style={styles.cornerTR} />
+                            <View style={styles.cornerBL} />
+                            <View style={styles.cornerBR} />
+                        </View>
+                        <Text style={styles.scanText}>QR kodu çerçeve içine alın</Text>
                     </View>
                 </Camera>
                 {scanned && (
@@ -126,24 +212,13 @@ const QRCodeScreen = ({ navigation }) => {
     return (
         <View style={styles.container}>
             {renderHeader()}
-            {isScanMode ? renderCamera() : (
-                <View style={styles.qrContainer}>
-                    <View style={styles.qrWrapper}>
-                        <QRCode
-                            value={qrValue}
-                            size={200}
-                            color="#000"
-                            backgroundColor="#fff"
-                        />
-                    </View>
-                    <Text style={styles.instruction}>
-                        QR kodunu arkadaşına göster
-                    </Text>
-                </View>
-            )}
+            {isScanMode ? renderCamera() : renderQRCode()}
             <TouchableOpacity
                 style={styles.switchButton}
-                onPress={() => setIsScanMode(!isScanMode)}
+                onPress={() => {
+                    setIsScanMode(!isScanMode);
+                    setScanned(false);
+                }}
             >
                 <Text style={styles.switchButtonText}>
                     {isScanMode ? 'QR Kodumu Göster' : 'QR Kod Tara'}
@@ -156,7 +231,7 @@ const QRCodeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#f8f9fa',
     },
     headerContainer: {
         backgroundColor: '#fff',
@@ -188,23 +263,26 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     qrWrapper: {
-        padding: 20,
+        padding: 25,
         backgroundColor: '#fff',
         borderRadius: 20,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
+        elevation: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     instruction: {
-        marginTop: 20,
+        marginTop: 24,
         fontSize: 16,
-        color: '#666',
+        color: '#555',
         textAlign: 'center',
+        fontWeight: '500',
     },
     cameraContainer: {
         flex: 1,
@@ -212,16 +290,67 @@ const styles = StyleSheet.create({
     },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     scanFrame: {
         width: 250,
         height: 250,
-        borderWidth: 2,
-        borderColor: '#fff',
+        borderWidth: 0,
+        borderColor: 'transparent',
         backgroundColor: 'transparent',
+        position: 'relative',
+    },
+    cornerTL: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: 40,
+        height: 40,
+        borderTopWidth: 4,
+        borderLeftWidth: 4,
+        borderColor: '#2196F3',
+        borderTopLeftRadius: 12,
+    },
+    cornerTR: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: 40,
+        height: 40,
+        borderTopWidth: 4,
+        borderRightWidth: 4,
+        borderColor: '#2196F3',
+        borderTopRightRadius: 12,
+    },
+    cornerBL: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        width: 40,
+        height: 40,
+        borderBottomWidth: 4,
+        borderLeftWidth: 4,
+        borderColor: '#2196F3',
+        borderBottomLeftRadius: 12,
+    },
+    cornerBR: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 40,
+        height: 40,
+        borderBottomWidth: 4,
+        borderRightWidth: 4,
+        borderColor: '#2196F3',
+        borderBottomRightRadius: 12,
+    },
+    scanText: {
+        color: '#fff',
+        fontSize: 16,
+        marginTop: 20,
+        fontWeight: '500',
     },
     switchButton: {
         position: 'absolute',
@@ -232,6 +361,14 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     switchButtonText: {
         color: '#fff',
@@ -247,6 +384,14 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.2,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     rescanText: {
         color: '#2196F3',
@@ -263,6 +408,66 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#FF3B30',
         textAlign: 'center',
+        marginTop: 12,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#555',
+    },
+    shareButtonAlt: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#2196F3',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        marginTop: 24,
+    },
+    shareButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '500',
+        marginLeft: 8,
+    },
+    permissionButton: {
+        backgroundColor: '#2196F3',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 10,
+        marginTop: 20,
+    },
+    permissionButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    userIdContainer: {
+        padding: 20,
+        alignItems: 'center',
+    },
+    userIdTitle: {
+        fontSize: 16,
+        color: '#555',
+        marginBottom: 10,
+    },
+    userId: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#2196F3',
+        textAlign: 'center',
+        padding: 10,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        backgroundColor: '#f8f9fa',
+        minWidth: 200,
     },
 });
 

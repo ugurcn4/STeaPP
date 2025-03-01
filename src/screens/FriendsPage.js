@@ -45,6 +45,8 @@ import {
 import Toast from 'react-native-toast-message';
 import FriendProfileModal from '../modals/friendProfileModal';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import FastImage from 'react-native-fast-image';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -311,13 +313,22 @@ const FriendsPage = ({ navigation }) => {
 
         return (
             <View key={user.id} style={styles.searchResultCard}>
-                <Image
+                <FastImage
                     source={
                         user.profilePicture
-                            ? { uri: user.profilePicture }
-                            : { uri: `https://ui-avatars.com/api/?name=${user.informations?.name || 'Unknown'}&background=random` }
+                            ? {
+                                uri: user.profilePicture,
+                                priority: FastImage.priority.normal,
+                                cache: FastImage.cacheControl.immutable
+                            }
+                            : {
+                                uri: `https://ui-avatars.com/api/?name=${user.informations?.name || 'Unknown'}&background=random`,
+                                priority: FastImage.priority.normal,
+                                cache: FastImage.cacheControl.web
+                            }
                     }
                     style={styles.searchResultImage}
+                    resizeMode={FastImage.resizeMode.cover}
                 />
                 <View style={styles.searchResultInfo}>
                     <Text style={styles.searchResultName}>
@@ -457,18 +468,6 @@ const FriendsPage = ({ navigation }) => {
         setFriendProfileVisible(true);
     };
 
-    const handleVideoCall = (friend) => {
-        Alert.alert(
-            "Görüntülü Arama",
-            `${friend.name} ile görüntülü arama başlatılıyor...`,
-            [
-                {
-                    text: "İptal",
-                    style: "cancel"
-                }
-            ]
-        );
-    };
 
     const handleMessagePress = (friend) => {
         const chatFriend = {
@@ -593,13 +592,22 @@ const FriendsPage = ({ navigation }) => {
             delayLongPress={500}
         >
             <View style={styles.friendMainInfo}>
-                <Image
+                <FastImage
                     source={
                         friend.profilePicture
-                            ? { uri: friend.profilePicture }
-                            : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name)}&background=random` }
+                            ? {
+                                uri: friend.profilePicture,
+                                priority: FastImage.priority.normal,
+                                cache: FastImage.cacheControl.immutable
+                            }
+                            : {
+                                uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name)}&background=random`,
+                                priority: FastImage.priority.normal,
+                                cache: FastImage.cacheControl.web
+                            }
                     }
                     style={styles.profileImage}
+                    resizeMode={FastImage.resizeMode.cover}
                 />
                 <View style={styles.friendInfo}>
                     <Text style={styles.friendName}>{friend.name || 'İsimsiz'}</Text>
@@ -625,21 +633,24 @@ const FriendsPage = ({ navigation }) => {
                     style={[styles.actionButton, styles.messageButton]}
                     onPress={() => handleMessagePress(friend)}
                 >
-                    <Ionicons name="chatbubble-outline" size={20} color="#FFF" />
+                    <LinearGradient
+                        colors={['#2196F3', '#1976D2']}
+                        style={styles.actionButtonGradient}
+                    >
+                        <Ionicons name="chatbubble-outline" size={20} color="#FFF" />
+                    </LinearGradient>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={[styles.actionButton, styles.locationButton]}
                     onPress={() => handleLocationShare(friend.id)}
                 >
-                    <Ionicons name="location-outline" size={20} color="#FFF" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.actionButton, styles.videoButton]}
-                    onPress={() => handleVideoCall(friend)}
-                >
-                    <Ionicons name="videocam-outline" size={20} color="#FFF" />
+                    <LinearGradient
+                        colors={['#4CAF50', '#388E3C']}
+                        style={styles.actionButtonGradient}
+                    >
+                        <Ionicons name="location-outline" size={20} color="#FFF" />
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
         </TouchableOpacity>
@@ -687,12 +698,21 @@ const FriendsPage = ({ navigation }) => {
                             );
                         }}
                     >
-                        <Image
+                        <FastImage
                             source={friend.profilePicture
-                                ? { uri: friend.profilePicture }
-                                : { uri: `https://ui-avatars.com/api/?name=${friend.name}&background=random` }
+                                ? {
+                                    uri: friend.profilePicture,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.immutable
+                                }
+                                : {
+                                    uri: `https://ui-avatars.com/api/?name=${friend.name}&background=random`,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.web
+                                }
                             }
                             style={styles.chipImage}
+                            resizeMode={FastImage.resizeMode.cover}
                         />
                         <Text style={styles.chipText}>{friend.name}</Text>
                     </TouchableOpacity>
@@ -726,13 +746,22 @@ const FriendsPage = ({ navigation }) => {
                     style={styles.shareCard}
                 >
                     <View style={styles.shareHeader}>
-                        <Image
+                        <FastImage
                             source={
                                 share.friendPhoto
-                                    ? { uri: share.friendPhoto }
-                                    : { uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random` }
+                                    ? {
+                                        uri: share.friendPhoto,
+                                        priority: FastImage.priority.normal,
+                                        cache: FastImage.cacheControl.immutable
+                                    }
+                                    : {
+                                        uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random`,
+                                        priority: FastImage.priority.normal,
+                                        cache: FastImage.cacheControl.web
+                                    }
                             }
                             style={styles.friendAvatar}
+                            resizeMode={FastImage.resizeMode.cover}
                         />
                         <View style={styles.shareInfo}>
                             <Text style={styles.friendName}>{share.friendName}</Text>
@@ -910,13 +939,22 @@ const FriendsPage = ({ navigation }) => {
                                     ]}
                                     onPress={() => handleFriendSelect(friend.id)}
                                 >
-                                    <Image
+                                    <FastImage
                                         source={
                                             friend.profilePicture
-                                                ? { uri: friend.profilePicture }
-                                                : { uri: `https://ui-avatars.com/api/?name=${friend.name}&background=random` }
+                                                ? {
+                                                    uri: friend.profilePicture,
+                                                    priority: FastImage.priority.normal,
+                                                    cache: FastImage.cacheControl.immutable
+                                                }
+                                                : {
+                                                    uri: `https://ui-avatars.com/api/?name=${friend.name}&background=random`,
+                                                    priority: FastImage.priority.normal,
+                                                    cache: FastImage.cacheControl.web
+                                                }
                                         }
                                         style={styles.friendSelectImage}
+                                        resizeMode={FastImage.resizeMode.cover}
                                     />
                                     <Text style={styles.friendSelectName}>{friend.name}</Text>
                                 </TouchableOpacity>
@@ -975,13 +1013,22 @@ const FriendsPage = ({ navigation }) => {
         return (
             <View style={styles.shareCard}>
                 <View style={styles.shareHeader}>
-                    <Image
+                    <FastImage
                         source={
                             share.friendPhoto
-                                ? { uri: share.friendPhoto }
-                                : { uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random` }
+                                ? {
+                                    uri: share.friendPhoto,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.immutable
+                                }
+                                : {
+                                    uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random`,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.web
+                                }
                         }
                         style={styles.friendAvatar}
+                        resizeMode={FastImage.resizeMode.cover}
                     />
                     <View style={styles.shareInfo}>
                         <Text style={styles.friendName}>{share.friendName}</Text>
@@ -1046,13 +1093,22 @@ const FriendsPage = ({ navigation }) => {
         return (
             <View style={styles.shareCard} key={share.id}>
                 <View style={styles.shareHeader}>
-                    <Image
+                    <FastImage
                         source={
                             share.senderPhoto
-                                ? { uri: share.senderPhoto }
-                                : { uri: `https://ui-avatars.com/api/?name=${share.senderName}&background=random` }
+                                ? {
+                                    uri: share.senderPhoto,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.immutable
+                                }
+                                : {
+                                    uri: `https://ui-avatars.com/api/?name=${share.senderName}&background=random`,
+                                    priority: FastImage.priority.normal,
+                                    cache: FastImage.cacheControl.web
+                                }
                         }
                         style={styles.friendAvatar}
+                        resizeMode={FastImage.resizeMode.cover}
                     />
                     <View style={styles.shareInfo}>
                         <Text style={styles.friendName}>{share.senderName}</Text>
@@ -1154,12 +1210,22 @@ const FriendsPage = ({ navigation }) => {
                         <Text style={styles.sectionTitle}>Gelen İstekler</Text>
                         {friendRequests.map((request) => (
                             <View key={request.id} style={styles.requestCard}>
-                                <Image
-                                    source={request.profilePicture
-                                        ? { uri: request.profilePicture }
-                                        : { uri: `https://ui-avatars.com/api/?name=${request.name}&background=random` }
+                                <FastImage
+                                    source={
+                                        request.profilePicture
+                                            ? {
+                                                uri: request.profilePicture,
+                                                priority: FastImage.priority.normal,
+                                                cache: FastImage.cacheControl.immutable
+                                            }
+                                            : {
+                                                uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(request.name)}&background=random`,
+                                                priority: FastImage.priority.normal,
+                                                cache: FastImage.cacheControl.web
+                                            }
                                     }
                                     style={styles.requestImage}
+                                    resizeMode={FastImage.resizeMode.cover}
                                 />
                                 <View style={styles.requestInfo}>
                                     <Text style={styles.requestName}>{request.name}</Text>
@@ -1189,13 +1255,22 @@ const FriendsPage = ({ navigation }) => {
                         <Text style={styles.sectionTitle}>Gönderilen İstekler</Text>
                         {sentRequests.map((request) => (
                             <View key={request.id} style={styles.requestCard}>
-                                <Image
+                                <FastImage
                                     source={
                                         request.profilePicture
-                                            ? { uri: request.profilePicture }
-                                            : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(request.name)}&background=random` }
+                                            ? {
+                                                uri: request.profilePicture,
+                                                priority: FastImage.priority.normal,
+                                                cache: FastImage.cacheControl.immutable
+                                            }
+                                            : {
+                                                uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(request.name)}&background=random`,
+                                                priority: FastImage.priority.normal,
+                                                cache: FastImage.cacheControl.web
+                                            }
                                     }
                                     style={styles.requestImage}
+                                    resizeMode={FastImage.resizeMode.cover}
                                 />
                                 <View style={styles.requestInfo}>
                                     <Text style={styles.requestName}>{request.name}</Text>
@@ -1440,20 +1515,22 @@ const styles = StyleSheet.create({
     },
     friendCard: {
         backgroundColor: '#FFF',
-        borderRadius: 16,
+        borderRadius: 20,
         padding: 16,
-        marginBottom: 12,
+        marginBottom: 16,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.05)',
     },
     friendMainInfo: {
         flexDirection: 'row',
@@ -1461,10 +1538,12 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     profileImage: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         backgroundColor: '#F0F0F0',
+        borderWidth: 2,
+        borderColor: '#E3F2FD',
     },
     friendInfo: {
         marginLeft: 16,
@@ -1472,36 +1551,38 @@ const styles = StyleSheet.create({
     },
     friendName: {
         fontSize: 18,
-        fontWeight: '600',
-        color: '#2C3E50',
+        fontWeight: '700',
+        color: '#1A237E',
         marginBottom: 4,
+        letterSpacing: 0.3,
     },
     activeShareContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#E8F5E9',
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 12,
         alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
     },
     activeShareText: {
         fontSize: 12,
-        color: '#4CAF50',
+        color: '#2E7D32',
         marginLeft: 4,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     actionButtons: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
     },
     actionButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
@@ -1509,16 +1590,13 @@ const styles = StyleSheet.create({
         },
         shadowOpacity: 0.2,
         shadowRadius: 4,
-        elevation: 3,
+        elevation: 4,
     },
-    messageButton: {
-        backgroundColor: '#2196F3',
-    },
-    locationButton: {
-        backgroundColor: '#4CAF50',
-    },
-    videoButton: {
-        backgroundColor: '#9C27B0',
+    actionButtonGradient: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     searchSection: {
         flex: 1,

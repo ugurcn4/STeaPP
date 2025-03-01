@@ -27,6 +27,13 @@ import DirectMessagesScreen from '../screens/DirectMessagesScreen';
 import QRCodeScreen from '../screens/QRCodeScreen';
 import StoryEditor from '../screens/StoryEditor';
 import UpdatesPage from '../screens/SettingsPageScreens/UpdatesPage';
+import { OnboardingScreen } from '../screens';
+import CreatePostScreen from '../screens/CreatePostScreen';
+import CreatePostDetails from '../screens/CreatePostDetails';
+import ImageEditor from '../screens/ImageEditor';
+import LikedPostsScreen from '../screens/LikedPostsScreen';
+import LikedByScreen from '../screens/LikedByScreen';
+
 
 const Stack = createNativeStackNavigator();
 
@@ -226,6 +233,49 @@ const MainStack = () => {
                 name="Updates"
                 component={UpdatesPage}
                 options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="Onboarding"
+                component={OnboardingScreen}
+            />
+            <Stack.Screen
+                name="CreatePost"
+                component={CreatePostScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="CreatePostDetails"
+                component={CreatePostDetails}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="ImageEditor"
+                component={ImageEditor}
+                options={{
+                    headerShown: false,
+                    presentation: 'modal'
+                }}
+            />
+            <Stack.Screen
+                name="LikedPosts"
+                component={LikedPostsScreen}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="LikedBy"
+                component={LikedByScreen}
+                options={{
+                    headerShown: false,
+                    presentation: 'transparentModal',
+                    cardStyle: { backgroundColor: 'transparent' },
+                    cardOverlayEnabled: true
+                }}
             />
         </Stack.Navigator>
     );

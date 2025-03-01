@@ -13,24 +13,45 @@ import { db } from '../../../firebaseConfig';
 // Async thunks
 export const fetchNotifications = createAsyncThunk(
     'notifications/fetchNotifications',
-    async (userId) => {
-        const notificationsRef = collection(db, 'notifications');
-        const q = query(
-            notificationsRef,
-            where('recipientId', '==', userId),
-            orderBy('createdAt', 'desc')
-        );
+    async (userId, { rejectWithValue }) => {
+        try {
+            if (!userId) {
+                throw new Error('Kullanıcı ID\'si bulunamadı');
+            }
 
-        const querySnapshot = await getDocs(q);
-        const notifications = [];
-        querySnapshot.forEach((doc) => {
-            notifications.push({ id: doc.id, ...doc.data() });
-        });
+            const notificationsRef = collection(db, 'notifications');
 
-        return {
-            notifications,
-            unreadCount: notifications.filter(n => n.status === 'unread').length
-        };
+            const q = query(
+                notificationsRef,
+                where('recipientId', '==', userId)
+            );
+            const querySnapshot = await getDocs(q);
+
+            const notifications = [];
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                notifications.push({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate?.() || new Date(),
+                    body: data.body || '',
+                    title: data.title || 'Yeni Bildirim',
+                    type: data.type || 'message',
+                    status: data.status || 'unread'
+                });
+            });
+
+            // Client-side sıralama
+            notifications.sort((a, b) => b.createdAt - a.createdAt);
+
+            return {
+                notifications,
+                unreadCount: notifications.filter(n => n.status === 'unread').length
+            };
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
     }
 );
 
@@ -105,10 +126,12 @@ const notificationSlice = createSlice({
                 state.notifications = action.payload.notifications;
                 state.unreadCount = action.payload.unreadCount;
                 state.loading = false;
+                state.error = null;
             })
             .addCase(fetchNotifications.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.error.message;
+                state.error = action.payload || 'Bildirimler yüklenirken bir hata oluştu';
+                console.error('Bildirim yükleme hatası:', action.payload);
             })
             // Mark as read
             .addCase(markNotificationAsRead.fulfilled, (state, action) => {

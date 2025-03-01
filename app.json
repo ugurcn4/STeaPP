@@ -25,14 +25,18 @@
         "NSLocationWhenInUseUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
         "NSLocationAlwaysUsageDescription": "Yakınınızdaki mekanları görebilmek ve konumunuzu paylaşabilmek için konum izni gereklidir",
-        "NSCameraUsageDescription": "Fotoğraf çekmek ve hikaye paylaşmak için kamera izni gereklidir",
+        "NSCameraUsageDescription": "Video görüşmesi yapabilmek için kamera izni gerekiyor",
         "NSPhotoLibraryUsageDescription": "Galerinizdeki fotoğrafları paylaşabilmek için izin gereklidir",
         "NSPhotoLibraryAddUsageDescription": "Çektiğiniz fotoğrafları galeriye kaydetmek için izin gereklidir",
-        "NSMicrophoneUsageDescription": "Video çekerken ses kaydı yapabilmek için mikrofon izni gereklidir",
+        "NSMicrophoneUsageDescription": "Video görüşmesi yapabilmek için mikrofon izni gerekiyor",
         "NSUserTrackingUsageDescription": "Size daha iyi bir deneyim sunabilmek için izleme izni gereklidir",
         "NSContactsUsageDescription": "Arkadaşlarınızı bulabilmek için rehber izni gereklidir",
         "NSCalendarsUsageDescription": "Etkinlikleri takviminize ekleyebilmek için takvim izni gereklidir",
-        "NSMotionUsageDescription": "Hareket sensörlerini kullanabilmek için izin gereklidir"
+        "NSMotionUsageDescription": "Hareket sensörlerini kullanabilmek için izin gereklidir",
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ]
       }
     },
     "android": {
@@ -60,20 +64,9 @@
         "SCHEDULE_EXACT_ALARM",
         "ACCESS_NOTIFICATION_POLICY",
         "POST_NOTIFICATIONS",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECORD_AUDIO",
-        "READ_CONTACTS",
-        "READ_CALENDAR",
-        "WRITE_CALENDAR",
-        "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED",
-        "SCHEDULE_EXACT_ALARM",
-        "ACCESS_NOTIFICATION_POLICY",
-        "POST_NOTIFICATIONS"
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "ACCESS_NETWORK_STATE"
       ],
       "package": "com.ugurrucr.steapp",
       "versionCode": 1
@@ -82,12 +75,12 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-build-properties",
       [
-        "expo-notifications",
+        "expo-build-properties",
         {
-          "icon": "./assets/images/new-logo.png",
-          "color": "#ffffff"
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
       ]
     ],

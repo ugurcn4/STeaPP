@@ -129,7 +129,10 @@ const AboutPage = ({ navigation }) => {
                     © 2024 STeaPP. Tüm hakları saklıdır.
                 </Text>
                 <Text style={styles.madeWith}>
-                    Uğur Can UÇAR tarafından Türkiye'de geliştirildi.❤️🇹🇷
+                    Uğur Can UÇAR tarafından Türkiye'de geliştirildi.
+                </Text>
+                <Text style={styles.madeWith}>
+                    ❤️🇹🇷
                 </Text>
             </View>
         </ScrollView>

@@ -25,29 +25,36 @@ const RootPage = () => {
                     const userToken = await AsyncStorage.getItem('userToken');
 
                     if (userData && userToken) {
-                        await dispatch(autoLogin()).unwrap();
-                        // Kullanıcı giriş yaptığında token kaydını yap
-                        const { registerForPushNotifications } = await import('../Notifications/notificationConfig');
-                        await registerForPushNotifications();
+                        try {
+                            await dispatch(autoLogin()).unwrap();
+                        } catch (error) {
+                            console.error('AutoLogin hatası:', error);
+                        }
                     }
-                } else {
-                    // Kullanıcı oturumu kapanmışsa local storage'ı temizle
-                    await AsyncStorage.multiRemove(['userToken', 'userData', 'pushToken']);
                 }
             } catch (error) {
-                console.error('Auth kontrolü hatası:', error);
+                console.error('Oturum kontrolü hatası:', error);
             } finally {
+                // Her durumda loading'i false yap
                 setLoading(false);
             }
         });
 
-        return () => unsubscribe();
+        // Timeout ekleyelim
+        const timeoutId = setTimeout(() => {
+            setLoading(false);
+        }, 5000); // 5 saniye sonra loading'i zorla kapat
+
+        return () => {
+            unsubscribe();
+            clearTimeout(timeoutId);
+        };
     }, [dispatch]);
 
     if (loading) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#0000ff" />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+                <ActivityIndicator size="large" color="#2196F3" />
             </View>
         );
     }

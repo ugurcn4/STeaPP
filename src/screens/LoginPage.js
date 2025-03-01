@@ -13,9 +13,12 @@ import {
     ScrollView
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { login } from '../redux/userSlice';
+import { login, socialLogin } from '../redux/userSlice';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { getAuth, OAuthProvider, signInWithCredential } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LoginPage = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -62,7 +65,64 @@ const LoginPage = ({ navigation }) => {
         }
     };
 
-    const handleSocialLogin = (provider) => {
+    const handleSocialLogin = async (provider) => {
+        if (provider === 'Apple') {
+            try {
+                const credential = await AppleAuthentication.signInAsync({
+                    requestedScopes: [
+                        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                    ],
+                });
+
+                const { identityToken, nonce, email, fullName, user: appleUser } = credential;
+
+                // Firebase ile giriş yap
+                const auth = getAuth();
+                const appleProvider = new OAuthProvider('apple.com');
+                const firebaseCredential = appleProvider.credential({
+                    idToken: identityToken,
+                    rawNonce: nonce
+                });
+
+                const userCredential = await signInWithCredential(auth, firebaseCredential);
+                const token = await userCredential.user.getIdToken();
+
+                // Kullanıcı bilgilerini hazırla
+                const userDataToStore = {
+                    token,
+                    user: {
+                        uid: userCredential.user.uid,
+                        email: email || userCredential.user.email,
+                        emailVerified: userCredential.user.emailVerified,
+                        username: fullName ? `${fullName.givenName} ${fullName.familyName}` : email?.split('@')[0]
+                    }
+                };
+
+                // AsyncStorage'a kaydet
+                await AsyncStorage.setItem('userToken', token);
+                await AsyncStorage.setItem('userData', JSON.stringify(userDataToStore));
+
+                // Redux store'u güncelle
+                await dispatch(socialLogin(userDataToStore)).unwrap();
+
+                Toast.show({
+                    type: 'success',
+                    text1: 'Başarılı',
+                    text2: 'Apple hesabınız ile giriş yapıldı',
+                    position: 'top',
+                });
+
+            } catch (error) {
+                console.error('Apple giriş hatası:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: 'Giriş Başarısız',
+                    text2: 'Apple ile giriş yapılırken bir hata oluştu. ' + error.message,
+                    position: 'top',
+                });
+            }
+        }
     };
 
     return (
@@ -162,12 +222,14 @@ const LoginPage = ({ navigation }) => {
                                     <Ionicons name="logo-google" size={22} color="#FFF" />
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={[styles.socialButton, { backgroundColor: '#000000' }]}
-                                    onPress={() => handleSocialLogin('Apple')}
-                                >
-                                    <Ionicons name="logo-apple" size={22} color="#FFF" />
-                                </TouchableOpacity>
+                                {Platform.OS === 'ios' && (
+                                    <TouchableOpacity
+                                        style={[styles.socialButton, { backgroundColor: '#000000' }]}
+                                        onPress={() => handleSocialLogin('Apple')}
+                                    >
+                                        <Ionicons name="logo-apple" size={22} color="#FFF" />
+                                    </TouchableOpacity>
+                                )}
                             </View>
 
                             <View style={styles.registerContainer}>

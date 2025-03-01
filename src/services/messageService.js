@@ -13,7 +13,10 @@ import {
     getDocs,
     limit,
     setDoc,
-    increment
+    increment,
+    writeBatch,
+    arrayUnion,
+    deleteDoc
 } from 'firebase/firestore';
 import { storage } from '../../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -22,7 +25,6 @@ import { Platform } from 'react-native';
 // Yeni mesaj gönderme
 export const sendMessage = async (senderId, receiverId, message, type = 'text', storyData = null) => {
     try {
-
         // ChatId'yi her zaman aynı formatta oluştur
         const participants = [senderId, receiverId].sort();
         const chatId = `${participants[0]}_${participants[1]}`;
@@ -39,7 +41,7 @@ export const sendMessage = async (senderId, receiverId, message, type = 'text', 
             receiverId,
             message,
             timestamp,
-            read: false,
+            read: false,  // Her zaman false olarak başlat
             mediaType: type
         };
 
@@ -56,7 +58,7 @@ export const sendMessage = async (senderId, receiverId, message, type = 'text', 
             // Chat yoksa oluştur
             await setDoc(chatRef, {
                 participants: [senderId, receiverId],
-                lastMessage: { message, mediaType: type },  // type yerine mediaType kullan
+                lastMessage: { message, mediaType: type },
                 lastMessageTime: timestamp,
                 unreadCount: {
                     [senderId]: 0,
@@ -66,7 +68,7 @@ export const sendMessage = async (senderId, receiverId, message, type = 'text', 
         } else {
             // Varsa güncelle
             await updateDoc(chatRef, {
-                lastMessage: { message, mediaType: type },  // type yerine mediaType kullan
+                lastMessage: { message, mediaType: type },
                 lastMessageTime: timestamp,
                 [`unreadCount.${receiverId}`]: increment(1)
             });
@@ -88,7 +90,6 @@ export const subscribeToMessages = (userId1, userId2, callback) => {
     const participants = [userId1, userId2].sort();
     const chatId = `${participants[0]}_${participants[1]}`;
 
-
     const q = query(
         collection(db, 'messages'),
         where('chatId', '==', chatId),
@@ -98,12 +99,17 @@ export const subscribeToMessages = (userId1, userId2, callback) => {
     return onSnapshot(q, (snapshot) => {
         const messages = snapshot.docs.map(doc => {
             const data = doc.data();
+            // Eğer mesaj bu kullanıcı için silinmişse, gösterme
+            if (data.deletedFor?.includes(userId1)) {
+                return null;
+            }
             return {
                 id: doc.id,
                 ...data,
                 timestamp: data.timestamp
             };
-        });
+        })
+            .filter(message => message !== null); // Silinen mesajları filtrele
 
         // Mesajları tarihe göre sırala (en yeni en üstte)
         const sortedMessages = messages.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
@@ -125,6 +131,9 @@ export const markMessageAsRead = async (messageId) => {
 // Mesajı okundu olarak işaretle
 export const markChatAsRead = async (chatId, receiverId) => {
     try {
+        const batch = writeBatch(db);
+
+        // 1. Okunmamış mesajları bul
         const q = query(
             collection(db, 'messages'),
             where('chatId', '==', chatId),
@@ -133,45 +142,35 @@ export const markChatAsRead = async (chatId, receiverId) => {
         );
 
         const snapshot = await getDocs(q);
-        const updatePromises = snapshot.docs.map(doc =>
-            updateDoc(doc.ref, { read: true })
-        );
 
-        await Promise.all(updatePromises);
+        // Okunmamış mesaj yoksa işlem yapma
+        if (snapshot.empty) {
+            return { success: true };
+        }
+
+        // 2. Tüm mesajları batch ile güncelle
+        snapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { read: true });
+        });
+
+        // 3. Chat dokümanını da aynı batch içinde güncelle
+        const chatRef = doc(db, 'chats', chatId);
+        const chatDoc = await getDoc(chatRef);
+
+        if (chatDoc.exists()) {
+            batch.update(chatRef, {
+                [`unreadCount.${receiverId}`]: 0
+            });
+        }
+
+        // 4. Batch'i commit et
+        await batch.commit();
+
         return { success: true };
     } catch (error) {
         console.error('Mesajlar okundu olarak işaretlenemedi:', error);
         return { success: false, error };
     }
-};
-
-// Kullanıcının online durumunu güncelle
-export const updateOnlineStatus = async (userId, isOnline) => {
-    try {
-        const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
-            isOnline,
-            lastSeen: Timestamp.now()
-        });
-        return { success: true };
-    } catch (error) {
-        console.error('Online durum güncellenemedi:', error);
-        return { success: false, error };
-    }
-};
-
-// Kullanıcının online durumunu dinle
-export const subscribeToUserOnlineStatus = (userId, callback) => {
-    const userRef = doc(db, 'users', userId);
-    return onSnapshot(userRef, (doc) => {
-        if (doc.exists()) {
-            const userData = doc.data();
-            callback({
-                isOnline: userData.isOnline || false,
-                lastSeen: userData.lastSeen
-            });
-        }
-    });
 };
 
 // Medya mesajı gönderme
@@ -286,98 +285,53 @@ export const sendVoiceMessage = async (senderId, receiverId, audioBlob) => {
 
 // Son sohbetleri getir
 export const getRecentChats = (userId, callback) => {
-    const messagesRef = collection(db, 'messages');
-
-    // Gönderilen mesajlar için sorgu
-    const sentQuery = query(
-        messagesRef,
-        where('senderId', '==', userId),
-        orderBy('timestamp', 'desc')
+    const chatsRef = collection(db, 'chats');
+    const q = query(
+        chatsRef,
+        where('participants', 'array-contains', userId)
     );
 
-    // Alınan mesajlar için sorgu
-    const receivedQuery = query(
-        messagesRef,
-        where('receiverId', '==', userId),
-        orderBy('timestamp', 'desc')
-    );
+    return onSnapshot(q, async (snapshot) => {
+        try {
+            const chatsData = await Promise.all(
+                snapshot.docs.map(async (docSnapshot) => {
+                    const chatData = docSnapshot.data();
+                    const otherUserId = chatData.participants.find(id => id !== userId);
 
-    // Her iki sorguyu da dinle
-    const unsubscribeSent = onSnapshot(sentQuery, async (sentSnapshot) => {
-        const unsubscribeReceived = onSnapshot(receivedQuery, async (receivedSnapshot) => {
-            try {
-                const uniqueChats = new Map();
-                const allMessages = [...sentSnapshot.docs, ...receivedSnapshot.docs];
+                    // Kullanıcı bilgilerini al
+                    const userRef = doc(db, 'users', otherUserId);
+                    const userDoc = await getDoc(userRef);
+                    const userData = userDoc.data() || {};
+                    const userInfo = userData.informations || {};
 
-                // Her mesajı işle
-                allMessages.forEach(doc => {
-                    const message = doc.data();
-                    const otherUserId = message.senderId === userId ? message.receiverId : message.senderId;
+                    // unreadCount'u doğrudan chat dokümanından al
+                    const unreadCount = chatData.unreadCount?.[userId] || 0;
 
-                    // Her sohbet için sadece en son mesajı al
-                    if (!uniqueChats.has(otherUserId) ||
-                        message.timestamp.toMillis() > uniqueChats.get(otherUserId).timestamp.toMillis()) {
-                        uniqueChats.set(otherUserId, {
-                            chatId: message.chatId,
-                            lastMessage: {
-                                message: message.message,
-                                mediaType: message.mediaType,
-                                timestamp: message.timestamp
-                            },
-                            timestamp: message.timestamp,
-                            unreadCount: message.receiverId === userId && !message.read ? 1 : 0,
-                            otherUserId
-                        });
-                    } else if (message.receiverId === userId && !message.read) {
-                        // Okunmamış mesaj sayısını güncelle
-                        const chat = uniqueChats.get(otherUserId);
-                        chat.unreadCount += 1;
-                    }
-                });
+                    return {
+                        chatId: docSnapshot.id,
+                        lastMessage: chatData.lastMessage || {},
+                        timestamp: chatData.lastMessageTime,
+                        unreadCount,
+                        user: {
+                            id: otherUserId,
+                            name: userInfo.name || userData.name || 'İsimsiz',
+                            profilePicture: userInfo.profilePicture || userData.profilePicture,
+                            isOnline: userData.isOnline || false,
+                        }
+                    };
+                })
+            );
 
-                // Kullanıcı bilgilerini al
-                const chatsWithUserInfo = await Promise.all(
-                    Array.from(uniqueChats.values()).map(async (chat) => {
-                        const userDoc = await getDoc(doc(db, 'users', chat.otherUserId));
-                        const userData = userDoc.data() || {};
-                        const userInfo = userData.informations || {};
+            const sortedChats = chatsData
+                .filter(chat => chat.timestamp)
+                .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
 
-                        // Profil fotoğrafı için tüm olası alanları kontrol et
-                        const profilePicture =
-                            userInfo.profileImage ||
-                            userInfo.profilePicture ||
-                            userData.profilePicture ||
-                            userData.profileImage ||
-                            `https://ui-avatars.com/api/?name=${encodeURIComponent(userInfo.name || 'User')}&background=random`;
-
-                        return {
-                            ...chat,
-                            user: {
-                                id: chat.otherUserId,
-                                name: userInfo.name || userData.name || 'İsimsiz',
-                                profilePicture: profilePicture,
-                                isOnline: userData.isOnline || false,
-                            }
-                        };
-                    })
-                );
-
-                // Son mesaj tarihine göre sırala
-                const sortedChats = chatsWithUserInfo.sort(
-                    (a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()
-                );
-
-                callback(sortedChats);
-            } catch (error) {
-                console.error('Sohbet verilerini işlerken hata:', error);
-                callback([]);
-            }
-        });
-
-        return () => unsubscribeReceived();
+            callback(sortedChats);
+        } catch (error) {
+            console.error('Sohbet verilerini işlerken hata:', error);
+            callback([]);
+        }
     });
-
-    return () => unsubscribeSent();
 };
 
 export const getUnreadMessageCount = async (userId) => {
@@ -409,5 +363,283 @@ export const sendStoryReply = async (senderId, receiverId, message, storyData) =
     } catch (error) {
         console.error('Story yanıtı gönderme hatası:', error);
         return { success: false, error };
+    }
+};
+
+// Sohbeti silme (benden sil)
+export const deleteChat = async (chatId, userId) => {
+    try {
+        const chatRef = doc(db, 'chats', chatId);
+        const chatDoc = await getDoc(chatRef);
+
+        if (!chatDoc.exists()) {
+            throw new Error('Sohbet bulunamadı');
+        }
+
+        const messagesRef = collection(db, 'messages');
+        const q = query(messagesRef, where('chatId', '==', chatId));
+        const snapshot = await getDocs(q);
+
+        const batch = writeBatch(db);
+
+        // Her mesaj için deletedFor alanını güncelle
+        snapshot.docs.forEach((doc) => {
+            const messageData = doc.data();
+            const updates = {};
+
+            if (!messageData.deletedFor) {
+                updates.deletedFor = [userId];
+            } else if (!messageData.deletedFor.includes(userId)) {
+                updates.deletedFor = [...messageData.deletedFor, userId];
+            }
+
+            if (Object.keys(updates).length > 0) {
+                batch.update(doc.ref, updates);
+            }
+        });
+
+        // Chat dokümanını güncelle
+        const chatData = chatDoc.data();
+        const updates = {
+            deletedFor: chatData.deletedFor ?
+                [...new Set([...chatData.deletedFor, userId])] :
+                [userId]
+        };
+        batch.update(chatRef, updates);
+
+        await batch.commit();
+
+        return { success: true };
+    } catch (error) {
+        console.error('Sohbet silme hatası:', error);
+        return { success: false, error };
+    }
+};
+
+// Sohbeti herkesten silme
+export const deleteChatForEveryone = async (chatId) => {
+    try {
+        // Tüm mesajları getir
+        const messagesRef = collection(db, 'messages');
+        const q = query(messagesRef, where('chatId', '==', chatId));
+        const snapshot = await getDocs(q);
+
+        // Mesajları sil
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
+        // Sohbeti sil
+        const chatRef = doc(db, 'chats', chatId);
+        batch.delete(chatRef);
+
+        await batch.commit();
+
+        return { success: true };
+    } catch (error) {
+        console.error('Sohbet silme hatası:', error);
+        return { success: false, error };
+    }
+};
+
+// Mesajı favorilere ekleme
+export const addMessageToFavorites = async (userId, message) => {
+    try {
+        await addDoc(collection(db, 'favorites'), {
+            userId,
+            messageId: message.id,
+            message: message.message || '',
+            mediaType: message.mediaType || 'text',
+            mediaUrl: message.mediaUrl || null,
+            audioUrl: message.audioUrl || null,
+            timestamp: message.timestamp,
+            chatId: message.chatId,
+            senderId: message.senderId,
+            receiverId: message.receiverId,
+            addedAt: Timestamp.now()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Favorilere ekleme hatası:', error);
+        throw error;
+    }
+};
+
+// Favorileri getir
+export const getFavoriteMessages = async (userId) => {
+    try {
+        const q = query(
+            collection(db, 'favorites'),
+            where('userId', '==', userId)
+        );
+        const snapshot = await getDocs(q);
+        const messages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        // JavaScript tarafında sıralama yapılıyor
+        return messages.sort((a, b) => b.addedAt.toMillis() - a.addedAt.toMillis());
+    } catch (error) {
+        console.error('Favorileri getirme hatası:', error);
+        throw error;
+    }
+};
+
+// Mesajı silme (benden)
+export const deleteMessage = async (messageId, userId) => {
+    try {
+        const batch = writeBatch(db);
+        const messageRef = doc(db, 'messages', messageId);
+        const messageDoc = await getDoc(messageRef);
+
+        if (!messageDoc.exists()) {
+            throw new Error('Mesaj bulunamadı');
+        }
+
+        const messageData = messageDoc.data();
+        const currentDeletedFor = messageData.deletedFor || [];
+        const newDeletedFor = [...new Set([...currentDeletedFor, userId])];
+
+        // Eğer mesaj her iki kullanıcı tarafından da silindiyse
+        if (newDeletedFor.length === 2) {
+            // Mesajı tamamen sil
+            batch.delete(messageRef);
+
+            // Chat dokümanını güncelle
+            const chatRef = doc(db, 'chats', messageData.chatId);
+            const chatDoc = await getDoc(chatRef);
+
+            if (chatDoc.exists()) {
+                const chatData = chatDoc.data();
+                // Silinen mesaj son mesajsa, bir önceki mesajı bul
+                if (chatData.lastMessage?.message === messageData.message &&
+                    chatData.lastMessageTime?.toMillis() === messageData.timestamp.toMillis()) {
+
+                    const q = query(
+                        collection(db, 'messages'),
+                        where('chatId', '==', messageData.chatId),
+                        where('timestamp', '<', messageData.timestamp),
+                        orderBy('timestamp', 'desc'),
+                        limit(1)
+                    );
+
+                    const prevMessages = await getDocs(q);
+
+                    if (!prevMessages.empty) {
+                        const prevMessage = prevMessages.docs[0].data();
+                        batch.update(chatRef, {
+                            lastMessage: {
+                                message: prevMessage.message,
+                                mediaType: prevMessage.mediaType
+                            },
+                            lastMessageTime: prevMessage.timestamp
+                        });
+                    } else {
+                        // Eğer başka mesaj yoksa lastMessage'ı temizle
+                        batch.update(chatRef, {
+                            lastMessage: {
+                                message: '',
+                                mediaType: 'text'
+                            },
+                            lastMessageTime: Timestamp.now()
+                        });
+                    }
+                }
+            }
+        } else {
+            // Sadece deletedFor alanını güncelle
+            batch.update(messageRef, {
+                deletedFor: newDeletedFor
+            });
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error('Mesaj silme hatası:', error);
+        throw error;
+    }
+};
+
+// Mesajı şikayet etme
+export const reportMessage = async (messageId) => {
+    try {
+        await addDoc(collection(db, 'reports'), {
+            messageId,
+            timestamp: Timestamp.now(),
+            status: 'pending'
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Mesaj şikayet hatası:', error);
+        throw error;
+    }
+};
+
+// Mesajı herkesten silme
+export const deleteMessageForEveryone = async (messageId) => {
+    try {
+        const batch = writeBatch(db);
+        const messageRef = doc(db, 'messages', messageId);
+        const messageDoc = await getDoc(messageRef);
+
+        if (!messageDoc.exists()) {
+            throw new Error('Mesaj bulunamadı');
+        }
+
+        const messageData = messageDoc.data();
+
+        // Mesajı sil
+        batch.delete(messageRef);
+
+        // Chat dokümanını güncelle
+        const chatRef = doc(db, 'chats', messageData.chatId);
+        const chatDoc = await getDoc(chatRef);
+
+        if (chatDoc.exists()) {
+            const chatData = chatDoc.data();
+            // Silinen mesaj son mesajsa, bir önceki mesajı bul
+            if (chatData.lastMessage?.message === messageData.message &&
+                chatData.lastMessageTime?.toMillis() === messageData.timestamp.toMillis()) {
+
+                const q = query(
+                    collection(db, 'messages'),
+                    where('chatId', '==', messageData.chatId),
+                    where('timestamp', '<', messageData.timestamp),
+                    orderBy('timestamp', 'desc'),
+                    limit(1)
+                );
+
+                const prevMessages = await getDocs(q);
+
+                if (!prevMessages.empty) {
+                    const prevMessage = prevMessages.docs[0].data();
+                    batch.update(chatRef, {
+                        lastMessage: {
+                            message: prevMessage.message,
+                            mediaType: prevMessage.mediaType
+                        },
+                        lastMessageTime: prevMessage.timestamp
+                    });
+                } else {
+                    // Eğer başka mesaj yoksa lastMessage'ı temizle
+                    batch.update(chatRef, {
+                        lastMessage: {
+                            message: '',
+                            mediaType: 'text'
+                        },
+                        lastMessageTime: Timestamp.now()
+                    });
+                }
+            }
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error('Mesaj silme hatası:', error);
+        throw error;
     }
 }; 

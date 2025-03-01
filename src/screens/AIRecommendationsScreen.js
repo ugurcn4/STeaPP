@@ -114,7 +114,7 @@ const AIRecommendationsScreen = ({ navigation }) => {
 
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#6C3EE8" />
+                    <ActivityIndicator size="large" color="#25D220" />
                     <Text style={styles.loadingText}>Öneriler hazırlanıyor...</Text>
                 </View>
             ) : (
