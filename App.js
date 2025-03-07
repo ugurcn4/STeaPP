@@ -103,6 +103,9 @@ const App = () => {
           // Sadece uygulama aktif ve internet varsa online yap
           const shouldBeOnline = appState === 'active' && isConnected;
           await updateOnlineStatus(user.uid, shouldBeOnline);
+
+          // Global değişkeni ayarla
+          global.currentUser = { uid: user.uid };
         } else {
           // Kullanıcı çıkış yaptıysa
           if (previousUser) {
@@ -111,6 +114,7 @@ const App = () => {
             setPreviousUser(null);
           }
           setIsAuthenticated(false);
+          global.currentUser = null;
         }
       } catch (error) {
         console.error('Auth kontrolü hatası:', error);

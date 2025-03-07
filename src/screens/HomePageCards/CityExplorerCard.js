@@ -26,11 +26,10 @@ const CityExplorerCard = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
     const [cities, setCities] = useState([]);
-    const scrollX = useRef(new Animated.Value(0)).current;
-    const animationRef = useRef(null);
     const lastLoadedIndex = useRef(0);
     const allCitiesRef = useRef([]);
     const loadingMoreRef = useRef(false);
+    const scrollViewRef = useRef(null);
 
     // İlleri sırayla yükle
     const loadMoreCities = useCallback(async () => {
@@ -79,9 +78,6 @@ const CityExplorerCard = ({ navigation }) => {
 
         return () => {
             unsubscribeAuth();
-            if (animationRef.current) {
-                animationRef.current.stop();
-            }
         };
     }, []);
 
@@ -93,20 +89,19 @@ const CityExplorerCard = ({ navigation }) => {
                 const citiesRef = collection(db, 'cities');
                 const snapshot = await getDocs(citiesRef);
 
-                // Tüm şehirleri referansta sakla
-                allCitiesRef.current = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    image: doc.data().imageUrl
-                }));
+                // Tüm şehirleri referansta sakla ve alfabetik olarak sırala
+                allCitiesRef.current = snapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        image: doc.data().imageUrl
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name, 'tr')); // Türkçe alfabetik sıralama
 
                 // İlk 10 şehri hemen yükle
                 const initialCities = allCitiesRef.current.slice(0, 10);
                 lastLoadedIndex.current = 10;
                 setCities(initialCities);
-
-                // Otomatik kaydırma başlat
-                startContinuousScroll(initialCities.length);
                 setLoading(false);
             } catch (error) {
                 console.error('Şehirler yüklenirken hata:', error);
@@ -115,45 +110,19 @@ const CityExplorerCard = ({ navigation }) => {
         };
 
         fetchCities();
-
-        return () => {
-            if (animationRef.current) {
-                animationRef.current.stop();
-            }
-        };
     }, []);
 
-    // Sürekli kaydırma animasyonu
-    const startContinuousScroll = useCallback((totalCities) => {
-        const cardWidth = 140;
-        const totalWidth = cardWidth * totalCities;
+    // Kullanıcı kaydırma işlemlerini yönet
+    const handleScrollEnd = (event) => {
+        // Kullanıcı sona yaklaştıysa daha fazla şehir yükle
+        const contentWidth = event.nativeEvent.contentSize.width;
+        const layoutWidth = event.nativeEvent.layoutMeasurement.width;
+        const position = event.nativeEvent.contentOffset.x;
 
-        // Mevcut animasyonu temizle
-        if (animationRef.current) {
-            animationRef.current.stop();
+        if (position + layoutWidth > contentWidth - 200) {
+            loadMoreCities();
         }
-
-        // Yeni animasyonu başlat
-        const animation = Animated.loop(
-            Animated.timing(scrollX, {
-                toValue: totalWidth,
-                duration: 30000,
-                easing: Easing.linear,
-                useNativeDriver: true,
-            })
-        );
-
-        animationRef.current = animation;
-        animation.start();
-    }, []);
-
-    // Cities verisi değiştiğinde animasyonu güncelle
-    useEffect(() => {
-        if (cities.length > 0) {
-            startContinuousScroll(cities.length);
-        }
-    }, [cities, startContinuousScroll]);
-
+    };
 
     const handleCardPress = () => {
         if (!user) {
@@ -201,40 +170,29 @@ const CityExplorerCard = ({ navigation }) => {
 
                     {/* Şehirler Kaydırması */}
                     <View style={styles.suggestedCities}>
-                        <Animated.View
-                            style={[
-                                styles.suggestedCitiesInner,
-                                {
-                                    transform: [{
-                                        translateX: scrollX.interpolate({
-                                            inputRange: [0, 140 * cities.length],
-                                            outputRange: [0, -140 * cities.length],
-                                        })
-                                    }]
-                                }
-                            ]}
+                        <ScrollView
+                            ref={scrollViewRef}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            onMomentumScrollEnd={handleScrollEnd}
+                            contentContainerStyle={styles.scrollViewContent}
                         >
-                            {/* Şehirleri 3 kez tekrarla */}
-                            {[...Array(3)].map((_, setIndex) => (
-                                <View key={`set-${setIndex}`} style={styles.citySet}>
-                                    {cities.map((city, index) => (
-                                        <View
-                                            key={`${city.id}-${setIndex}-${index}`}
-                                            style={styles.suggestedCityCard}
-                                        >
-                                            <Image
-                                                source={{ uri: city.image }}
-                                                style={styles.cityImage}
-                                            />
-                                            <Text style={styles.cityTitle}>{city.name}</Text>
-                                            <Text style={styles.cityDescription}>
-                                                {formatRegionName(city.region)}
-                                            </Text>
-                                        </View>
-                                    ))}
+                            {cities.map((city, index) => (
+                                <View
+                                    key={`${city.id}-${index}`}
+                                    style={styles.suggestedCityCard}
+                                >
+                                    <Image
+                                        source={{ uri: city.image }}
+                                        style={styles.cityImage}
+                                    />
+                                    <Text style={styles.cityTitle}>{city.name}</Text>
+                                    <Text style={styles.cityDescription}>
+                                        {formatRegionName(city.region)}
+                                    </Text>
                                 </View>
                             ))}
-                        </Animated.View>
+                        </ScrollView>
                     </View>
 
                     {/* Gamification Elementleri */}
@@ -331,7 +289,7 @@ const styles = StyleSheet.create({
         marginVertical: 16,
         overflow: 'hidden',
     },
-    suggestedCitiesInner: {
+    scrollViewContent: {
         flexDirection: 'row',
         alignItems: 'center',
     },

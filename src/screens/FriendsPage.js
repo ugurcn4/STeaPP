@@ -6,13 +6,14 @@ import {
     TextInput,
     TouchableOpacity,
     FlatList,
-    StyleSheet,
     Image,
     Dimensions,
     Alert,
     ScrollView,
     RefreshControl,
-    ActivityIndicator
+    ActivityIndicator,
+    StatusBar,
+    Platform
 } from 'react-native';
 import {
     searchUsers,
@@ -26,8 +27,8 @@ import {
     cancelFriendRequest
 } from '../services/friendFunctions';
 import FriendRequestModal from '../modals/FriendRequestModal';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { doc, getDoc, updateDoc, getDocs, query, where, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, rtdb } from '../../firebaseConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import {
     shareLocation,
@@ -35,7 +36,6 @@ import {
     shareLiveLocation,
     getShares,
     stopShare,
-    deleteShare,
     shareInstantLocation,
     startLiveLocation,
     stopSharing,
@@ -47,6 +47,14 @@ import FriendProfileModal from '../modals/friendProfileModal';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import FastImage from 'react-native-fast-image';
+import { ref, set, remove } from 'firebase/database';
+import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
+import * as Location from 'expo-location';
+// Stil dosyasını içe aktar
+import styles from '../styles/FriendsPageStyles';
+
+// Status bar yüksekliğini hesaplamak için
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight;
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -55,7 +63,6 @@ const showToast = (type, text1, text2) => {
         text2: text2
     });
 };
-
 
 const FriendsPage = ({ navigation }) => {
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -136,7 +143,33 @@ const FriendsPage = ({ navigation }) => {
     const fetchShares = async (uid) => {
         try {
             const userShares = await getShares(uid);
-            setShares(userShares);
+
+            // Her paylaşım için konum bilgilerini kontrol et ve eksikse ekle
+            const updatedShares = await Promise.all(userShares.map(async (share) => {
+                // Eğer locationInfo yoksa ve konum bilgisi varsa
+                if (!share.locationInfo && share.location) {
+                    try {
+                        const locationInfo = await getLocationInfo(
+                            share.location.latitude,
+                            share.location.longitude
+                        );
+
+                        if (locationInfo) {
+                            // Firestore'daki paylaşımı güncelle
+                            const shareRef = doc(db, `users/${uid}/shares/${share.id}`);
+                            await updateDoc(shareRef, { locationInfo });
+
+                            // Güncellenmiş paylaşımı döndür
+                            return { ...share, locationInfo };
+                        }
+                    } catch (error) {
+                        console.error('Konum bilgisi güncelleme hatası:', error);
+                    }
+                }
+                return share;
+            }));
+
+            setShares(updatedShares);
         } catch (error) {
             console.error('Paylaşımları alma hatası:', error);
             showToast('error', 'Hata', 'Paylaşımlar alınırken bir sorun oluştu');
@@ -255,8 +288,35 @@ const FriendsPage = ({ navigation }) => {
             // Kendi profilini sonuçlardan çıkar
             const filteredUsers = users.filter(user => user.id !== currentUserId);
 
+            // Gizlilik ayarlarını kontrol et - aramada görünürlük ayarı kapalı olanları filtrele
+            const visibleUsers = await Promise.all(
+                filteredUsers.map(async (user) => {
+                    try {
+                        const userRef = doc(db, 'users', user.id);
+                        const userDoc = await getDoc(userRef);
+                        const userData = userDoc.data();
+
+                        // Kullanıcının gizlilik ayarlarını kontrol et
+                        const privacySettings = userData?.settings?.privacySettings || {};
+
+                        // Eğer searchable ayarı false ise kullanıcıyı gösterme
+                        if (privacySettings.searchable === false) {
+                            return null;
+                        }
+
+                        return user;
+                    } catch (error) {
+                        console.error('Kullanıcı gizlilik ayarları kontrol hatası:', error);
+                        return user; // Hata durumunda kullanıcıyı göster
+                    }
+                })
+            );
+
+            // null olmayan kullanıcıları filtrele
+            const filteredVisibleUsers = visibleUsers.filter(user => user !== null);
+
             // Her kullanıcı için arkadaşlık durumunu kontrol et
-            const statusPromises = filteredUsers.map(async user => {
+            const statusPromises = filteredVisibleUsers.map(async user => {
                 const status = await checkFriendshipStatus(currentUserId, user.id);
                 return { ...user, friendshipStatus: status };
             });
@@ -312,7 +372,11 @@ const FriendsPage = ({ navigation }) => {
         const buttonConfig = getButtonConfig(user.id);
 
         return (
-            <View key={user.id} style={styles.searchResultCard}>
+            <TouchableOpacity
+                key={user.id}
+                style={styles.searchResultCard}
+                onPress={() => handleSearchResultPress(user)}
+            >
                 <FastImage
                     source={
                         user.profilePicture
@@ -349,8 +413,37 @@ const FriendsPage = ({ navigation }) => {
                         {buttonConfig.text}
                     </Text>
                 </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
         );
+    };
+
+    const handleSearchResultPress = async (user) => {
+        try {
+            // Kullanıcı bilgilerini güncel olarak al
+            const userDoc = await getDoc(doc(db, 'users', user.id));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                // Kullanıcı bilgilerini düzenle
+                const updatedUser = {
+                    ...user,
+                    bio: userData.bio,
+                    friends: userData.friends || [],
+                    informations: {
+                        ...user.informations,
+                        ...userData.informations
+                    }
+                };
+                setSelectedFriend(updatedUser);
+                setFriendProfileVisible(true);
+            } else {
+                setSelectedFriend(user);
+                setFriendProfileVisible(true);
+            }
+        } catch (error) {
+            console.error('Kullanıcı bilgileri alınırken hata:', error);
+            setSelectedFriend(user);
+            setFriendProfileVisible(true);
+        }
     };
 
     const handleFriendAction = async (targetUserId) => {
@@ -405,67 +498,355 @@ const FriendsPage = ({ navigation }) => {
         }
     };
 
-    const handleStartSharing = async (friendId) => {
+    const handleStartSharing = async (friendIds) => {
         try {
-            const result = await shareInstantLocation(currentUserId, friendId);
-            if (result.success) {
-                // Konum takip aboneliğini sakla
-                setLocationSubscriptions(prev => ({
-                    ...prev,
-                    [result.shareId]: result.locationSubscription
-                }));
-                showToast('success', 'Başarılı', 'Konum paylaşımı başlatıldı');
+            // Arkadaş seçilip seçilmediğini kontrol et
+            if (!friendIds || friendIds.length === 0) {
+                showToast('error', 'Hata', 'Lütfen en az bir arkadaş seçin');
+                return;
+            }
+
+            // Önce konum izinlerini kontrol et
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                showToast('error', 'İzin Hatası', 'Konum izni verilmedi');
+                return;
+            }
+
+            // Mevcut konumu al
+            const currentLocation = await getCurrentLocation();
+
+            // Konum bilgilerini al ve Promise'in çözümlenmesini bekle
+            const locationInfo = await getLocationInfo(
+                currentLocation.latitude,
+                currentLocation.longitude
+            );
+
+            // locationInfo null olabilir, bu durumda boş bir nesne kullan
+            const locationData = locationInfo || {
+                city: 'Bilinmiyor',
+                district: 'Bilinmiyor',
+                street: '',
+                country: ''
+            };
+
+            // Kullanıcı bilgilerini al
+            const userDoc = await getDoc(doc(db, 'users', currentUserId));
+            const userData = userDoc.exists() ? userDoc.data() : {};
+
+            // Kullanıcı bilgilerini güvenli bir şekilde hazırla
+            const userName = userData?.informations?.name || 'İsimsiz';
+            const userUsername = userData?.informations?.username || '';
+            const userPhoto = userData?.profilePicture || '';
+
+            // Her bir arkadaş için konum paylaşımı yap
+            const sharePromises = friendIds.map(async (friendId) => {
+                // Seçilen arkadaşın bilgilerini al
+                const selectedFriend = friends.find(friend => friend.id === friendId);
+                if (!selectedFriend) {
+                    return { success: false, error: 'Arkadaş bilgileri alınamadı', friendId };
+                }
+
+                // Arkadaş bilgilerini güvenli bir şekilde hazırla
+                const friendName = selectedFriend.name || selectedFriend.informations?.name || 'İsimsiz';
+                const friendUsername = selectedFriend.informations?.username || '';
+                const friendPhoto = selectedFriend.profilePicture || '';
+
+                // Arkadaş bilgilerini ekleyerek çözümlenmiş veriyi gönder
+                return shareInstantLocation(
+                    currentUserId,
+                    friendId,
+                    locationData,
+                    {
+                        name: friendName,
+                        username: friendUsername,
+                        profilePicture: friendPhoto,
+                        senderName: userName,
+                        senderUsername: userUsername,
+                        senderPhoto: userPhoto,
+                        // Konum bilgilerini ekle
+                        location: {
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude
+                        }
+                    }
+                );
+            });
+
+            // Tüm paylaşım işlemlerini bekle
+            const results = await Promise.all(sharePromises);
+
+            // Başarılı ve başarısız paylaşımları say
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.filter(r => !r.success).length;
+
+            // Konum takip aboneliklerini sakla
+            results.forEach(result => {
+                if (result.success && result.shareId) {
+                    setLocationSubscriptions(prev => ({
+                        ...prev,
+                        [result.shareId]: result.locationSubscription
+                    }));
+                }
+            });
+
+            // Sonuçları kullanıcıya bildir
+            if (successCount > 0) {
+                if (failCount > 0) {
+                    showToast('info', 'Bilgi', `${successCount} arkadaş ile konum paylaşıldı, ${failCount} arkadaş ile paylaşılamadı`);
+                } else {
+                    showToast('success', 'Başarılı', `${successCount} arkadaş ile konum paylaşımı başlatıldı`);
+                }
             } else {
-                showToast('error', 'Hata', result.error);
+                showToast('error', 'Hata', 'Konum paylaşılamadı');
             }
         } catch (error) {
+            console.error('Konum paylaşımı hatası:', error);
             showToast('error', 'Hata', 'Konum paylaşılamadı');
         }
     };
 
-    const handleShareLiveLocation = async (friendId) => {
+    const handleShareLiveLocation = async (friendIds) => {
         try {
-            const result = await startLiveLocation(currentUserId, friendId);
-            if (result.success) {
-                // Konum takip aboneliğini sakla
-                setLocationSubscriptions(prev => ({
-                    ...prev,
-                    [result.shareId]: result.locationSubscription
-                }));
-                showToast('success', 'Başarılı', 'Canlı konum paylaşımı başlatıldı');
+            // Arkadaş seçilip seçilmediğini kontrol et
+            if (!friendIds || friendIds.length === 0) {
+                showToast('error', 'Hata', 'Lütfen en az bir arkadaş seçin');
+                return;
+            }
+
+            // Önce konum izinlerini kontrol et
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                showToast('error', 'İzin Hatası', 'Konum izni verilmedi');
+                return;
+            }
+
+            // Arka plan konum izinlerini kontrol et
+            const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+            if (backgroundStatus !== 'granted') {
+                showToast('error', 'İzin Hatası', 'Arka plan konum izni verilmedi');
+                return;
+            }
+
+            // Mevcut konumu al
+            const currentLocation = await getCurrentLocation();
+
+            // Konum bilgilerini al ve Promise'in çözümlenmesini bekle
+            const locationInfo = await getLocationInfo(
+                currentLocation.latitude,
+                currentLocation.longitude
+            );
+
+            // locationInfo null olabilir, bu durumda boş bir nesne kullan
+            const locationData = locationInfo || {
+                city: 'Bilinmiyor',
+                district: 'Bilinmiyor',
+                street: '',
+                country: ''
+            };
+
+            // Kullanıcı bilgilerini al
+            const userDoc = await getDoc(doc(db, 'users', currentUserId));
+            const userData = userDoc.exists() ? userDoc.data() : {};
+
+            // Kullanıcı bilgilerini güvenli bir şekilde hazırla
+            const userName = userData?.informations?.name || 'İsimsiz';
+            const userUsername = userData?.informations?.username || '';
+            const userPhoto = userData?.profilePicture || '';
+
+            // Her bir arkadaş için canlı konum paylaşımı yap
+            const sharePromises = friendIds.map(async (friendId) => {
+                try {
+                    // Seçilen arkadaşın bilgilerini al
+                    const selectedFriend = friends.find(friend => friend.id === friendId);
+                    if (!selectedFriend) {
+                        return { success: false, error: 'Arkadaş bilgileri alınamadı', friendId };
+                    }
+
+                    // Arkadaş bilgilerini güvenli bir şekilde hazırla
+                    const friendName = selectedFriend.name || selectedFriend.informations?.name || 'İsimsiz';
+                    const friendUsername = selectedFriend.informations?.username || '';
+                    const friendPhoto = selectedFriend.profilePicture || '';
+
+                    // 1. Firestore'da paylaşım kaydı oluştur
+                    const shareRef = await addDoc(collection(db, `users/${currentUserId}/shares`), {
+                        type: 'live',
+                        friendId: friendId,
+                        status: 'active',
+                        startTime: serverTimestamp(),
+                        lastUpdate: serverTimestamp(),
+                        locationInfo: locationData,
+                        friendName: friendName,
+                        friendUsername: friendUsername,
+                        friendPhoto: friendPhoto
+                    });
+
+                    // 2. Karşı tarafa paylaşımı ekle
+                    await addDoc(collection(db, `users/${friendId}/receivedShares`), {
+                        type: 'live',
+                        fromUserId: currentUserId,
+                        shareId: shareRef.id,
+                        status: 'active',
+                        startTime: serverTimestamp(),
+                        lastUpdate: serverTimestamp(),
+                        locationInfo: locationData,
+                        senderName: userName,
+                        senderUsername: userUsername,
+                        senderPhoto: userPhoto
+                    });
+
+                    // 3. RTDB'de başlangıç konumu oluştur
+                    const locationRef = ref(rtdb, `locations/${shareRef.id}`);
+                    await set(locationRef, {
+                        latitude: currentLocation.latitude,
+                        longitude: currentLocation.longitude,
+                        accuracy: 0,
+                        heading: 0,
+                        speed: 0,
+                        timestamp: serverTimestamp()
+                    });
+
+                    return { success: true, shareId: shareRef.id, friendId };
+                } catch (error) {
+                    console.error(`${friendId} ile canlı konum paylaşım hatası:`, error);
+                    return { success: false, error: error.message, friendId };
+                }
+            });
+
+            // Tüm paylaşım işlemlerini bekle
+            const results = await Promise.all(sharePromises);
+
+            // Başarılı ve başarısız paylaşımları say
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.filter(r => !r.success).length;
+
+            // Konum güncellemesi için kullanılacak bilgileri hazırla
+            // Bu bilgileri global bir değişkene atayalım ki arka plan servisi kullanabilsin
+            if (successCount > 0) {
+                // Başarılı olan ilk paylaşımı kullan
+                const firstSuccess = results.find(r => r.success);
+                if (firstSuccess) {
+                    global.shareLocationInfo = {
+                        shareId: firstSuccess.shareId,
+                        userId: currentUserId,
+                        friendId: firstSuccess.friendId,
+                        // Konum bilgilerini string olarak saklayalım
+                        locationInfo: JSON.stringify(locationData)
+                    };
+
+                    // 4. Arka plan konum takibini başlat
+                    const started = await startBackgroundLocationUpdates(currentUserId);
+                    if (!started) {
+                        console.error('Arka plan konum takibi başlatılamadı');
+                    }
+                }
+            }
+
+            // Konum takip aboneliklerini sakla
+            results.forEach(result => {
+                if (result.success && result.shareId) {
+                    setLocationSubscriptions(prev => ({
+                        ...prev,
+                        [result.shareId]: true
+                    }));
+                }
+            });
+
+            // Sonuçları kullanıcıya bildir
+            if (successCount > 0) {
+                if (failCount > 0) {
+                    showToast('info', 'Bilgi', `${successCount} arkadaş ile canlı konum paylaşıldı, ${failCount} arkadaş ile paylaşılamadı`);
+                } else {
+                    showToast('success', 'Başarılı', `${successCount} arkadaş ile canlı konum paylaşımı başlatıldı`);
+                }
             } else {
-                showToast('error', 'Hata', result.error);
+                showToast('error', 'Hata', 'Canlı konum paylaşılamadı');
             }
         } catch (error) {
+            console.error('Canlı konum paylaşım hatası:', error);
             showToast('error', 'Hata', 'Canlı konum paylaşılamadı');
         }
     };
 
-    const handleStopShare = async (shareId, type) => {
+    const handleStopShare = async (shareId) => {
         try {
-            const result = await stopSharing(currentUserId, shareId, type);
-            if (result.success) {
-                // Konum takibini durdur
-                if (type === 'live' && locationSubscriptions[shareId]) {
-                    locationSubscriptions[shareId].remove();
-                    setLocationSubscriptions(prev => {
-                        const newSubs = { ...prev };
-                        delete newSubs[shareId];
-                        return newSubs;
-                    });
+            // 1. Firestore'da paylaşımı yapan kullanıcının shares koleksiyonunu güncelle
+            await updateDoc(doc(db, `users/${currentUserId}/shares/${shareId}`), {
+                status: 'ended',
+                endTime: serverTimestamp()
+            });
+
+            // 2. Karşı tarafın receivedShares koleksiyonunu güncelle
+            const shareDoc = await getDoc(doc(db, `users/${currentUserId}/shares/${shareId}`));
+            const friendId = shareDoc.data().friendId;
+
+            const receivedSharesQuery = query(
+                collection(db, `users/${friendId}/receivedShares`),
+                where('fromUserId', '==', currentUserId),
+                where('status', '==', 'active')
+            );
+            const querySnapshot = await getDocs(receivedSharesQuery);
+            querySnapshot.forEach(async (doc) => {
+                await updateDoc(doc.ref, {
+                    status: 'ended',
+                    endTime: serverTimestamp()
+                });
+            });
+
+            // 3. RTDB'den konum verilerini temizle
+            const locationRef = ref(rtdb, `locations/${shareId}`);
+            await remove(locationRef);
+
+            // 4. Konum takibini durdur
+            if (locationSubscriptions[shareId]) {
+                // Aboneliği kontrol et ve varsa kaldır
+                const subscription = locationSubscriptions[shareId];
+                if (subscription && typeof subscription.remove === 'function') {
+                    subscription.remove();
                 }
-                showToast('success', 'Başarılı', 'Paylaşım durduruldu');
-            } else {
-                showToast('error', 'Hata', result.error);
+
+                // Aboneliği state'den kaldır
+                setLocationSubscriptions(prev => {
+                    const newSubscriptions = { ...prev };
+                    delete newSubscriptions[shareId];
+                    return newSubscriptions;
+                });
+
+                // Eğer başka aktif paylaşım yoksa arka plan takibi durdur
+                if (Object.keys(locationSubscriptions).length === 1) { // Sadece bu paylaşım varsa
+                    await stopBackgroundLocationUpdates();
+                }
             }
+
+            showToast('success', 'Başarılı', 'Paylaşım durduruldu');
         } catch (error) {
+            console.error('Paylaşım durdurma hatası:', error);
             showToast('error', 'Hata', 'Paylaşım durdurulamadı');
         }
     };
 
-    const handleFriendPress = (friend) => {
-        setSelectedFriend(friend);
-        setFriendProfileVisible(true);
+    const handleFriendPress = async (friend) => {
+        try {
+            // Kullanıcı bilgilerini güncel olarak al
+            const userDoc = await getDoc(doc(db, 'users', friend.id));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                // Bio'yu da ekleyelim
+                const updatedFriend = {
+                    ...friend,
+                    bio: userData.bio // Bio'yu doğrudan kök seviyeden al
+                };
+                setSelectedFriend(updatedFriend);
+                setFriendProfileVisible(true);
+            } else {
+                setSelectedFriend(friend);
+                setFriendProfileVisible(true);
+            }
+        } catch (error) {
+            console.error('Kullanıcı bilgileri alınırken hata:', error);
+            setSelectedFriend(friend);
+            setFriendProfileVisible(true);
+        }
     };
 
 
@@ -538,13 +919,13 @@ const FriendsPage = ({ navigation }) => {
                     style={styles.backButton}
                     onPress={() => setActiveTab('Arkadaşlar')}
                 >
-                    <MaterialIcons name="arrow-back-ios" size={24} color="#2C3E50" />
+                    <MaterialIcons name="arrow-back-ios" size={22} color="#1A1A1A" />
                 </TouchableOpacity>
             )}
 
             <Text style={[
                 styles.headerTitle,
-                activeTab !== 'Arkadaşlar' && styles.headerTitleWithBack
+                activeTab !== 'Arkadaşlar' ? styles.headerTitleWithBack : null
             ]}>
                 {activeTab}
             </Text>
@@ -555,7 +936,7 @@ const FriendsPage = ({ navigation }) => {
                         style={styles.headerButton}
                         onPress={() => setActiveTab('Paylaşımlar')}
                     >
-                        <MaterialIcons name="share-location" size={24} color="#2C3E50" />
+                        <MaterialIcons name="share-location" size={22} color="#2C3E50" />
                         {shares.length > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{shares.length}</Text>
@@ -566,7 +947,7 @@ const FriendsPage = ({ navigation }) => {
                         style={styles.headerButton}
                         onPress={() => setActiveTab('İstekler')}
                     >
-                        <MaterialIcons name="person-add" size={24} color="#2C3E50" />
+                        <MaterialIcons name="person-add" size={22} color="#2C3E50" />
                         {friendRequests.length > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{friendRequests.length}</Text>
@@ -577,7 +958,7 @@ const FriendsPage = ({ navigation }) => {
                         style={styles.headerButton}
                         onPress={() => setActiveTab('Ara')}
                     >
-                        <MaterialIcons name="search" size={24} color="#2C3E50" />
+                        <MaterialIcons name="search" size={22} color="#2C3E50" />
                     </TouchableOpacity>
                 </View>
             )}
@@ -721,14 +1102,14 @@ const FriendsPage = ({ navigation }) => {
             <View style={styles.sharingButtons}>
                 <TouchableOpacity
                     style={[styles.sharingButton, styles.instantShareButton]}
-                    onPress={() => handleStartSharing(selectedFriends[0])}
+                    onPress={() => handleStartSharing(selectedFriends)}
                 >
                     <MaterialIcons name="my-location" size={24} color="#FFF" />
                     <Text style={styles.sharingButtonText}>Anlık Konum</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={[styles.sharingButton, styles.liveShareButton]}
-                    onPress={() => handleShareLiveLocation(selectedFriends[0])}
+                    onPress={() => handleShareLiveLocation(selectedFriends)}
                 >
                     <MaterialIcons name="location-on" size={24} color="#FFF" />
                     <Text style={styles.sharingButtonText}>Canlı Konum</Text>
@@ -771,7 +1152,7 @@ const FriendsPage = ({ navigation }) => {
                         </View>
                         <TouchableOpacity
                             style={styles.stopShareButton}
-                            onPress={() => handleStopShare(share.id, share.type)}
+                            onPress={() => handleStopShare(share.id)}
                         >
                             <MaterialIcons name="close" size={24} color="#FF3B30" />
                         </TouchableOpacity>
@@ -869,7 +1250,11 @@ const FriendsPage = ({ navigation }) => {
                                     <Text style={styles.shareTypeTitle}>Canlı Konumlar</Text>
                                     {receivedShares
                                         .filter(share => share.type === 'live')
-                                        .map(share => renderReceivedShareCard(share))}
+                                        .map(share => (
+                                            <React.Fragment key={share.id || `live-${share.fromUserId}-${share.startTime}`}>
+                                                {renderReceivedShareCard(share)}
+                                            </React.Fragment>
+                                        ))}
                                 </View>
                             )}
 
@@ -879,7 +1264,11 @@ const FriendsPage = ({ navigation }) => {
                                     <Text style={styles.shareTypeTitle}>Anlık Konumlar</Text>
                                     {receivedShares
                                         .filter(share => share.type === 'instant')
-                                        .map(share => renderReceivedShareCard(share))}
+                                        .map(share => (
+                                            <React.Fragment key={share.id || `instant-${share.fromUserId}-${share.startTime}`}>
+                                                {renderReceivedShareCard(share)}
+                                            </React.Fragment>
+                                        ))}
                                 </View>
                             )}
                         </View>
@@ -897,7 +1286,11 @@ const FriendsPage = ({ navigation }) => {
                                     <Text style={styles.shareTypeTitle}>Canlı Konumlar</Text>
                                     {shares
                                         .filter(share => share.type === 'live')
-                                        .map(share => renderShareCard(share))}
+                                        .map(share => (
+                                            <React.Fragment key={share.id || `my-live-${share.friendId}-${share.startTime}`}>
+                                                {renderShareCard(share)}
+                                            </React.Fragment>
+                                        ))}
                                 </View>
                             )}
 
@@ -907,7 +1300,11 @@ const FriendsPage = ({ navigation }) => {
                                     <Text style={styles.shareTypeTitle}>Anlık Konumlar</Text>
                                     {shares
                                         .filter(share => share.type === 'instant')
-                                        .map(share => renderShareCard(share))}
+                                        .map(share => (
+                                            <React.Fragment key={share.id || `my-instant-${share.friendId}-${share.startTime}`}>
+                                                {renderShareCard(share)}
+                                            </React.Fragment>
+                                        ))}
                                 </View>
                             )}
                         </View>
@@ -966,7 +1363,7 @@ const FriendsPage = ({ navigation }) => {
                     <View style={styles.shareOptionsContainer}>
                         <TouchableOpacity
                             style={[styles.shareOption, { backgroundColor: '#E8F5E9' }]}
-                            onPress={() => handleStartSharing(selectedFriends[0])}
+                            onPress={() => handleStartSharing(selectedFriends)}
                             disabled={selectedFriends.length === 0}
                         >
                             <Ionicons name="location" size={24} color="#4CAF50" />
@@ -980,7 +1377,7 @@ const FriendsPage = ({ navigation }) => {
 
                         <TouchableOpacity
                             style={[styles.shareOption, { backgroundColor: '#E3F2FD' }]}
-                            onPress={() => handleShareLiveLocation(selectedFriends[0])}
+                            onPress={() => handleShareLiveLocation(selectedFriends)}
                             disabled={selectedFriends.length === 0}
                         >
                             <Ionicons name="navigate" size={24} color="#2196F3" />
@@ -998,192 +1395,210 @@ const FriendsPage = ({ navigation }) => {
     };
 
     const getTimeAgo = (timestamp) => {
-        if (!timestamp) return '';
-        const now = new Date();
-        const shareTime = timestamp.toDate();
-        const diffInMinutes = Math.floor((now - shareTime) / (1000 * 60));
+        if (!timestamp) return 'Bilinmiyor';
 
-        if (diffInMinutes < 1) return 'Şimdi';
-        if (diffInMinutes < 60) return `${diffInMinutes} dakika önce`;
-        if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} saat önce`;
-        return `${Math.floor(diffInMinutes / 1440)} gün önce`;
+        try {
+            // timestamp bir Firestore Timestamp nesnesi mi kontrol et
+            const date = timestamp.toDate ? timestamp.toDate() :
+                // timestamp bir Date nesnesi mi kontrol et
+                timestamp instanceof Date ? timestamp :
+                    // timestamp bir sayı mı kontrol et
+                    typeof timestamp === 'number' ? new Date(timestamp) :
+                        // hiçbiri değilse şu anki zamanı kullan
+                        new Date();
+
+            const now = new Date();
+            const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+
+            if (diffInMinutes < 1) return 'Şimdi';
+            if (diffInMinutes < 60) return `${diffInMinutes} dakika önce`;
+            if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} saat önce`;
+            return `${Math.floor(diffInMinutes / 1440)} gün önce`;
+        } catch (error) {
+            console.error('Zaman hesaplama hatası:', error);
+            return 'Bilinmiyor';
+        }
     };
 
     const renderShareCard = (share) => {
+        // Konum bilgilerini kontrol et
+        const hasLocationInfo = share.locationInfo &&
+            (share.locationInfo.city || share.locationInfo.district);
+
+        // Konum koordinatlarını kontrol et
+        const hasValidLocation = share.location &&
+            typeof share.location.latitude === 'number' &&
+            typeof share.location.longitude === 'number';
+
         return (
-            <View style={styles.shareCard}>
-                <View style={styles.shareHeader}>
-                    <FastImage
-                        source={
-                            share.friendPhoto
-                                ? {
-                                    uri: share.friendPhoto,
-                                    priority: FastImage.priority.normal,
-                                    cache: FastImage.cacheControl.immutable
+            <View style={styles.shareCardNew}>
+                <LinearGradient
+                    colors={share.type === 'live' ? ['#E3F2FD', '#BBDEFB'] : ['#E8F5E9', '#C8E6C9']}
+                    style={styles.shareCardGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.shareHeaderNew}>
+                        <View style={styles.shareUserInfo}>
+                            <FastImage
+                                source={
+                                    share.friendPhoto
+                                        ? {
+                                            uri: share.friendPhoto,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.immutable
+                                        }
+                                        : {
+                                            uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random`,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.web
+                                        }
                                 }
-                                : {
-                                    uri: `https://ui-avatars.com/api/?name=${share.friendName}&background=random`,
-                                    priority: FastImage.priority.normal,
-                                    cache: FastImage.cacheControl.web
-                                }
-                        }
-                        style={styles.friendAvatar}
-                        resizeMode={FastImage.resizeMode.cover}
-                    />
-                    <View style={styles.shareInfo}>
-                        <Text style={styles.friendName}>{share.friendName}</Text>
-                        {share.friendUsername && (
-                            <Text style={styles.username}>@{share.friendUsername}</Text>
-                        )}
-                    </View>
-                    <TouchableOpacity
-                        style={styles.stopShareButton}
-                        onPress={() => handleStopShare(share.id, share.type)}
-                    >
-                        <MaterialIcons name="close" size={24} color="#FF3B30" />
-                    </TouchableOpacity>
-                </View>
+                                style={styles.friendAvatarNew}
+                                resizeMode={FastImage.resizeMode.cover}
+                            />
+                            <View style={styles.shareInfoNew}>
+                                <Text style={styles.friendNameNew}>{share.friendName}</Text>
+                                {share.friendUsername && (
+                                    <Text style={styles.usernameNew}>@{share.friendUsername}</Text>
+                                )}
+                            </View>
+                        </View>
 
-                <View style={styles.shareDetails}>
-                    <View style={styles.shareTypeContainer}>
-                        <MaterialIcons
-                            name={share.type === 'live' ? 'location-on' : 'my-location'}
-                            size={20}
-                            color={share.type === 'live' ? '#2196F3' : '#4CAF50'}
-                        />
-                        <Text style={[
-                            styles.shareTypeText,
-                            { color: share.type === 'live' ? '#2196F3' : '#4CAF50' }
-                        ]}>
-                            {share.type === 'live' ? 'Canlı Konum' : 'Anlık Konum'}
-                        </Text>
-                    </View>
-
-                    {share.locationInfo && (
-                        <View style={styles.locationInfo}>
-                            <MaterialIcons name="place" size={16} color="#666" />
-                            <Text style={styles.locationText}>
-                                {share.locationInfo.district || 'Bilinmeyen Bölge'}, {share.locationInfo.city || 'Bilinmeyen Şehir'}
+                        <View style={styles.shareTypeContainerNew}>
+                            <MaterialIcons
+                                name={share.type === 'live' ? 'location-on' : 'my-location'}
+                                size={18}
+                                color={share.type === 'live' ? '#2196F3' : '#4CAF50'}
+                            />
+                            <Text style={[
+                                styles.shareTypeTextNew,
+                                { color: share.type === 'live' ? '#2196F3' : '#4CAF50' }
+                            ]}>
+                                {share.type === 'live' ? 'Canlı Konum' : 'Anlık Konum'}
                             </Text>
                         </View>
-                    )}
+                    </View>
 
-                    <View style={styles.timeInfo}>
-                        <View style={styles.timeRow}>
-                            <MaterialIcons name="access-time" size={16} color="#666" />
-                            <Text style={styles.timeText}>
-                                Başlangıç: {getTimeAgo(share.startTime)}
-                            </Text>
-                        </View>
-                        {share.type === 'live' && share.lastUpdate && (
-                            <View style={styles.timeRow}>
-                                <MaterialIcons name="update" size={16} color="#666" />
-                                <Text style={styles.timeText}>
-                                    Son güncelleme: {getTimeAgo(share.lastUpdate)}
+                    <View style={styles.shareDetailsNew}>
+                        {hasLocationInfo &&
+                            share.locationInfo.city && share.locationInfo.city !== 'Bilinmiyor' &&
+                            share.locationInfo.district && share.locationInfo.district !== 'Bilinmiyor' ? (
+                            <View style={styles.locationInfoNew}>
+                                <View style={styles.locationIconContainer}>
+                                    <MaterialIcons name="place" size={20} color="#555" />
+                                </View>
+                                <Text style={styles.locationTextNew}>
+                                    {share.locationInfo.district}, {share.locationInfo.city}
                                 </Text>
                             </View>
+                        ) : (
+                            <TouchableOpacity
+                                style={styles.locationInfoNew}
+                                onPress={async () => {
+                                    // Konum bilgilerini al ve güncelle
+                                    try {
+                                        if (!hasValidLocation) {
+                                            showToast('error', 'Hata', 'Geçerli konum bilgisi bulunamadı');
+                                            return;
+                                        }
+
+                                        showToast('info', 'Bilgi', 'Konum bilgileri yükleniyor...');
+                                        const locationInfo = await getLocationInfo(
+                                            share.location.latitude,
+                                            share.location.longitude
+                                        );
+                                        if (locationInfo) {
+                                            // Paylaşımı güncelle
+                                            const shareRef = doc(db, `users/${currentUserId}/shares/${share.id}`);
+                                            await updateDoc(shareRef, { locationInfo });
+
+                                            // Paylaşımları yenile
+                                            fetchShares(currentUserId);
+                                            showToast('success', 'Başarılı', 'Konum bilgileri güncellendi');
+                                        } else {
+                                            showToast('error', 'Hata', 'Konum bilgileri alınamadı');
+                                        }
+                                    } catch (error) {
+                                        console.error('Konum bilgisi güncelleme hatası:', error);
+                                        showToast('error', 'Hata', 'Konum bilgileri güncellenirken bir sorun oluştu');
+                                    }
+                                }}
+                            >
+                                <View style={styles.locationIconContainer}>
+                                    <MaterialIcons name="refresh" size={20} color="#555" />
+                                </View>
+                                <Text style={styles.locationTextNew}>
+                                    {hasLocationInfo ? 'Konum bilgilerini yenilemek için dokunun' : 'Konum bilgilerini yüklemek için dokunun'}
+                                </Text>
+                            </TouchableOpacity>
                         )}
+
+                        <View style={styles.timeInfoNew}>
+                            <View style={styles.timeRowNew}>
+                                <View style={styles.timeIconContainer}>
+                                    <MaterialIcons name="access-time" size={18} color="#666" />
+                                </View>
+                                <Text style={styles.timeTextNew}>
+                                    Başlangıç: {getTimeAgo(share.startTime)}
+                                </Text>
+                            </View>
+                            {share.type === 'live' && share.lastUpdate && (
+                                <View style={styles.timeRowNew}>
+                                    <View style={styles.timeIconContainer}>
+                                        <MaterialIcons name="update" size={18} color="#666" />
+                                    </View>
+                                    <Text style={styles.timeTextNew}>
+                                        Son güncelleme: {getTimeAgo(share.lastUpdate)}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                </View>
+
+                    <TouchableOpacity
+                        style={styles.stopShareButtonNew}
+                        onPress={() => handleStopShare(share.id)}
+                    >
+                        <LinearGradient
+                            colors={['#FF5252', '#FF1744']}
+                            style={styles.stopButtonGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        >
+                            <MaterialIcons name="stop" size={16} color="#FFF" />
+                            <Text style={styles.stopButtonText}>Paylaşımı Durdur</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </LinearGradient>
             </View>
         );
     };
 
-    const renderReceivedShareCard = (share) => {
-        return (
-            <View style={styles.shareCard} key={share.id}>
-                <View style={styles.shareHeader}>
-                    <FastImage
-                        source={
-                            share.senderPhoto
-                                ? {
-                                    uri: share.senderPhoto,
-                                    priority: FastImage.priority.normal,
-                                    cache: FastImage.cacheControl.immutable
-                                }
-                                : {
-                                    uri: `https://ui-avatars.com/api/?name=${share.senderName}&background=random`,
-                                    priority: FastImage.priority.normal,
-                                    cache: FastImage.cacheControl.web
-                                }
-                        }
-                        style={styles.friendAvatar}
-                        resizeMode={FastImage.resizeMode.cover}
-                    />
-                    <View style={styles.shareInfo}>
-                        <Text style={styles.friendName}>{share.senderName}</Text>
-                        {share.senderUsername && (
-                            <Text style={styles.username}>@{share.senderUsername}</Text>
-                        )}
-                    </View>
-                    <TouchableOpacity
-                        style={styles.viewLocationButton}
-                        onPress={() => navigation.navigate('LocationDetail', { share })}
-                    >
-                        <MaterialIcons name="map" size={24} color="#4CAF50" />
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.shareDetails}>
-                    <View style={styles.shareTypeContainer}>
-                        <MaterialIcons
-                            name={share.type === 'live' ? 'location-on' : 'my-location'}
-                            size={20}
-                            color={share.type === 'live' ? '#2196F3' : '#4CAF50'}
-                        />
-                        <Text style={[
-                            styles.shareTypeText,
-                            { color: share.type === 'live' ? '#2196F3' : '#4CAF50' }
-                        ]}>
-                            {share.type === 'live' ? 'Canlı Konum' : 'Anlık Konum'}
-                        </Text>
-                    </View>
-
-                    {share.locationInfo && (
-                        <View style={styles.locationInfo}>
-                            <MaterialIcons name="place" size={16} color="#666" />
-                            <Text style={styles.locationText}>
-                                {share.locationInfo.district || 'Bilinmeyen Bölge'}, {share.locationInfo.city || 'Bilinmeyen Şehir'}
-                            </Text>
-                        </View>
-                    )}
-
-                    <View style={styles.timeInfo}>
-                        <View style={styles.timeRow}>
-                            <MaterialIcons name="access-time" size={16} color="#666" />
-                            <Text style={styles.timeText}>
-                                Başlangıç: {getTimeAgo(share.startTime)}
-                            </Text>
-                        </View>
-                        {share.type === 'live' && share.lastUpdate && (
-                            <View style={styles.timeRow}>
-                                <MaterialIcons name="update" size={16} color="#666" />
-                                <Text style={styles.timeText}>
-                                    Son güncelleme: {getTimeAgo(share.lastUpdate)}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                </View>
-            </View>
-        );
-    };
-
-    // Arkadaş seçimi için yardımcı fonksiyon
+    // Arkadaş seçimi için yardımcı fonksiyon - birden fazla arkadaş seçimine izin ver
     const handleFriendSelect = (friendId) => {
         setSelectedFriends(prev => {
             if (prev.includes(friendId)) {
                 return prev.filter(id => id !== friendId);
             }
-            return [friendId]; // Tek arkadaş seçimi için
+            // Birden fazla arkadaş seçimine izin ver
+            return [...prev, friendId];
         });
     };
 
     // Component unmount olduğunda tüm konum takiplerini temizle
     useEffect(() => {
         return () => {
-            Object.values(locationSubscriptions).forEach(subscription => {
-                if (subscription) subscription.remove();
+            // Tüm abonelikleri temizle
+            Object.entries(locationSubscriptions).forEach(([shareId, subscription]) => {
+                try {
+                    // Aboneliği kontrol et ve varsa kaldır
+                    if (subscription && typeof subscription.remove === 'function') {
+                        subscription.remove();
+                    }
+                } catch (error) {
+                    console.error('Abonelik kaldırma hatası:', error);
+                }
             });
         };
     }, [locationSubscriptions]);
@@ -1415,730 +1830,91 @@ const FriendsPage = ({ navigation }) => {
         );
     };
 
+    const viewLocationDetail = (share) => {
+        if (share) {
+            navigation.navigate('Harita', {
+                initialRegion: {
+                    latitude: share.location?.latitude || 0,
+                    longitude: share.location?.longitude || 0,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01
+                },
+                shareData: {
+                    ...share,
+                    type: 'received',
+                }
+            });
+        }
+    };
+
+    // Konum bilgilerini almak için yardımcı fonksiyon
+    const getLocationInfo = async (latitude, longitude) => {
+        try {
+            // Latitude ve longitude değerlerinin geçerli sayılar olduğunu kontrol et
+            if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+                console.warn('Geçersiz konum bilgileri:', { latitude, longitude });
+                return null;
+            }
+
+            // Sayısal değerlere dönüştür
+            const lat = parseFloat(latitude);
+            const lng = parseFloat(longitude);
+
+            // Google Maps Geocoding API veya başka bir servis kullanabilirsiniz
+            // Örnek olarak, Expo Location'ın reverseGeocodeAsync fonksiyonu:
+            const response = await Location.reverseGeocodeAsync({
+                latitude: lat,
+                longitude: lng
+            });
+
+            if (response && response.length > 0) {
+                const address = response[0];
+                return {
+                    city: address.city || address.region,
+                    district: address.district || address.subregion,
+                    street: address.street,
+                    country: address.country
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error('Konum bilgisi alma hatası:', error);
+            return null;
+        }
+    };
+
     return (
-        <SafeAreaView style={styles.container}>
-            {renderHeader()}
+        <>
+            <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+            <View style={[styles.container, { paddingTop: 0 }]}>
+                {renderHeader()}
 
-            <View style={styles.content}>
-                {activeTab === 'Arkadaşlar' && renderFriendsTab()}
+                <View style={styles.content}>
+                    {activeTab === 'Arkadaşlar' && renderFriendsTab()}
+                    {activeTab === 'Ara' && renderSearchSection()}
+                    {activeTab === 'İstekler' && renderRequestsTab()}
+                    {activeTab === 'Paylaşımlar' && renderSharesTab()}
+                </View>
 
-                {activeTab === 'Ara' && renderSearchSection()}
+                {modalVisible && (
+                    <FriendRequestModal
+                        visible={modalVisible}
+                        onClose={() => setModalVisible(false)}
+                        request={selectedRequest}
+                        onAccept={handleAccept}
+                        onReject={handleReject}
+                    />
+                )}
 
-                {activeTab === 'İstekler' && renderRequestsTab()}
-
-                {activeTab === 'Paylaşımlar' && renderSharesTab()}
-            </View>
-
-            {modalVisible && (
-                <FriendRequestModal
-                    visible={modalVisible}
-                    onClose={() => setModalVisible(false)}
-                    request={selectedRequest}
-                    onAccept={handleAccept}
-                    onReject={handleReject}
+                <FriendProfileModal
+                    visible={friendProfileVisible}
+                    onClose={() => setFriendProfileVisible(false)}
+                    friend={selectedFriend}
+                    navigation={navigation}
                 />
-            )}
-
-            <FriendProfileModal
-                visible={friendProfileVisible}
-                onClose={() => setFriendProfileVisible(false)}
-                friend={selectedFriend}
-            />
-        </SafeAreaView>
+            </View>
+        </>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
-        backgroundColor: '#FFF',
-    },
-    backButton: {
-        padding: 8,
-        marginRight: 8,
-    },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#2C3E50',
-        flex: 1,
-    },
-    headerTitleWithBack: {
-        fontSize: 20,
-        textAlign: 'center',
-        marginRight: 48, // Sağ tarafta boşluk bırakarak ortalamak için
-    },
-    headerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    headerButton: {
-        padding: 8,
-        marginLeft: 16,
-        position: 'relative',
-    },
-    badge: {
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        backgroundColor: '#FF3B30',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    badgeText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    content: {
-        flex: 1,
-    },
-    friendsListContainer: {
-        padding: 16,
-        paddingBottom: 100, // Alt kısımda ekstra boşluk
-    },
-    listContainer: {
-        flexGrow: 1, // İçeriğin tam görünmesi için
-    },
-    friendCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)',
-    },
-    friendMainInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    profileImage: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#F0F0F0',
-        borderWidth: 2,
-        borderColor: '#E3F2FD',
-    },
-    friendInfo: {
-        marginLeft: 16,
-        flex: 1,
-    },
-    friendName: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1A237E',
-        marginBottom: 4,
-        letterSpacing: 0.3,
-    },
-    activeShareContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#E8F5E9',
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 12,
-        alignSelf: 'flex-start',
-        borderWidth: 1,
-        borderColor: '#C8E6C9',
-    },
-    activeShareText: {
-        fontSize: 12,
-        color: '#2E7D32',
-        marginLeft: 4,
-        fontWeight: '600',
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    actionButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 4,
-    },
-    actionButtonGradient: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    searchSection: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: '#FFF',
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F6FA',
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        marginBottom: 16,
-    },
-    searchInput: {
-        flex: 1,
-        paddingVertical: 12,
-        marginLeft: 8,
-        fontSize: 16,
-        color: '#2C3E50',
-    },
-    searchResultCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    searchResultImage: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
-    searchResultInfo: {
-        flex: 1,
-        marginLeft: 16,
-    },
-    searchResultName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginBottom: 4,
-    },
-    searchResultEmail: {
-        fontSize: 14,
-        color: '#666',
-    },
-    searchActionButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        minWidth: 110,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    searchActionButtonText: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    loader: {
-        marginTop: 16,
-    },
-    requestsContainer: {
-        flex: 1,
-        backgroundColor: '#FFF',
-    },
-    requestsContentContainer: {
-        padding: 16,
-    },
-    requestsSection: {
-        marginBottom: 24,
-    },
-    requestCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    requestImage: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-    },
-    requestInfo: {
-        flex: 1,
-        marginLeft: 16,
-    },
-    requestName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginBottom: 8,
-    },
-    requestButtons: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    requestButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-    },
-    emptyRequestsContainer: {
-        alignItems: 'center',
-        padding: 32,
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-    },
-    emptyRequestsText: {
-        fontSize: 16,
-        color: '#666',
-        marginTop: 12,
-        textAlign: 'center',
-    },
-    sharingOptionsContainer: {
-        padding: 16,
-        backgroundColor: '#FFF',
-        marginHorizontal: 16,
-        marginTop: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginBottom: 12,
-    },
-    friendChips: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginBottom: 16,
-    },
-    friendChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F6FA',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        marginRight: 8,
-        marginBottom: 8,
-    },
-    selectedChip: {
-        backgroundColor: '#E8F5E9',
-        borderColor: '#4CAF50',
-        borderWidth: 1,
-    },
-    chipImage: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        marginRight: 8,
-    },
-    chipText: {
-        color: '#2C3E50',
-        fontSize: 14,
-    },
-    sharingButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    sharingButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 12,
-        borderRadius: 12,
-        marginHorizontal: 4,
-    },
-    instantShareButton: {
-        backgroundColor: '#4CAF50',
-    },
-    liveShareButton: {
-        backgroundColor: '#2196F3',
-    },
-    sharingButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-        marginLeft: 8,
-    },
-    activeSharesSection: {
-        padding: 16,
-        backgroundColor: '#FFF',
-        marginHorizontal: 16,
-        marginTop: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
-    },
-    shareCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    shareHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    friendAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
-    shareInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    username: {
-        fontSize: 14,
-        color: '#7F8C8D',
-    },
-    shareDetails: {
-        marginTop: 8,
-    },
-    shareTypeContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    shareTypeText: {
-        marginLeft: 4,
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    locationInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    locationText: {
-        marginLeft: 4,
-        fontSize: 14,
-        color: '#666',
-    },
-    timeInfo: {
-        marginTop: 8,
-    },
-    timeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    timeText: {
-        marginLeft: 8,
-        fontSize: 12,
-        color: '#666',
-    },
-    stopShareButton: {
-        padding: 8,
-    },
-    sharesContainer: {
-        flex: 1,
-    },
-    sharesContentContainer: {
-        padding: 16,
-        paddingBottom: 100, // Alt kısımda ekstra boşluk
-    },
-    sharesSection: {
-        marginBottom: 24,
-    },
-    quickShareSection: {
-        marginBottom: 24, // Alt kısımda ek boşluk
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 32,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#666',
-    },
-    shareName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-    },
-    shareType: {
-        fontSize: 14,
-        color: '#7F8C8D',
-    },
-    emptyState: {
-        alignItems: 'center',
-        padding: 24,
-    },
-    emptyStateText: {
-        fontSize: 16,
-        color: '#666',
-        textAlign: 'center',
-    },
-    emptySharesContainer: {
-        alignItems: 'center',
-        padding: 32,
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        marginHorizontal: 16,
-        marginTop: 8,
-    },
-    emptySharesText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginTop: 12,
-    },
-    emptySharesSubText: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
-        textAlign: 'center',
-    },
-    quickShareCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 3,
-    },
-    quickShareIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    quickShareInfo: {
-        flex: 1,
-    },
-    quickShareTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginBottom: 4,
-    },
-    quickShareDescription: {
-        fontSize: 13,
-        color: '#666',
-    },
-    friendSelectContainer: {
-        marginVertical: 16,
-    },
-    subsectionTitle: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#666',
-        marginBottom: 12,
-    },
-    friendSelectItem: {
-        alignItems: 'center',
-        marginRight: 16,
-        opacity: 0.7,
-    },
-    selectedFriendItem: {
-        opacity: 1,
-    },
-    friendSelectImage: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        marginBottom: 8,
-        borderWidth: 2,
-        borderColor: 'transparent',
-    },
-    friendSelectName: {
-        fontSize: 14,
-        color: '#2C3E50',
-        textAlign: 'center',
-    },
-    shareOptionsContainer: {
-        marginTop: 16,
-    },
-    shareOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    shareOptionInfo: {
-        marginLeft: 16,
-    },
-    shareOptionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-    },
-    shareOptionDescription: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
-    },
-    sharesSection: {
-        marginBottom: 24,
-    },
-    shareTypeSection: {
-        marginBottom: 16,
-    },
-    shareTypeTitle: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#666',
-        marginBottom: 12,
-        marginTop: 16,
-    },
-    viewLocationButton: {
-        padding: 8,
-    },
-    noSharesText: {
-        fontSize: 16,
-        color: '#666',
-        textAlign: 'center',
-        marginTop: 12,
-    },
-    addFriendsSection: {
-        marginTop: 24,
-    },
-    addOptionCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    addOptionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#F5F6FA',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    addOptionInfo: {
-        flex: 1,
-    },
-    addOptionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2C3E50',
-        marginBottom: 4,
-    },
-    addOptionDescription: {
-        fontSize: 14,
-        color: '#666',
-    },
-    tipText: {
-        fontSize: 13,
-        color: '#666',
-        fontStyle: 'italic',
-        textAlign: 'center',
-        marginTop: 8,
-        marginBottom: 16,
-    },
-    cancelButton: {
-        backgroundColor: '#FFF',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#FF3B30',
-    },
-    cancelButtonText: {
-        color: '#FF3B30',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    requestUsername: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 8,
-    },
-    welcomeText: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: '#666666', // Daha soluk bir gri renk
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    tabContent: {
-        flex: 1,
-    },
-    friendsList: {
-        padding: 16,
-    },
-    addButton: {
-        backgroundColor: '#2196F3',
-    },
-    pendingButton: {
-        backgroundColor: '#FFA000',
-    },
-    friendButton: {
-        backgroundColor: '#4CAF50',
-    },
-    acceptButton: {
-        backgroundColor: '#4CAF50',
-    },
-});
 
 export default FriendsPage;

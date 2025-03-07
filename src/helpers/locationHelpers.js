@@ -128,43 +128,44 @@ const normalizeLocation = (location) => {
 };
 
 // Anlık konum paylaşımı
-export const shareInstantLocation = async (userId, friendId) => {
+export const shareInstantLocation = async (userId, friendId, locationInfo, userInfo) => {
     try {
-        // Aktif paylaşım kontrolü
-        const hasActiveShare = await checkActiveShare(userId, friendId, 'instant');
-        if (hasActiveShare) {
-            return {
-                success: false,
-                error: 'Bu arkadaşınızla zaten aktif bir anlık konum paylaşımınız bulunmakta'
-            };
-        }
-
-        const location = await getCurrentLocation();
-        const normalizedLocation = normalizeLocation(location);
-
-        // Paylaşımı oluştur
+        // 1. Firestore'da paylaşım kaydı oluştur
         const shareRef = await addDoc(collection(db, `users/${userId}/shares`), {
             type: 'instant',
             friendId: friendId,
             status: 'active',
             startTime: serverTimestamp(),
             lastUpdate: serverTimestamp(),
-            location: normalizedLocation
+            locationInfo: locationInfo,
+            // Konum bilgilerini doğrudan ekle
+            latitude: userInfo.location.latitude,
+            longitude: userInfo.location.longitude,
+            friendName: userInfo.name,
+            friendUsername: userInfo.username,
+            friendPhoto: userInfo.profilePicture
         });
 
-        // Karşı tarafa paylaşımı ekle
+        // 2. Karşı tarafa paylaşımı ekle
         await addDoc(collection(db, `users/${friendId}/receivedShares`), {
             type: 'instant',
             fromUserId: userId,
+            shareId: shareRef.id,
             status: 'active',
             startTime: serverTimestamp(),
             lastUpdate: serverTimestamp(),
-            location: normalizedLocation
+            locationInfo: locationInfo,
+            // Konum bilgilerini doğrudan ekle
+            latitude: userInfo.location.latitude,
+            longitude: userInfo.location.longitude,
+            senderName: userInfo.senderName,
+            senderUsername: userInfo.senderUsername,
+            senderPhoto: userInfo.senderPhoto
         });
 
         return { success: true, shareId: shareRef.id };
     } catch (error) {
-        console.error('Konum paylaşım hatası:', error);
+        console.error('Anlık konum paylaşım hatası:', error);
         return { success: false, error: error.message };
     }
 };
@@ -464,6 +465,90 @@ export const getReceivedShares = async (userId) => {
     } catch (error) {
         console.error('Gelen paylaşımları getirme hatası:', error);
         return [];
+    }
+};
+
+// Koordinatlardan adres bilgisi alma fonksiyonu
+export const getAddressFromCoordinates = async (latitude, longitude) => {
+    try {
+        const response = await axios.get(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&language=tr&key=AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8`
+        );
+
+        if (response.data.status !== 'OK') {
+            throw new Error(`Geocoding API error: ${response.data.status}`);
+        }
+
+        const result = response.data.results[0];
+        if (!result) {
+            throw new Error('No results found');
+        }
+
+        // Adres bileşenlerini ayıkla
+        const addressComponents = result.address_components;
+        let district = '';
+        let city = '';
+        let country = '';
+        let street = '';
+        let streetNumber = '';
+        let postalCode = '';
+
+        for (const component of addressComponents) {
+            const types = component.types;
+
+            if (types.includes('administrative_area_level_2')) {
+                district = component.long_name;
+            } else if (types.includes('administrative_area_level_1')) {
+                city = component.long_name;
+            } else if (types.includes('country')) {
+                country = component.long_name;
+            } else if (types.includes('route')) {
+                street = component.long_name;
+            } else if (types.includes('street_number')) {
+                streetNumber = component.long_name;
+            } else if (types.includes('postal_code')) {
+                postalCode = component.long_name;
+            }
+
+            // İlçe bulunamadıysa alternatif olarak sublocality'i kullan
+            if (!district && (types.includes('sublocality_level_1') || types.includes('sublocality'))) {
+                district = component.long_name;
+            }
+
+            // İlçe hala bulunamadıysa neighborhood'u kullan
+            if (!district && types.includes('neighborhood')) {
+                district = component.long_name;
+            }
+        }
+
+        // Tam adres
+        const formattedAddress = result.formatted_address;
+
+        return {
+            formattedAddress,
+            district,
+            city,
+            country,
+            street,
+            streetNumber,
+            postalCode,
+            coordinates: {
+                latitude,
+                longitude
+            }
+        };
+    } catch (error) {
+        console.error('Adres bilgisi alınırken hata:', error);
+        return {
+            formattedAddress: 'Adres bilgisi alınamadı',
+            district: '',
+            city: '',
+            country: '',
+            coordinates: {
+                latitude,
+                longitude
+            }
+        };
     }
 };
 

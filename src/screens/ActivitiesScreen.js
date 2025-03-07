@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     ScrollView,
@@ -10,7 +10,8 @@ import {
     Platform,
     TouchableOpacity,
     Animated,
-    ActivityIndicator
+    ActivityIndicator,
+    FlatList
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import Stories from '../components/Stories';
@@ -26,8 +27,12 @@ import NotificationItem from '../components/NotificationItem';
 import FastImage from 'react-native-fast-image';
 import { fetchPosts, toggleLikePost, addComment, deleteComment } from '../services/postService';
 import { getAuth } from 'firebase/auth';
+import { SafeAreaProvider, SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
 
-const ActivitiesScreen = ({ navigation }) => {
+// Activity bileşenini performans için memoize edelim
+const MemoizedActivity = React.memo(Activity);
+
+const ActivitiesScreen = ({ navigation, route }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [friends, setFriends] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -46,6 +51,11 @@ const ActivitiesScreen = ({ navigation }) => {
     const userId = useSelector(state => state.auth.user?.id);
 
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
+    // Pagination için yeni state'ler
+    const [page, setPage] = useState(1);
+    const [hasMorePosts, setHasMorePosts] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
 
     useEffect(() => {
         const initializeData = async () => {
@@ -100,33 +110,89 @@ const ActivitiesScreen = ({ navigation }) => {
         loadPosts();
     }, []);
 
-    const loadPosts = async () => {
+    // useCallback ile fonksiyonları memoize edelim
+    const loadPosts = useCallback(async (refresh = false) => {
         try {
-            setLoading(true);
+            if (refresh) {
+                setLoading(true);
+                setPage(1);
+                setHasMorePosts(true);
+            } else if (loadingMore || !hasMorePosts) {
+                return;
+            } else {
+                setLoadingMore(true);
+            }
+
             if (!currentUser?.uid) return;
 
-            const fetchedPosts = await fetchPosts(currentUser.uid);
-            setPosts(fetchedPosts);
+            // Sayfalama parametreleri ekleyelim
+            const pageSize = 10;
+            const fetchedPosts = await fetchPosts(currentUser.uid, page, pageSize);
+
+            // Eğer sayfa yenileniyorsa, eski verileri temizle
+            if (refresh || page === 1) {
+                setPosts(fetchedPosts);
+            } else {
+                // Yeni verileri mevcut verilere ekle
+                setPosts(prevPosts => {
+                    // Yinelenen gönderileri filtrele
+                    const existingIds = new Set(prevPosts.map(p => p.id));
+                    const newPosts = fetchedPosts.filter(p => !existingIds.has(p.id));
+                    return [...prevPosts, ...newPosts];
+                });
+            }
+
+            // Daha fazla gönderi var mı kontrolü
+            setHasMorePosts(fetchedPosts.length === pageSize);
+
+            // Bir sonraki sayfa için page değerini artır
+            if (fetchedPosts.length > 0 && !refresh) {
+                setPage(prevPage => prevPage + 1);
+            }
         } catch (error) {
             console.error('Gönderiler yüklenirken hata:', error);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
-    };
+    }, [currentUser?.uid, page, hasMorePosts, loadingMore]);
 
-    const handleLikePress = async (postId) => {
-        if (!currentUser?.uid) {
-            return;
+    // Daha fazla veri yükleme fonksiyonu
+    const handleLoadMore = useCallback(() => {
+        if (!loading && !loadingMore && hasMorePosts) {
+            loadPosts(false);
         }
+    }, [loading, loadingMore, hasMorePosts, loadPosts]);
+
+    // Yenileme fonksiyonu
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                fetchFriends(),
+                loadPosts(true)
+            ]);
+
+            if (userId && activeTab === 'notifications') {
+                await dispatch(fetchNotifications(userId));
+            }
+        } catch (error) {
+            console.error('Yenileme hatası:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [activeTab, userId, dispatch, fetchFriends, loadPosts]);
+
+    // Beğeni işlemi
+    const handleLikePress = useCallback(async (postId) => {
+        if (!currentUser?.uid) return;
 
         try {
             const isLiked = await toggleLikePost(postId, currentUser.uid);
             setPosts(currentPosts =>
                 currentPosts.map(post => {
                     if (post.id === postId) {
-                        // Mevcut beğeni sayısını al
                         const currentLikes = post.stats?.likes || 0;
-                        // Beğeni durumuna göre sayıyı güncelle (0'dan küçük olamaz)
                         const newLikes = Math.max(0, currentLikes + (isLiked ? 1 : -1));
 
                         return {
@@ -146,26 +212,19 @@ const ActivitiesScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Beğeni hatası:', error);
         }
-    };
+    }, [currentUser?.uid]);
 
-    const handleCommentSubmit = async (postId, comment, replyToId = null) => {
-        // Boş yorum kontrolü
-        if (!comment || comment.trim() === '') {
-            return;
-        }
-
-        // İşlem devam ederken yeni yorum eklemeyi engelle
-        if (isSubmittingComment) {
+    // Yorum işleme
+    const handleCommentSubmit = useCallback(async (postId, comment, replyToId = null) => {
+        if (!comment || comment.trim() === '' || isSubmittingComment || !currentUser?.uid) {
             return;
         }
 
         try {
-            setIsSubmittingComment(true); // İşlem başladı
+            setIsSubmittingComment(true);
 
             if (comment === 'delete') {
-                // Yorum silme işlemi
                 await deleteComment(postId, replyToId, currentUser.uid);
-                // Yorumları güncelle
                 setPosts(currentPosts =>
                     currentPosts.map(post => {
                         if (post.id === postId) {
@@ -174,7 +233,7 @@ const ActivitiesScreen = ({ navigation }) => {
                                 comments: post.comments.filter(c => c.id !== replyToId),
                                 stats: {
                                     ...post.stats,
-                                    comments: (post.stats?.comments || 1) - 1
+                                    comments: Math.max(0, (post.stats?.comments || 1) - 1)
                                 }
                             };
                         }
@@ -182,13 +241,11 @@ const ActivitiesScreen = ({ navigation }) => {
                     })
                 );
             } else {
-                // Normal yorum ekleme işlemi
                 const newComment = await addComment(postId, currentUser.uid, comment, replyToId);
                 setPosts(currentPosts =>
                     currentPosts.map(post => {
                         if (post.id === postId) {
                             if (replyToId) {
-                                // Yanıt ekleme durumu
                                 const updatedComments = post.comments.map(c => {
                                     if (c.id === replyToId) {
                                         return {
@@ -207,7 +264,6 @@ const ActivitiesScreen = ({ navigation }) => {
                                     }
                                 };
                             } else {
-                                // Yeni yorum ekleme durumu
                                 return {
                                     ...post,
                                     comments: [...(post.comments || []), newComment],
@@ -225,8 +281,109 @@ const ActivitiesScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Yorum işlemi hatası:', error);
         } finally {
-            setIsSubmittingComment(false); // İşlem bitti
+            setIsSubmittingComment(false);
         }
+    }, [currentUser?.uid, isSubmittingComment]);
+
+    // Aktiviteler listesini render eden fonksiyon
+    const renderActivities = () => (
+        <FlatList
+            data={posts}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+                <MemoizedActivity
+                    activity={item}
+                    onLikePress={() => handleLikePress(item.id)}
+                    onCommentPress={(comment, replyToId) => handleCommentSubmit(item.id, comment, replyToId)}
+                    isLiked={item.likedBy?.includes(currentUser?.uid)}
+                    currentUserId={currentUser?.uid}
+                    navigation={navigation}
+                />
+            )}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#2196F3']}
+                    tintColor="#2196F3"
+                />
+            }
+            ListFooterComponent={() => (
+                <View>
+                    {loadingMore && hasMorePosts ? (
+                        <View style={styles.footerLoader}>
+                            <ActivityIndicator size="small" color="#2196F3" />
+                        </View>
+                    ) : null}
+                    <View style={styles.bottomSpacer} />
+                </View>
+            )}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={5}
+            windowSize={10}
+            initialNumToRender={3}
+            contentContainerStyle={styles.flatListContent}
+            ListHeaderComponent={() => (
+                <>
+                    <Stories friends={friends} navigation={navigation} />
+                    <View style={styles.separator} />
+                </>
+            )}
+        />
+    );
+
+    // Bildirimler listesini render eden fonksiyon
+    const renderNotifications = () => {
+        if (notificationsLoading && !refreshing) {
+            return (
+                <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color="#25D220" />
+                </View>
+            );
+        }
+
+        if (!notifications || notifications.length === 0) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                        Henüz bildiriminiz bulunmuyor
+                    </Text>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={notifications}
+                keyExtractor={item => item.id}
+                renderItem={({ item }) => (
+                    <NotificationItem
+                        notification={{
+                            ...item,
+                            title: item.title || 'Yeni Bildirim',
+                            body: item.body || '',
+                            type: item.type || 'message'
+                        }}
+                        onPress={() => handleNotificationPress(item)}
+                    />
+                )}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={['#2196F3']}
+                        tintColor="#2196F3"
+                    />
+                }
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                initialNumToRender={7}
+                contentContainerStyle={styles.flatListContent}
+                ListFooterComponent={() => <View style={styles.bottomSpacer} />}
+            />
+        );
     };
 
     const fetchFriends = async () => {
@@ -240,20 +397,6 @@ const ActivitiesScreen = ({ navigation }) => {
             console.error('Arkadaşları getirme hatası:', error);
         }
     };
-
-    const onRefresh = React.useCallback(async () => {
-        setRefreshing(true);
-        try {
-            await fetchFriends();
-            if (userId && activeTab === 'notifications') {
-                await dispatch(fetchNotifications(userId));
-            }
-        } catch (error) {
-            console.error('Yenileme hatası:', error);
-        } finally {
-            setRefreshing(false);
-        }
-    }, [activeTab, userId, dispatch]);
 
     // Tab değiştiğinde bildirimleri yükle
     useEffect(() => {
@@ -298,20 +441,6 @@ const ActivitiesScreen = ({ navigation }) => {
                 break;
             default:
         }
-    };
-
-    const handlePostUpdate = (updatedPost) => {
-        setPosts(currentPosts =>
-            currentPosts.map(post =>
-                post.id === updatedPost.id ? updatedPost : post
-            )
-        );
-    };
-
-    const handlePostDelete = (postId) => {
-        setPosts(currentPosts =>
-            currentPosts.filter(post => post.id !== postId)
-        );
     };
 
     const renderHeader = () => (
@@ -371,80 +500,32 @@ const ActivitiesScreen = ({ navigation }) => {
         </View>
     );
 
+    // Route params'ı dinle
+    useEffect(() => {
+        if (route.params?.refresh) {
+            loadPosts();
+            // Paramı temizle
+            navigation.setParams({ refresh: undefined });
+        }
+    }, [route.params?.refresh]);
+
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <PanGestureHandler
                 onHandlerStateChange={onGestureEvent}
                 activeOffsetX={[-20, 20]}
             >
-                <SafeAreaView style={styles.container}>
-                    <StatusBar barStyle="dark-content" />
+                <SafeAreaViewRN
+                    style={styles.container}
+                    edges={['top']}
+                >
+                    <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
                     {renderHeader()}
 
-                    <ScrollView
-                        style={styles.content}
-                        contentContainerStyle={styles.scrollContent}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={onRefresh}
-                                colors={['#2196F3']}
-                                tintColor="#2196F3"
-                            />
-                        }
-                    >
-                        {activeTab === 'activities' ? (
-                            <>
-                                <Stories friends={friends} navigation={navigation} />
-                                <View style={styles.separator} />
-                                {/* Aktiviteler Listesi */}
-                                {posts.map(post => (
-                                    <Activity
-                                        key={post.id}
-                                        activity={post}
-                                        onLikePress={() => handleLikePress(post.id)}
-                                        onCommentPress={(comment, replyToId) => {
-                                            handleCommentSubmit(post.id, comment, replyToId);
-                                        }}
-                                        isLiked={post.likedBy?.includes(currentUser?.uid)}
-                                        currentUserId={currentUser?.uid}
-                                        onUpdate={handlePostUpdate}
-                                        onDelete={handlePostDelete}
-                                        navigation={navigation}
-                                    />
-                                ))}
-                            </>
-                        ) : (
-                            <>
-                                {notificationsLoading ? (
-                                    <View style={styles.centerContainer}>
-                                        <ActivityIndicator size="large" color="#25D220" />
-                                    </View>
-                                ) : notifications && notifications.length > 0 ? (
-                                    notifications.map(notification => (
-                                        <NotificationItem
-                                            key={notification.id}
-                                            notification={{
-                                                ...notification,
-                                                title: notification.title || 'Yeni Bildirim',
-                                                body: notification.body || '',
-                                                type: notification.type || 'message'
-                                            }}
-                                            onPress={() => handleNotificationPress(notification)}
-                                        />
-                                    ))
-                                ) : (
-                                    <View style={styles.emptyContainer}>
-                                        <Text style={styles.emptyText}>
-                                            Henüz bildiriminiz bulunmuyor
-                                        </Text>
-                                    </View>
-                                )}
-                            </>
-                        )}
-                    </ScrollView>
-                </SafeAreaView>
+                    {/* ScrollView yerine içerik tabına göre değişen listeler */}
+                    {activeTab === 'activities' ? renderActivities() : renderNotifications()}
+                </SafeAreaViewRN>
             </PanGestureHandler>
         </GestureHandlerRootView>
     );
@@ -460,7 +541,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
         paddingBottom: 10,
         borderBottomWidth: 0.5,
         borderBottomColor: '#DBDBDB',
@@ -650,6 +730,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
         fontWeight: '500',
+    },
+    footerLoader: {
+        paddingVertical: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    flatListContent: {
+        paddingBottom: 20,
+    },
+    bottomSpacer: {
+        height: 80,
     },
 });
 

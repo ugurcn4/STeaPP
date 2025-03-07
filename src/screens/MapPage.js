@@ -1,25 +1,28 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal } from 'react-native';
-import MapView, { Polyline } from 'react-native-maps';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable } from 'react-native';
+import MapView, { Polyline, Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { collection, addDoc, onSnapshot } from 'firebase/firestore';
+import {
+    collection,
+    addDoc,
+    onSnapshot,
+    getDoc,
+    updateDoc,
+    serverTimestamp,
+    query,
+    getDocs,
+    where,
+    doc as firestoreDoc
+} from 'firebase/firestore';
 import { onAuthStateChanged, getAuth } from 'firebase/auth';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
-
-import {
-    trackLiveLocations,
-    listenToShares,
-    listenToSharedLocations,
-} from '../helpers/firebaseHelpers';
 import { fetchFriends } from './FriendsPage';
 import { haversine } from '../helpers/locationUtils';
 import {
     shouldCollectPoint,
-    TRACKING_CONSTANTS,
     GPS_ACCURACY,
     MOVEMENT_CONSTANTS,
-    calculateSpeed,
     isGPSStable,
     evaluateGPSQuality,
     isGPSUsable,
@@ -27,6 +30,10 @@ import {
     calculateBearing
 } from '../helpers/pathTracking';
 import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
+import FastImage from 'react-native-fast-image';
+import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
+import { ref, set, remove, get, onValue, off } from 'firebase/database';
+import { rtdb } from '../../firebaseConfig';
 
 // Yol renk ve stilleri
 const PATH_STYLES = {
@@ -38,12 +45,42 @@ const PATH_STYLES = {
     width: 6 // Direkt kalınlık değeri
 };
 
-const MapPage = ({ navigation }) => {
+const CustomMarker = ({ photo, name }) => {
+    return (
+        <View>
+            <View style={styles.markerContainer}>
+                {photo ? (
+                    <FastImage
+                        source={{
+                            uri: photo,
+                            priority: FastImage.priority.normal,
+                            cache: FastImage.cacheControl.immutable
+                        }}
+                        style={styles.markerImage}
+                        resizeMode={FastImage.resizeMode.cover}
+                    />
+                ) : (
+                    <View style={styles.markerDefault}>
+                        <Text style={styles.markerInitial}>
+                            {name?.charAt(0) || '?'}
+                        </Text>
+                    </View>
+                )}
+            </View>
+            {/* Üçgen işaretçi */}
+            <View style={styles.markerTriangle} />
+        </View>
+    );
+};
+
+const MapPage = ({ navigation, route }) => {
     const [MapType, setMapType] = useState('standard');
     const [location, setLocation] = useState(null);
     const [userId, setUserId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [sharedLocations, setSharedLocations] = useState([]);
+    const [receivedLocations, setReceivedLocations] = useState([]);
+    const [receivedInstantLocations, setReceivedInstantLocations] = useState([]);
     const [friendPickerVisible, setFriendPickerVisible] = useState(false);
     const [friends, setFriends] = useState([]);
     const mapRef = useRef(null);
@@ -74,6 +111,10 @@ const MapPage = ({ navigation }) => {
     const [isMoving, setIsMoving] = useState(true);
     const [lastLocations, setLastLocations] = useState([]);
     const [locationSubscription, setLocationSubscription] = useState(null);
+    const [selectedMarker, setSelectedMarker] = useState(null);
+    const [selectedLocation, setSelectedLocation] = useState(null);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [activeLocationShares, setActiveLocationShares] = useState({});
 
     useEffect(() => {
         let locationSubscription;
@@ -90,6 +131,7 @@ const MapPage = ({ navigation }) => {
 
                 // Kalibrasyon başlangıç zamanını ayarla
                 setCalibrationStartTime(Date.now());
+                setFollowsUserLocation(false); // Başlangıçta false olarak ayarlayalım
 
                 const initialLocation = await Location.getCurrentPositionAsync({});
                 setLocation(initialLocation);
@@ -104,7 +146,17 @@ const MapPage = ({ navigation }) => {
                     (newLocation) => {
                         setLocation(newLocation);
 
-                        // Son konumları güncelle
+                        // Sadece followsUserLocation true ise konumu takip et
+                        if (followsUserLocation && mapRef.current) {
+                            mapRef.current.animateToRegion({
+                                latitude: newLocation.coords.latitude,
+                                longitude: newLocation.coords.longitude,
+                                latitudeDelta: 0.005,
+                                longitudeDelta: 0.005,
+                            }, 1000);
+                        }
+
+                        // GPS kalibrasyonu ve diğer işlemler followsUserLocation'dan bağımsız devam etsin
                         setLastLocations(prev => {
                             const newLocations = [...prev, {
                                 latitude: newLocation.coords.latitude,
@@ -114,24 +166,20 @@ const MapPage = ({ navigation }) => {
                             return newLocations;
                         });
 
-                        // Accuracy değerini her zaman geçmişe ekle
                         setAccuracyHistory(prev => {
                             const newHistory = [...prev, newLocation.coords.accuracy];
                             return newHistory.slice(-GPS_ACCURACY.SAMPLE_SIZE);
                         });
 
-                        // GPS kalitesini her zaman değerlendir
                         const quality = evaluateGPSQuality(newLocation.coords.accuracy);
                         setGpsQuality(quality);
 
-                        // Kalibrasyon durumunu her zaman kontrol et
+                        // GPS kalibrasyonunu followsUserLocation'dan bağımsız yap
                         if (!isGPSCalibrated) {
                             const timeSinceStart = Date.now() - calibrationStartTime;
                             const stable = isGPSStable(accuracyHistory);
 
-                            const isCalibrated = timeSinceStart >= GPS_ACCURACY.CALIBRATION_TIME && stable;
-
-                            if (isCalibrated) {
+                            if (timeSinceStart >= GPS_ACCURACY.CALIBRATION_TIME && stable) {
                                 setIsGPSCalibrated(true);
                             }
                         }
@@ -164,9 +212,8 @@ const MapPage = ({ navigation }) => {
 
                 setLocationSubscription(subscription);
             } catch (error) {
-                console.error('Konum başlatılırken hata:', error);
+                console.error('Konum takibi başlatılamadı:', error);
                 setLoading(false);
-                Alert.alert('Hata', 'Konum alınırken bir hata oluştu');
             }
         };
 
@@ -203,29 +250,90 @@ const MapPage = ({ navigation }) => {
         return () => unsubscribe();
     }, [userId]);
 
-    // Paylaşımları dinlemek için ayrı bir useEffect
+    // Konum dinleme useEffect'i
     useEffect(() => {
         if (!userId) return;
 
-        // Paylaşımları dinle
-        const unsubscribe = listenToShares(userId, (type, locations) => {
-            if (type === 'active') {
-                setActiveShares(locations);
-            } else if (type === 'shared') {
-                setSharedWithMe(locations);
-            }
-        });
+        // 1. Firestore'dan gelen paylaşımları dinle
+        const receivedSharesRef = collection(db, `users/${userId}/receivedShares`);
+        const activeSharesQuery = query(receivedSharesRef, where('status', '==', 'active'));
 
-        // Canlı konumları dinle
-        const unsubscribeLive = trackLiveLocations(userId, (locations) => {
-            if (Array.isArray(locations)) {
-                setLiveLocations(locations);
+        const unsubscribe = onSnapshot(activeSharesQuery, async (snapshot) => {
+            try {
+                const shares = await Promise.all(
+                    snapshot.docs.map(async (doc) => {
+                        const shareData = doc.data();
+
+                        // Paylaşan kullanıcının bilgilerini al
+                        const senderDoc = await getDoc(firestoreDoc(db, 'users', shareData.fromUserId));
+                        const senderData = senderDoc.data();
+
+                        // Anlık konum paylaşımları için konum bilgisini doğrudan Firestore'dan al
+                        let locationData = null;
+                        if (shareData.type === 'instant' && shareData.location) {
+                            // Eğer konum bilgisi doğrudan paylaşımda varsa kullan
+                            locationData = shareData.location;
+                        }
+
+                        return {
+                            id: doc.id,
+                            shareId: shareData.shareId || doc.id,
+                            type: shareData.type,
+                            senderId: shareData.fromUserId,
+                            senderName: shareData.senderName || senderData?.informations?.name || 'İsimsiz',
+                            senderUsername: shareData.senderUsername || senderData?.informations?.username,
+                            senderPhoto: shareData.senderPhoto || senderData?.profilePicture,
+                            startTime: shareData.startTime,
+                            lastUpdate: shareData.lastUpdate,
+                            status: shareData.status,
+                            locationInfo: shareData.locationInfo,
+                            // Anlık konum için konum bilgisini ekle
+                            location: locationData || (shareData.type === 'instant' ? {
+                                latitude: shareData.latitude,
+                                longitude: shareData.longitude
+                            } : null)
+                        };
+                    })
+                );
+
+                // Anlık ve canlı konumları ayır
+                const instantLocations = shares.filter(share =>
+                    share.type === 'instant' && share.location
+                );
+                const liveLocations = shares.filter(share => share.type === 'live');
+
+                // Anlık konumları doğrudan set et
+                setReceivedInstantLocations(instantLocations);
+
+                // Canlı konumlar için RTDB dinleyicilerini ayarla
+                liveLocations.forEach(share => {
+                    const locationRef = ref(rtdb, `locations/${share.shareId}`);
+                    onValue(locationRef, (snapshot) => {
+                        const locationData = snapshot.val();
+                        if (locationData) {
+                            setReceivedLocations(prev => {
+                                const filtered = prev.filter(loc => loc.id !== share.id);
+                                return [...filtered, { ...share, location: locationData }];
+                            });
+                        }
+                    });
+                });
+
+                // Canlı konumları başlangıç değerleriyle set et
+                setReceivedLocations(liveLocations);
+
+            } catch (error) {
+                console.error('Paylaşımları dinlerken hata:', error);
             }
         });
 
         return () => {
-            if (unsubscribe) unsubscribe();
-            if (unsubscribeLive) unsubscribeLive();
+            unsubscribe();
+            // RTDB dinleyicilerini temizle
+            receivedLocations.forEach(share => {
+                const locationRef = ref(rtdb, `locations/${share.shareId}`);
+                off(locationRef);
+            });
         };
     }, [userId]);
 
@@ -286,24 +394,6 @@ const MapPage = ({ navigation }) => {
             loadFriends();
         }
     }, [friendPickerVisible, userId]);
-
-    useEffect(() => {
-        if (!userId) return;
-
-        // Paylaşılan konumları dinle
-        const unsubscribe = listenToSharedLocations(userId, (type, locations) => {
-            if (type === 'live') {
-                setLiveLocations(locations);
-            } else {
-                setSharedLocations(locations);
-            }
-        });
-
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
-    }, [userId]);
-
 
     const savePath = useCallback(async (points, currentUserId) => {
         if (!currentUserId || points.length < 2) return;
@@ -452,7 +542,6 @@ const MapPage = ({ navigation }) => {
         });
     }, [savePath, pathCoordinates, gpsQuality, accuracyHistory]);
 
-
     const toggle3DMode = () => {
         setIs3DMode(!is3DMode);
         if (mapRef.current) {
@@ -486,6 +575,132 @@ const MapPage = ({ navigation }) => {
     const closePathDetails = () => {
         setShowPathDetails(false);
         setSelectedPath(null);
+    };
+
+    const handleMarkerPress = (location) => {
+        setSelectedLocation(location);
+        setModalVisible(true);
+    };
+
+    const closeModal = () => {
+        setModalVisible(false);
+        setSelectedLocation(null);
+    };
+
+    useEffect(() => {
+        const shareData = route?.params?.shareData;
+        const initialRegion = route?.params?.initialRegion;
+
+        if (shareData && initialRegion) {
+            // Haritayı paylaşılan konuma odakla
+            mapRef.current?.animateToRegion(initialRegion, 1000);
+
+            // Paylaşım türüne göre marker göster
+            if (shareData.type === 'received') {
+                setSelectedLocation({
+                    ...shareData.location,
+                    title: `${shareData.senderName}'in Konumu`,
+                    description: shareData.type === 'live' ? 'Canlı Konum' : 'Anlık Konum'
+                });
+            }
+        }
+    }, [route?.params]);
+
+    // Canlı konum paylaşımını başlat
+    const startLiveLocationShare = async (friendId) => {
+        try {
+            // 1. Firestore'da paylaşım kaydı oluştur (locationShares yerine users/{userId}/shares)
+            const shareRef = await addDoc(collection(db, `users/${userId}/shares`), {
+                type: 'live',
+                friendId: friendId,
+                status: 'active',
+                startTime: serverTimestamp(),
+                lastUpdate: serverTimestamp()
+            });
+
+            // 2. Karşı tarafa paylaşımı ekle
+            await addDoc(collection(db, `users/${friendId}/receivedShares`), {
+                type: 'live',
+                fromUserId: userId,
+                status: 'active',
+                startTime: serverTimestamp(),
+                lastUpdate: serverTimestamp()
+            });
+
+            // 3. RTDB'de başlangıç konumu oluştur
+            const locationRef = ref(rtdb, `locations/${shareRef.id}`);
+            await set(locationRef, {
+                latitude: location?.coords?.latitude,
+                longitude: location?.coords?.longitude,
+                accuracy: location?.coords?.accuracy,
+                heading: location?.coords?.heading,
+                speed: location?.coords?.speed,
+                timestamp: serverTimestamp()
+            });
+
+            // 4. Arka plan konum takibini başlat
+            const started = await startBackgroundLocationUpdates(userId);
+            if (!started) {
+                throw new Error('Arka plan konum takibi başlatılamadı');
+            }
+
+            setActiveLocationShares(prev => ({
+                ...prev,
+                [shareRef.id]: { friendId, type: 'live' }
+            }));
+
+            Alert.alert('Başarılı', 'Canlı konum paylaşımı başlatıldı');
+        } catch (error) {
+            console.error('Konum paylaşımı hatası:', error);
+            Alert.alert('Hata', 'Konum paylaşımı başlatılamadı');
+        }
+    };
+
+    // Konum paylaşımını durdur
+    const stopLiveLocationShare = async (shareId) => {
+        try {
+            // 1. Firestore'da paylaşımı yapan kullanıcının shares koleksiyonunu güncelle
+            await updateDoc(firestoreDoc(db, `users/${userId}/shares/${shareId}`), {
+                status: 'ended',
+                endTime: serverTimestamp()
+            });
+
+            // 2. Karşı tarafın receivedShares koleksiyonunu güncelle
+            const friendId = activeLocationShares[shareId].friendId;
+            const receivedSharesQuery = query(
+                collection(db, `users/${friendId}/receivedShares`),
+                where('fromUserId', '==', userId),
+                where('status', '==', 'active')
+            );
+            const querySnapshot = await getDocs(receivedSharesQuery);
+            querySnapshot.forEach(async (doc) => {
+                await updateDoc(doc.ref, {
+                    status: 'ended',
+                    endTime: serverTimestamp()
+                });
+            });
+
+            // 3. RTDB'den konum verilerini temizle
+            const locationRef = ref(rtdb, `locations/${shareId}`);
+            await remove(locationRef);
+
+            // 4. Aktif paylaşımları güncelle
+            setActiveLocationShares(prev => {
+                const newShares = { ...prev };
+                delete newShares[shareId];
+                return newShares;
+            });
+
+            // 5. Eğer başka aktif paylaşım yoksa arka plan takibi durdur
+            if (Object.keys(activeLocationShares).length === 0) {
+                await stopBackgroundLocationUpdates();
+            }
+
+            Alert.alert('Başarılı', 'Konum paylaşımı durduruldu');
+        } catch (error) {
+            console.error('Konum paylaşımı durdurma hatası:', error);
+            Alert.alert('Hata', 'Konum paylaşımı durdurulamadı');
+        }
     };
 
     if (loading) {
@@ -522,6 +737,41 @@ const MapPage = ({ navigation }) => {
                 scrollEnabled={true}
                 pitchEnabled={true}
             >
+                {/* Tüm konumlar için tek tip marker */}
+                {[...receivedInstantLocations, ...receivedLocations]
+                    .filter(share => {
+                        // Konum bilgilerini kontrol et
+                        if (share.location) {
+                            return typeof share.location.latitude === 'number' &&
+                                typeof share.location.longitude === 'number';
+                        } else if (share.latitude && share.longitude) {
+                            // Alternatif konum formatı
+                            return typeof share.latitude === 'number' &&
+                                typeof share.longitude === 'number';
+                        }
+                        return false;
+                    })
+                    .map((share) => {
+                        // Konum koordinatlarını belirle
+                        const coordinate = share.location ?
+                            { latitude: share.location.latitude, longitude: share.location.longitude } :
+                            { latitude: share.latitude, longitude: share.longitude };
+
+                        return (
+                            <Marker
+                                key={share.id}
+                                coordinate={coordinate}
+                                onPress={() => handleMarkerPress(share)}
+                            >
+                                <CustomMarker
+                                    photo={share.senderPhoto}
+                                    name={share.senderName}
+                                />
+                            </Marker>
+                        );
+                    })
+                }
+
                 {/* Kaydedilmiş yollar */}
                 {savedPaths.map((path, index) => (
                     <Polyline
@@ -664,86 +914,127 @@ const MapPage = ({ navigation }) => {
                 </View>
             </SafeAreaView>
 
-            {/* Path Details Modal */}
+            {/* Konum Detay Modalı */}
             <Modal
-                visible={showPathDetails}
-                transparent={true}
                 animationType="slide"
-                onRequestClose={closePathDetails}
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={closeModal}
             >
-                <TouchableOpacity
+                <Pressable
                     style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={closePathDetails}
+                    onPress={closeModal}
                 >
                     <View style={styles.modalContainer}>
                         <View style={styles.modalContent}>
+                            {/* Modal Handle */}
                             <View style={styles.modalHandle} />
 
-                            <View style={styles.modalHeader}>
-                                <View>
-                                    <Text style={styles.modalTitle}>Yol Detayları</Text>
-                                    <Text style={styles.modalSubtitle}>Bu yol hakkında detaylı bilgi</Text>
+                            {/* Kişi Bilgileri */}
+                            <View style={styles.userInfoContainer}>
+                                <View style={styles.userPhotoContainer}>
+                                    {selectedLocation?.senderPhoto ? (
+                                        <Image
+                                            source={{ uri: selectedLocation.senderPhoto }}
+                                            style={styles.userPhoto}
+                                        />
+                                    ) : (
+                                        <View style={styles.userPhotoDefault}>
+                                            <Text style={styles.userPhotoInitial}>
+                                                {selectedLocation?.senderName?.charAt(0) || '?'}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    <View style={[
+                                        styles.shareTypeIndicator,
+                                        selectedLocation?.type === 'instant' ? styles.instantType : styles.liveType
+                                    ]} />
                                 </View>
-                                <TouchableOpacity
-                                    style={styles.closeButton}
-                                    onPress={closePathDetails}
-                                >
-                                    <Ionicons name="close" size={24} color="#666" />
+                                <View style={styles.userInfo}>
+                                    <Text style={styles.userName}>{selectedLocation?.senderName || 'İsimsiz'}</Text>
+                                    <Text style={styles.userUsername}>@{selectedLocation?.senderUsername || 'kullanıcı'}</Text>
+                                    <View style={styles.locationInfoContainer}>
+                                        <Ionicons name="location" size={16} color="#666666" />
+                                        <Text style={styles.locationInfo}>
+                                            {selectedLocation?.locationInfo?.city}, {selectedLocation?.locationInfo?.district}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.shareTypeContainer}>
+                                        <Ionicons
+                                            name={selectedLocation?.type === 'instant' ? 'flash' : 'radio'}
+                                            size={16}
+                                            color={selectedLocation?.type === 'instant' ? '#FF9500' : '#30B0C7'}
+                                        />
+                                        <Text style={[
+                                            styles.shareType,
+                                            { color: selectedLocation?.type === 'instant' ? '#FF9500' : '#30B0C7' }
+                                        ]}>
+                                            {selectedLocation?.type === 'instant' ? 'Anlık Konum' : 'Canlı Konum'}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Hızlı Aksiyonlar */}
+                            <View style={styles.quickActions}>
+                                <TouchableOpacity style={styles.quickActionButton}>
+                                    <View style={[styles.actionIcon, { backgroundColor: '#E8F5E9' }]}>
+                                        <Ionicons name="person" size={24} color="#4CAF50" />
+                                    </View>
+                                    <Text style={styles.actionText}>Profil</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.quickActionButton}>
+                                    <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
+                                        <Ionicons name="navigate" size={24} color="#2196F3" />
+                                    </View>
+                                    <Text style={styles.actionText}>Yol Tarifi</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.quickActionButton}>
+                                    <View style={[styles.actionIcon, { backgroundColor: '#FFF3E0' }]}>
+                                        <Ionicons name="notifications" size={24} color="#FF9800" />
+                                    </View>
+                                    <Text style={styles.actionText}>Bildirim</Text>
                                 </TouchableOpacity>
                             </View>
 
-                            {selectedPath && (
-                                <View style={styles.pathDetails}>
-                                    <View style={styles.detailCard}>
-                                        <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9' }]}>
-                                            <Ionicons name="location" size={24} color="#4CAF50" />
-                                        </View>
-                                        <View style={styles.detailInfo}>
-                                            <Text style={styles.detailLabel}>Konum</Text>
-                                            <Text style={styles.detailText}>
-                                                {selectedPath.city}, {selectedPath.district}
-                                            </Text>
-                                        </View>
+                            {/* Konum Bilgileri */}
+                            <View style={styles.locationDetails}>
+                                <View style={styles.locationDetailItem}>
+                                    <Ionicons name="time-outline" size={20} color="#666666" />
+                                    <View style={styles.locationDetailText}>
+                                        <Text style={styles.detailLabel}>Son Güncelleme</Text>
+                                        <Text style={styles.detailValue}>5 dakika önce</Text>
                                     </View>
-
-                                    <View style={styles.detailCard}>
-                                        <View style={[styles.iconContainer, { backgroundColor: '#E3F2FD' }]}>
-                                            <Ionicons name="time" size={24} color="#2196F3" />
-                                        </View>
-                                        <View style={styles.detailInfo}>
-                                            <Text style={styles.detailLabel}>İlk Keşif Tarihi</Text>
-                                            <Text style={styles.detailText}>
-                                                {new Date(selectedPath.firstDiscovery.toDate()).toLocaleDateString('tr-TR', {
-                                                    year: 'numeric',
-                                                    month: 'long',
-                                                    day: 'numeric'
-                                                })}
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.detailCard}>
-                                        <View style={[styles.iconContainer, { backgroundColor: '#FFF3E0' }]}>
-                                            <Ionicons name="repeat" size={24} color="#FF9800" />
-                                        </View>
-                                        <View style={styles.detailInfo}>
-                                            <Text style={styles.detailLabel}>Ziyaret Sayısı</Text>
-                                            <Text style={styles.detailText}>
-                                                {selectedPath.visitCount} kez ziyaret edildi
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    <TouchableOpacity style={styles.actionButton}>
-                                        <Ionicons name="navigate" size={20} color="#FFF" />
-                                        <Text style={styles.actionButtonText}>Yolu Görüntüle</Text>
-                                    </TouchableOpacity>
                                 </View>
-                            )}
+
+                                <View style={styles.locationDetailItem}>
+                                    <Ionicons name="speedometer-outline" size={20} color="#666666" />
+                                    <View style={styles.locationDetailText}>
+                                        <Text style={styles.detailLabel}>Uzaklık</Text>
+                                        <Text style={styles.detailValue}>2.5 km</Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Aksiyon Butonları */}
+                            <View style={styles.actionButtons}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
+                                >
+                                    <Text style={styles.actionButtonText}>Konumumu Paylaş</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                                >
+                                    <Text style={styles.actionButtonText}>Paylaşımı Durdur</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
-                </TouchableOpacity>
+                </Pressable>
             </Modal>
         </View>
     );
@@ -906,114 +1197,169 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     modalContainer: {
-        backgroundColor: 'transparent',
-    },
-    modalContent: {
         backgroundColor: 'white',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
+        minHeight: '45%',
+        maxHeight: '90%',
+    },
+    modalContent: {
         padding: 20,
-        minHeight: 400,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: -4,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 10,
     },
     modalHandle: {
-        width: 40,
+        width: 36,
         height: 4,
         backgroundColor: '#E0E0E0',
         borderRadius: 2,
         alignSelf: 'center',
         marginBottom: 20,
     },
-    modalHeader: {
+    userInfoContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
         marginBottom: 24,
-    },
-    modalTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#1A1A1A',
-        marginBottom: 4,
-    },
-    modalSubtitle: {
-        fontSize: 14,
-        color: '#666',
-    },
-    closeButton: {
-        padding: 8,
-        marginTop: -8,
-        marginRight: -8,
-    },
-    pathDetails: {
-        gap: 16,
-    },
-    detailCard: {
-        flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
     },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
+    userPhotoContainer: {
+        position: 'relative',
         marginRight: 16,
     },
-    detailInfo: {
-        flex: 1,
+    userPhoto: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
     },
-    detailLabel: {
-        fontSize: 12,
-        color: '#666',
+    userPhotoDefault: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    userPhotoInitial: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: '#666666',
+    },
+    shareTypeIndicator: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 2,
+        borderColor: 'white',
+    },
+    instantType: {
+        backgroundColor: '#FF9500',
+    },
+    liveType: {
+        backgroundColor: '#30B0C7',
+    },
+    userInfo: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    userName: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    userUsername: {
+        fontSize: 14,
+        color: '#666666',
+        marginBottom: 6,
+    },
+    locationInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: 4,
     },
-    detailText: {
-        fontSize: 16,
+    locationInfo: {
+        fontSize: 14,
+        color: '#666666',
+        marginLeft: 4,
+    },
+    shareTypeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    shareType: {
+        fontSize: 13,
+        fontWeight: '500',
+        marginLeft: 4,
+    },
+    quickActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: '#F0F0F0',
+        marginBottom: 20,
+    },
+    quickActionButton: {
+        alignItems: 'center',
+    },
+    actionIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    actionText: {
+        fontSize: 13,
         color: '#1A1A1A',
         fontWeight: '500',
     },
-    actionButton: {
+    locationDetails: {
+        backgroundColor: '#F9F9F9',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+    },
+    locationDetailItem: {
         flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    locationDetailText: {
+        marginLeft: 12,
+    },
+    detailLabel: {
+        fontSize: 12,
+        color: '#666666',
+        marginBottom: 2,
+    },
+    detailValue: {
+        fontSize: 14,
+        color: '#1A1A1A',
+        fontWeight: '500',
+    },
+    actionButtons: {
+        gap: 12,
+    },
+    actionButton: {
+        borderRadius: 12,
+        paddingVertical: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#2196F3',
-        padding: 16,
-        borderRadius: 12,
-        marginTop: 8,
     },
     actionButtonText: {
-        color: '#FFF',
+        color: 'white',
         fontSize: 16,
         fontWeight: '600',
-        marginLeft: 8,
     },
-    gpsQualityIndicator: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 50 : 30,
-        alignSelf: 'center',  // Yatayda ortalama
-        backgroundColor: 'rgba(0, 0, 0, 0.7)', // Arka plan rengini daha koyu yapalım
-        borderRadius: 20,
-        padding: 12,
-        flexDirection: 'row',
+    markerContainer: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: 'white',
+        justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: {
@@ -1024,21 +1370,37 @@ const styles = StyleSheet.create({
         shadowRadius: 3.84,
         elevation: 5,
     },
-    gpsQualityText: {
-        marginLeft: 8,
-        fontSize: 14,  // Yazı boyutunu biraz büyütelim
-        color: '#FFFFFF', // Yazı rengini beyaz yapalım
-        fontWeight: '500'
+    markerImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
     },
-    movementIndicator: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 90 : 70,
+    markerDefault: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#E0E0E0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    markerInitial: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#757575',
+    },
+    markerTriangle: {
+        width: 0,
+        height: 0,
+        backgroundColor: 'transparent',
+        borderStyle: 'solid',
+        borderLeftWidth: 10,
+        borderRightWidth: 10,
+        borderTopWidth: 15,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderTopColor: 'white',
         alignSelf: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        borderRadius: 20,
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
+        marginTop: -2, // Üçgeni marker'a biraz daha yaklaştırır
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
@@ -1048,12 +1410,6 @@ const styles = StyleSheet.create({
         shadowRadius: 3.84,
         elevation: 5,
     },
-    movementText: {
-        marginLeft: 8,
-        fontSize: 14,
-        color: '#FFFFFF',
-        fontWeight: '500'
-    }
 });
 
 export default MapPage;

@@ -129,7 +129,6 @@ const CreatePostDetails = ({ route, navigation }) => {
             // iOS için resim işleme
             if (Platform.OS === 'ios' && image.startsWith('ph://')) {
                 try {
-                    // Önce izin kontrolü yapalım
                     const { status } = await MediaLibrary.requestPermissionsAsync();
                     if (status !== 'granted') {
                         alert('Fotoğraflara erişim izni gerekiyor');
@@ -137,12 +136,10 @@ const CreatePostDetails = ({ route, navigation }) => {
                         return;
                     }
 
-                    // Resmi getir
                     const asset = await MediaLibrary.getAssetInfoAsync(image.replace('ph://', ''));
                     if (asset) {
                         processedImageUri = asset.localUri || asset.uri;
 
-                        // Eğer hala ph:// ile başlıyorsa, alternatif yöntem deneyelim
                         if (processedImageUri.startsWith('ph://')) {
                             const assetInfo = await MediaLibrary.createAssetAsync(image);
                             processedImageUri = assetInfo.uri;
@@ -150,12 +147,10 @@ const CreatePostDetails = ({ route, navigation }) => {
                     }
                 } catch (error) {
                     console.error('iOS resim dönüştürme hatası:', error);
-                    // Orijinal URI'yi kullanmaya devam et
                     processedImageUri = image;
                 }
             }
 
-            // Resim URI'sinin geçerli olduğundan emin olalım
             if (!processedImageUri) {
                 throw new Error('Geçerli resim bulunamadı');
             }
@@ -173,21 +168,19 @@ const CreatePostDetails = ({ route, navigation }) => {
                 }
             };
 
-            const postId = await createPost(postData, processedImageUri);
+            await createPost(postData, processedImageUri);
 
-            // Ana tab navigator'a dönüş yapıyoruz
+            // Değiştirilmiş navigasyon kodu
             navigation.reset({
                 index: 0,
                 routes: [
                     {
-                        name: 'MainStack',
-                        state: {
-                            routes: [{ name: 'Activities' }],
-                            index: 0,
-                        }
+                        name: 'MainTabs',
+                        params: { screen: 'Etkinlikler', refresh: true }
                     }
                 ],
             });
+
         } catch (error) {
             console.error('Paylaşım hatası:', error);
             alert('Paylaşım sırasında bir hata oluştu: ' + error.message);

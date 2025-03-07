@@ -15,10 +15,17 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "distribution": "store"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "ucarugur07@gmail.com",
+        "ascAppId": "6742784316",
+        "appleTeamId": "DC4BD84S54"
+      }
+    }
   }
 }

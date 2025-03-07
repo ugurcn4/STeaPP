@@ -71,7 +71,7 @@ const AboutPage = ({ navigation }) => {
 
             <View style={styles.appInfoSection}>
                 <Image
-                    source={require('../../../assets/images/new-logo.png')} // Uygulama ikonunuzu ekleyin
+                    source={require('../../../assets/images/logo.png')} // Uygulama ikonunuzu ekleyin
                     style={styles.appIcon}
                 />
                 <Text style={[styles.appName, { color: currentTheme.text }]}>

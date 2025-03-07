@@ -15,8 +15,6 @@ import PhotosPage from '../screens/PhotosPage';
 import AIRecommendationsScreen from '../screens/AIRecommendationsScreen';
 import AIChatScreen from '../screens/AIChatScreen';
 import { useSelector } from 'react-redux';
-import FriendDetailScreen from '../screens/FriendDetailScreen';
-import LocationDetailScreen from '../screens/LocationDetailScreen';
 import StoryView from '../screens/StoryView';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -33,7 +31,7 @@ import CreatePostDetails from '../screens/CreatePostDetails';
 import ImageEditor from '../screens/ImageEditor';
 import LikedPostsScreen from '../screens/LikedPostsScreen';
 import LikedByScreen from '../screens/LikedByScreen';
-
+import MapPage from '../screens/MapPage';
 
 const Stack = createNativeStackNavigator();
 
@@ -74,13 +72,10 @@ const MainStack = () => {
     return (
         <Stack.Navigator
             screenOptions={{
-                headerShown: false // Tüm header'ı gizle
+                headerShown: false
             }}
         >
-            <Stack.Screen
-                name="MainTabs"
-                component={CustomNavBar}
-            />
+            <Stack.Screen name="MainTabs" component={CustomNavBar} />
             <Stack.Screen
                 name="NearbyRestaurants"
                 component={NearbyRestaurants}
@@ -137,22 +132,6 @@ const MainStack = () => {
             <Stack.Screen
                 name="AIChat"
                 component={AIChatScreen}
-                options={{
-                    headerShown: false
-                }}
-            />
-            <Stack.Screen
-                name="FriendDetail"
-                component={FriendDetailScreen}
-                options={{
-                    title: 'Arkadaş Detayı',
-                    headerShown: true,
-                    headerBackTitleVisible: false,
-                }}
-            />
-            <Stack.Screen
-                name="LocationDetail"
-                component={LocationDetailScreen}
                 options={{
                     headerShown: false
                 }}

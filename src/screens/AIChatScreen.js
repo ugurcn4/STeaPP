@@ -30,6 +30,21 @@ const SUGGESTED_PROMPTS = [
         id: '4',
         title: 'Aile Aktiviteleri',
         prompt: 'Ailece yapabileceğimiz aktiviteleri önerir misin?'
+    },
+    {
+        id: '5',
+        title: 'Meşhur Şeyler',
+        prompt: 'Bulunduğum bölgede meşhur şeyleri önerir misin?'
+    },
+    {
+        id: '6',
+        title: 'Şehir Hikayeleri',
+        prompt: 'Şehir Hikayeleri hakkında bilgi verir misin?'
+    },
+    {
+        id: '7',
+        title: 'Kültür',
+        prompt: 'Kültür hakkında bilgi verir misin?'
     }
 ];
 

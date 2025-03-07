@@ -347,34 +347,40 @@ const DirectMessagesScreen = ({ navigation, route }) => {
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <View style={styles.container}>
-                <StatusBar barStyle="dark-content" />
-                {renderHeader()}
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.container}>
+                    <StatusBar barStyle="dark-content" />
+                    {renderHeader()}
 
-                <FlatList
-                    data={filteredChats}
-                    renderItem={renderChatItem}
-                    keyExtractor={keyExtractor}
-                    getItemLayout={getItemLayout}
-                    ListEmptyComponent={renderEmptyComponent}
-                    contentContainerStyle={styles.listContainer}
-                    removeClippedSubviews={true}
-                    maxToRenderPerBatch={10}
-                    windowSize={10}
-                    initialNumToRender={10}
-                />
+                    <FlatList
+                        data={filteredChats}
+                        renderItem={renderChatItem}
+                        keyExtractor={keyExtractor}
+                        getItemLayout={getItemLayout}
+                        ListEmptyComponent={renderEmptyComponent}
+                        contentContainerStyle={styles.listContainer}
+                        removeClippedSubviews={true}
+                        maxToRenderPerBatch={10}
+                        windowSize={10}
+                        initialNumToRender={10}
+                    />
 
-                <NewChatModal
-                    visible={isNewChatModalVisible}
-                    onClose={() => setIsNewChatModalVisible(false)}
-                    onSelectFriend={handleSelectFriend}
-                />
-            </View>
+                    <NewChatModal
+                        visible={isNewChatModalVisible}
+                        onClose={() => setIsNewChatModalVisible(false)}
+                        onSelectFriend={handleSelectFriend}
+                    />
+                </View>
+            </SafeAreaView>
         </GestureHandlerRootView>
     );
 };
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
     container: {
         flex: 1,
         backgroundColor: '#fff',
@@ -383,7 +389,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.1)',
-        paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight,
     },
     headerBlur: {
         width: '100%',

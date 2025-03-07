@@ -15,7 +15,6 @@ const getUserProfileData = async () => {
         const user = auth.currentUser;
 
         if (!user) {
-            console.log('Kullanıcı oturumu bulunamadı');
             return null;
         }
 
@@ -24,11 +23,8 @@ const getUserProfileData = async () => {
 
         if (userSnapshot.exists()) {
             const userData = userSnapshot.data();
-            console.log('Kullanıcı verileri başarıyla alındı:', userData);
             return userData;
         }
-
-        console.log('Kullanıcı verileri bulunamadı');
         return null;
     } catch (error) {
         console.error('Kullanıcı profili alınırken hata:', error);
@@ -43,7 +39,6 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
 
         // Kullanıcı profil bilgilerini alalım
         const userProfileData = await getUserProfileData();
-        console.log('AI için kullanıcı profil verileri:', userProfileData);
 
         const currentHour = new Date().getHours();
         const timeOfDay = currentHour >= 5 && currentHour < 12 ? 'sabah' :
@@ -74,32 +69,16 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
         // Streak bilgisi
         const currentStreak = userProfileData?.currentStreak || 0;
 
-        // Çıkarılan kullanıcı bilgilerini logla
-        console.log('AI prompt için hazırlanan kullanıcı bilgileri:', {
-            username,
-            userBio,
-            instaAccount,
-            postsCount,
-            friendsCount,
-            interests,
-            visitedPlacesCount,
-            currentStreak
-        });
-
         const prompt = `Sen STeaPPY adında bir seyahat ve uygulama asistanısın. Enerjik, samimi ve esprili bir kişiliğin var.
 
         UYGULAMA ÖZELLİKLERİ VE YARDIM KONULARI:
-        - Arkadaş Ekleme:  Arkadaşlar > Sağ üstte arama ikonu > Arkadaşını arat > Arkadaş Ekle menüsünden yapılır
+        - Arkadaş Ekleme:  Arkadaşlar > Sağ Üstte Arama İkonu > Arkadaşını Ara > Arkadaş Ekle menüsünden yapılır
         - Rota Paylaşma: Herhangi bir rotaya uzun basıp "Paylaş" seçeneğini kullan
         - Favori Mekanlar: Mekan kartının sağ üstündeki yıldız ikonuna tıkla
-        - Profil Düzenleme: Profil > Düzenle menüsünden yapılır
+        - Profil Düzenleme: Ana Sayfa > Profil > Düzenle menüsünden yapılır
         - Bildirimler: Ayarlar > Bildirimler menüsünden özelleştirilebilir
-        - Çevrimdışı Haritalar: Ayarlar > Çevrimdışı Haritalar menüsünden indirilir
         - Gizlilik: Profil > Gizlilik menüsünden yönetilir
-        - Dil Değiştirme: Ayarlar > Dil menüsünden yapılır
-        - Rota Oluşturma: Ana Sayfa > Rota Oluştur butonuna tıklayarak başlayabilirsin
-        - Etkinlik Oluşturma: Etkinlikler > + butonuna tıklayarak yeni etkinlik oluşturabilirsin
-        - Grup Sohbetleri: Mesajlar > Yeni Grup Sohbeti seçeneğiyle arkadaşlarınla grup oluşturabilirsin
+        - Rota Oluşturma: Harita > Rota Oluştur butonuna tıklayarak başlayabilirsin
 
         KULLANICI PROFİLİ:
         - Kullanıcı Adı: ${username}
@@ -123,10 +102,9 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
            - Gezi/mekan önerisi mi?
            - Genel bilgi mi?
            - Rota planlaması mı?
-           - Etkinlik önerisi mi?
+           - Sohbet için mi?
         2. Uygulama yardımı için:
            - Net adımlar ver
-           - Ekran görüntüleriyle destekle
            - İlgili menü yolunu belirt
         3. Gezi önerileri için:
            - Saate uygun öneriler ver
@@ -154,7 +132,7 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
            - Kişisel bilgileri soruşturma
 
         YANIT FORMATI:
-        - Kısa bir selamlama ile başla
+        - Sohbet Geçmişi yoksa kısa bir selamlama ile başla
         - Ana içeriği 2-3 paragrafta sun
         - Gerekirse madde işaretleri kullan
         - Sonunda kısa bir kapanış cümlesi ekle

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, TextInput, Platform } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,9 @@ import CommentsModal from './CommentsModal';
 import { subscribeToPost, deletePost, toggleArchivePost, createArchiveGroup, updatePostArchiveGroups, fetchArchiveGroups, quickSavePost } from '../services/postService';
 import ArchiveGroupModal from '../modals/ArchiveGroupModal';
 import Toast from 'react-native-toast-message';
+import FriendProfileModal from '../modals/friendProfileModal';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -30,11 +33,9 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
     const [showArchiveModal, setShowArchiveModal] = useState(false);
     const [archiveGroups, setArchiveGroups] = useState([]);
     const [selectedGroups, setSelectedGroups] = useState(activity.archiveGroups || []);
-    const [showNewGroupForm, setShowNewGroupForm] = useState(false);
-    const [newGroupName, setNewGroupName] = useState('');
-    const [newGroupEmoji, setNewGroupEmoji] = useState('📁');
-    const [newGroupDesc, setNewGroupDesc] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [selectedFriend, setSelectedFriend] = useState(null);
+    const [friendModalVisible, setFriendModalVisible] = useState(false);
 
     useEffect(() => {
         setLocalLiked(isLiked);
@@ -57,9 +58,131 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
         }
     }, [showArchiveModal]);
 
-    const handleLikePress = () => {
+    const handleLikePress = useCallback(() => {
         setLocalLiked(!localLiked);
         onLikePress();
+    }, [localLiked, onLikePress]);
+
+    const handleUserPress = useCallback(() => {
+        if (activity.user) {
+            // Kullanıcı verisini daha kapsamlı hazırlayalım
+            const completeUserData = {
+                ...activity.user,
+                id: activity.userId || activity.user.id,
+                name: activity.user.name || 'İsimsiz Kullanıcı',
+                profilePicture: activity.user.profilePicture || activity.user.avatar || null,
+                bio: activity.user.bio || activity.user.informations?.bio || '',
+                friends: activity.user.friends || [],
+                informations: {
+                    ...(activity.user.informations || {}),
+                    name: activity.user.name || activity.user.informations?.name || 'İsimsiz Kullanıcı',
+                    username: activity.user.username ||
+                        activity.user.informations?.username ||
+                        (activity.user.name || activity.user.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                    bio: activity.user.bio || activity.user.informations?.bio || ''
+                }
+            };
+
+            // Kullanıcının tam bilgilerini Firestore'dan alalım
+            fetchCompleteUserData(completeUserData);
+        }
+    }, [activity.user, activity.userId]);
+
+    const handleCommentUserPress = (user) => {
+        if (user) {
+            const completeUserData = {
+                ...user,
+                id: user.id,
+                name: user.name || 'İsimsiz Kullanıcı',
+                profilePicture: user.profilePicture || user.avatar || null,
+                bio: user.bio || user.informations?.bio || '',
+                friends: user.friends || [],
+                informations: {
+                    ...(user.informations || {}),
+                    name: user.name || user.informations?.name || 'İsimsiz Kullanıcı',
+                    username: user.username ||
+                        user.informations?.username ||
+                        (user.name || user.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                    bio: user.bio || user.informations?.bio || ''
+                }
+            };
+
+            // Kullanıcının tam bilgilerini Firestore'dan alalım
+            fetchCompleteUserData(completeUserData);
+        }
+    };
+
+    // Kullanıcının tam bilgilerini Firestore'dan alan yeni fonksiyon
+    const fetchCompleteUserData = async (userData) => {
+        try {
+            if (!userData.id) {
+                setSelectedFriend(userData);
+                setFriendModalVisible(true);
+                return;
+            }
+
+            const userDoc = await getDoc(doc(db, 'users', userData.id));
+            if (userDoc.exists()) {
+                const firebaseUserData = userDoc.data();
+
+                // Mevcut verilerle Firestore verilerini birleştir
+                const mergedUserData = {
+                    ...userData,
+                    profilePicture: userData.profilePicture || firebaseUserData.profilePicture || null,
+                    bio: userData.bio || firebaseUserData.bio || firebaseUserData.informations?.bio || '',
+                    friends: firebaseUserData.friends || [],
+                    informations: {
+                        ...(userData.informations || {}),
+                        ...(firebaseUserData.informations || {}),
+                        name: userData.name || firebaseUserData.informations?.name || 'İsimsiz Kullanıcı',
+                        username: userData.informations?.username ||
+                            firebaseUserData.informations?.username ||
+                            (userData.name || firebaseUserData.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                        bio: userData.bio || firebaseUserData.bio || firebaseUserData.informations?.bio || ''
+                    }
+                };
+
+                setSelectedFriend(mergedUserData);
+            } else {
+                // Firestore'da kullanıcı bulunamadıysa mevcut verileri kullan
+                setSelectedFriend(userData);
+            }
+
+            setFriendModalVisible(true);
+        } catch (error) {
+            console.error('Kullanıcı bilgileri alınırken hata:', error);
+            // Hata durumunda mevcut verileri kullan
+            setSelectedFriend(userData);
+            setFriendModalVisible(true);
+        }
+    };
+
+    const fetchUserInfo = async (userId) => {
+        try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const user = {
+                    id: userId,
+                    name: userData.informations?.name || 'İsimsiz Kullanıcı',
+                    profilePicture: userData.profilePicture || userData.avatar || null,
+                    bio: userData.bio || userData.informations?.bio || '',
+                    friends: userData.friends || [],
+                    informations: {
+                        ...(userData.informations || {}),
+                        name: userData.informations?.name || 'İsimsiz Kullanıcı',
+                        username: userData.informations?.username ||
+                            userData.username ||
+                            (userData.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                        bio: userData.bio || userData.informations?.bio || ''
+                    }
+                };
+                setSelectedFriend(user);
+                setFriendModalVisible(true);
+            }
+        } catch (error) {
+            console.error('Kullanıcı bilgileri alınırken hata:', error);
+        }
     };
 
     const renderDescription = () => {
@@ -98,7 +221,12 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 {activity.comments.slice(0, 2).map((comment, index) => (
                     <View key={comment.id} style={styles.commentItem}>
                         <Text style={styles.commentText}>
-                            <Text style={styles.commentUsername}>{comment.user.name}</Text>
+                            <Text
+                                style={styles.commentUsername}
+                                onPress={() => handleCommentUserPress(comment.user)}
+                            >
+                                {comment.user?.name || 'Kullanıcı'}
+                            </Text>
                             {" "}{comment.text}
                         </Text>
                     </View>
@@ -233,26 +361,46 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
         try {
             setIsSaving(true);
-            const defaultCollection = await quickSavePost(activity.id, currentUserId);
-
-            // UI'ı güncelle
-            setIsArchived(true);
-            setSelectedGroups([defaultCollection.id]);
-
-            // Başarılı kaydetme bildirimi göster
-            Toast.show({
-                type: 'success',
-                text1: 'Kaydedildi',
-                text2: `"${defaultCollection.name}" koleksiyonuna eklendi`,
-                position: 'bottom',
-                visibilityTime: 2000,
-            });
+            
+            // Eğer zaten arşivlenmişse, arşivden kaldır
+            if (isArchived) {
+                // Arşivden kaldırma işlemi
+                await toggleArchivePost(activity.id, currentUserId);
+                
+                // UI'ı güncelle
+                setIsArchived(false);
+                setSelectedGroups([]);
+                
+                // Başarılı kaldırma bildirimi göster
+                Toast.show({
+                    type: 'success',
+                    text1: 'Kaydedilenlerden Kaldırıldı',
+                    position: 'bottom',
+                    visibilityTime: 2000,
+                });
+            } else {
+                // Yeni kaydetme işlemi
+                const defaultCollection = await quickSavePost(activity.id, currentUserId);
+                
+                // UI'ı güncelle
+                setIsArchived(true);
+                setSelectedGroups([defaultCollection.id]);
+                
+                // Başarılı kaydetme bildirimi göster
+                Toast.show({
+                    type: 'success',
+                    text1: 'Kaydedildi',
+                    text2: `"${defaultCollection.name}" koleksiyonuna eklendi`,
+                    position: 'bottom',
+                    visibilityTime: 2000,
+                });
+            }
         } catch (error) {
-            console.error('Kaydetme hatası:', error);
+            console.error('Kaydetme/kaldırma hatası:', error);
             Toast.show({
                 type: 'error',
                 text1: 'Hata',
-                text2: 'Gönderi kaydedilirken bir hata oluştu',
+                text2: 'İşlem sırasında bir hata oluştu',
                 position: 'bottom',
             });
         } finally {
@@ -325,18 +473,21 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
         <View style={styles.activityCard}>
             <View style={styles.activityHeader}>
                 <View style={styles.userInfoContainer}>
-                    <FastImage
-                        source={{
-                            uri: activity.user.avatar || 'https://via.placeholder.com/40'
-                        }}
-                        style={styles.avatarImage}
-                    />
-                    <View style={styles.userTextContainer}>
-                        <Text style={styles.username}>{activity.user.name}</Text>
-                        <Text style={styles.timestamp}>
-                            {formatDistanceToNow(activity.createdAt, { addSuffix: true, locale: tr })}
-                        </Text>
-                    </View>
+                    <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
+                        <FastImage
+                            source={{
+                                uri: activity.user?.avatar || 'https://via.placeholder.com/40',
+                                priority: FastImage.priority.normal,
+                            }}
+                            style={styles.avatarImage}
+                        />
+                        <View style={styles.userTextContainer}>
+                            <Text style={styles.username}>{activity.user?.name || 'İsimsiz Kullanıcı'}</Text>
+                            <Text style={styles.timestamp}>
+                                {formatDistanceToNow(activity.createdAt, { addSuffix: true, locale: tr })}
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -445,51 +596,75 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
                 {/* Yeni beğeni özeti bölümü */}
                 {activity.likedBy && activity.likedBy.length > 0 && (
-                    <TouchableOpacity
-                        style={styles.likeSummaryContainer}
-                        onPress={() => navigation.navigate('LikedBy', {
-                            postId: activity.id,
-                            likedBy: activity.likedBy || []
-                        })}
-                    >
-                        <Text style={styles.likeSummaryTextLight}>
-                            {(() => {
-                                // Tek beğeni varsa
-                                if (activity.likedBy.length === 1) {
-                                    if (activity.likedBy[0] === currentUserId) {
+                    <View style={styles.likeSummaryContainer}>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('LikedBy', {
+                                postId: activity.id,
+                                likedBy: activity.likedBy || []
+                            })}
+                        >
+                            <Text style={styles.likeSummaryTextLight}>
+                                {(() => {
+                                    // Tek beğeni varsa
+                                    if (activity.likedBy.length === 1) {
+                                        if (activity.likedBy[0] === currentUserId) {
+                                            return (
+                                                <Text>
+                                                    <Text style={styles.likeSummaryTextBold}>Siz</Text>
+                                                    <Text style={styles.likeSummaryTextLight}> beğendiniz</Text>
+                                                </Text>
+                                            );
+                                        }
+
+                                        // Burada düzeltme yapalım
                                         return (
                                             <Text>
-                                                <Text style={styles.likeSummaryTextBold}>Siz</Text>
-                                                <Text style={styles.likeSummaryTextLight}> beğendiniz</Text>
+                                                <Text
+                                                    style={styles.likeSummaryTextBold}
+                                                    onPress={(e) => {
+                                                        e.stopPropagation(); // Üst TouchableOpacity'nin tetiklenmesini engelle
+                                                        handleCommentUserPress(activity.user);
+                                                    }}
+                                                >
+                                                    {activity.user?.name || 'Kullanıcı'}
+                                                </Text>
+                                                <Text style={styles.likeSummaryTextLight}> beğendi</Text>
                                             </Text>
                                         );
                                     }
+
+                                    // Birden fazla beğeni varsa
+                                    const isCurrentUserFirst = activity.likedBy[0] === currentUserId;
+                                    const firstLiker = isCurrentUserFirst ? 'Siz' : (activity.firstLikerName || activity.user?.name || 'Kullanıcı');
+                                    const otherCount = activity.likedBy.length - 1;
+
                                     return (
                                         <Text>
-                                            <Text style={styles.likeSummaryTextBold}>
-                                                {activity.user?.name || 'Kullanıcı'}
-                                            </Text>
-                                            <Text style={styles.likeSummaryTextLight}> beğendi</Text>
+                                            {isCurrentUserFirst ? (
+                                                <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
+                                            ) : (
+                                                <Text
+                                                    style={styles.likeSummaryTextBold}
+                                                    onPress={(e) => {
+                                                        e.stopPropagation(); // Üst TouchableOpacity'nin tetiklenmesini engelle
+                                                        if (activity.likedBy && activity.likedBy.length > 0) {
+                                                            const firstLikerId = activity.likedBy[0];
+                                                            fetchUserInfo(firstLikerId);
+                                                        }
+                                                    }}
+                                                >
+                                                    {firstLiker}
+                                                </Text>
+                                            )}
+                                            <Text style={styles.likeSummaryTextLight}> ve </Text>
+                                            <Text style={styles.likeSummaryTextBold}>{otherCount}</Text>
+                                            <Text style={styles.likeSummaryTextLight}> kişi beğendi</Text>
                                         </Text>
                                     );
-                                }
-
-                                // Birden fazla beğeni varsa
-                                const isCurrentUserFirst = activity.likedBy[0] === currentUserId;
-                                const firstLiker = isCurrentUserFirst ? 'Siz' : (activity.firstLikerName || activity.user?.name || 'Kullanıcı');
-                                const otherCount = activity.likedBy.length - 1;
-
-                                return (
-                                    <Text>
-                                        <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
-                                        <Text style={styles.likeSummaryTextLight}> ve </Text>
-                                        <Text style={styles.likeSummaryTextBold}>{otherCount}</Text>
-                                        <Text style={styles.likeSummaryTextLight}> kişi beğendi</Text>
-                                    </Text>
-                                );
-                            })()}
-                        </Text>
-                    </TouchableOpacity>
+                                })()}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 )}
 
                 <View style={styles.descriptionContainer}>
@@ -582,6 +757,12 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 onSave={handleSaveArchiveGroups}
                 userId={currentUserId}
                 onGroupsUpdated={fetchGroups}
+            />
+            <FriendProfileModal
+                visible={friendModalVisible}
+                onClose={() => setFriendModalVisible(false)}
+                friend={selectedFriend}
+                navigation={navigation}
             />
         </View>
     );
@@ -846,6 +1027,21 @@ const styles = StyleSheet.create({
         color: '#262626',
         fontWeight: '600',
     },
+    userInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
 });
 
-export default Activity;
+export default React.memo(Activity, (prevProps, nextProps) => {
+    // Özel memoization karşılaştırması (gereksiz render'ları önlemek için)
+    return (
+        prevProps.activity.id === nextProps.activity.id &&
+        prevProps.isLiked === nextProps.isLiked &&
+        prevProps.currentUserId === nextProps.currentUserId &&
+        // Yorumlar ve beğeniler değiştiyse render edilmeli
+        prevProps.activity.stats?.likes === nextProps.activity.stats?.likes &&
+        prevProps.activity.stats?.comments === nextProps.activity.stats?.comments &&
+        prevProps.activity.comments?.length === nextProps.activity.comments?.length
+    );
+});

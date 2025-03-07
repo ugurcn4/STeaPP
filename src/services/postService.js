@@ -83,13 +83,29 @@ export const fetchPosts = async (currentUserId) => {
         for (const docSnapshot of querySnapshot.docs) {
             const postData = docSnapshot.data();
 
-            // Post görünürlük kontrolü
-            // Eğer post public değilse ve kullanıcı arkadaş listesinde değilse, postu gösterme
-            if (!postData.isPublic && !userFriends.includes(postData.userId) && postData.userId !== currentUserId) {
-                continue;
-            }
-
             try {
+                // Post sahibinin gizlilik ayarlarını kontrol et
+                const postOwnerRef = doc(db, 'users', postData.userId);
+                const postOwnerDoc = await getDoc(postOwnerRef);
+                const postOwnerData = postOwnerDoc.data() || {};
+
+                // Gizlilik ayarlarını kontrol et
+                const privacySettings = postOwnerData.settings?.privacySettings || {};
+                const visibility = postOwnerData.settings?.visibility || 'public';
+
+                // Kullanıcı kendisi değilse ve profil görünürlüğü private ise ve arkadaş değilse, postu gösterme
+                if (postData.userId !== currentUserId &&
+                    visibility === 'private' &&
+                    !userFriends.includes(postData.userId)) {
+                    continue;
+                }
+
+                // Post görünürlük kontrolü
+                // Eğer post public değilse ve kullanıcı arkadaş listesinde değilse, postu gösterme
+                if (!postData.isPublic && !userFriends.includes(postData.userId) && postData.userId !== currentUserId) {
+                    continue;
+                }
+
                 const userDocRef = doc(db, 'users', postData.userId);
                 const userDocSnapshot = await getDoc(userDocRef);
                 const userData = userDocSnapshot.data() || {};
@@ -123,7 +139,6 @@ export const fetchPosts = async (currentUserId) => {
                 if (post.likedBy && post.likedBy.length > 0) {
                     const firstLikerId = post.likedBy[0];
                     try {
-
                         const firstLikerDoc = await getDoc(doc(db, 'users', firstLikerId));
 
                         if (firstLikerDoc.exists()) {
@@ -551,8 +566,6 @@ export const createArchiveGroup = async (userId, groupData) => {
         await updateDoc(userRef, {
             archiveGroups: updatedGroups
         });
-
-        console.log('Yeni grup oluşturuldu:', newGroup); // Debug için log ekleyelim
 
         return newGroup;
     } catch (error) {

@@ -16,24 +16,18 @@ import Activity from '../components/Activity';
 import FastImage from 'react-native-fast-image';
 import { fetchLikedPosts, fetchArchivedPosts, toggleLikePost, addComment, deleteComment, fetchArchiveGroups } from '../services/postService';
 import { getAuth } from 'firebase/auth';
+import PostDetailModal from '../modals/PostDetailModal';
 
 const { width } = Dimensions.get('window');
 const GRID_SIZE = width / 3;
 
 const LikedPostsScreen = ({ navigation }) => {
-    const [posts, setPosts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [selectedPost, setSelectedPost] = useState(null);
-    const [postHeights, setPostHeights] = useState({});
     const [activeTab, setActiveTab] = useState('liked'); // 'liked' veya 'archived'
     const auth = getAuth();
     const currentUser = auth.currentUser;
     const listRef = useRef(null);
     const [selectedCollection, setSelectedCollection] = useState(null);
-    const [collections, setCollections] = useState([]);
-    const [hasMore, setHasMore] = useState(true);
-    const [lastDoc, setLastDoc] = useState(null);
     const POSTS_PER_PAGE = 21;
 
     // Ayrı FlatList'ler için ayrı key'ler kullanalım
@@ -130,11 +124,29 @@ const LikedPostsScreen = ({ navigation }) => {
     };
 
     const handlePostUpdate = (updatedPost) => {
-        setPosts(currentPosts =>
-            currentPosts.map(post =>
-                post.id === updatedPost.id ? updatedPost : post
-            )
-        );
+        setTabData(prev => {
+            if (activeTab === 'liked') {
+                return {
+                    ...prev,
+                    liked: {
+                        ...prev.liked,
+                        posts: prev.liked.posts.map(post =>
+                            post.id === updatedPost.id ? updatedPost : post
+                        )
+                    }
+                };
+            } else {
+                return {
+                    ...prev,
+                    archived: {
+                        ...prev.archived,
+                        posts: prev.archived.posts.map(post =>
+                            post.id === updatedPost.id ? updatedPost : post
+                        )
+                    }
+                };
+            }
+        });
     };
 
     const handleLikePress = async (postId) => {
@@ -142,31 +154,72 @@ const LikedPostsScreen = ({ navigation }) => {
 
         try {
             const isLiked = await toggleLikePost(postId, currentUser.uid);
-            setPosts(currentPosts =>
-                currentPosts.map(post => {
-                    if (post.id === postId) {
-                        const currentLikes = post.stats?.likes || 0;
-                        const newLikes = Math.max(0, currentLikes + (isLiked ? 1 : -1));
 
-                        // Beğeni kaldırıldıysa postu listeden kaldır
-                        if (!isLiked) {
-                            return null;
-                        }
+            // Aktif sekmeye göre doğru veri kümesini güncelleyelim
+            setTabData(prevTabData => {
+                if (activeTab === 'liked') {
+                    // Beğenilen postlar sekmesindeki güncelleme
+                    const updatedPosts = prevTabData.liked.posts.map(post => {
+                        if (post.id === postId) {
+                            const currentLikes = post.stats?.likes || 0;
+                            const newLikes = Math.max(0, currentLikes + (isLiked ? 1 : -1));
 
-                        return {
-                            ...post,
-                            likedBy: isLiked
-                                ? [...(post.likedBy || []), currentUser.uid]
-                                : (post.likedBy || []).filter(id => id !== currentUser.uid),
-                            stats: {
-                                ...post.stats,
-                                likes: newLikes
+                            // Beğeni kaldırıldıysa postu listeden kaldır
+                            if (!isLiked) {
+                                return null;
                             }
-                        };
-                    }
-                    return post;
-                }).filter(Boolean) // null olan postları filtrele
-            );
+
+                            return {
+                                ...post,
+                                likedBy: isLiked
+                                    ? [...(post.likedBy || []), currentUser.uid]
+                                    : (post.likedBy || []).filter(id => id !== currentUser.uid),
+                                stats: {
+                                    ...post.stats,
+                                    likes: newLikes
+                                }
+                            };
+                        }
+                        return post;
+                    }).filter(Boolean); // null olan postları filtrele
+
+                    return {
+                        ...prevTabData,
+                        liked: {
+                            ...prevTabData.liked,
+                            posts: updatedPosts
+                        }
+                    };
+                } else {
+                    // Arşivlenen postlar sekmesindeki güncelleme
+                    const updatedPosts = prevTabData.archived.posts.map(post => {
+                        if (post.id === postId) {
+                            const currentLikes = post.stats?.likes || 0;
+                            const newLikes = Math.max(0, currentLikes + (isLiked ? 1 : -1));
+
+                            return {
+                                ...post,
+                                likedBy: isLiked
+                                    ? [...(post.likedBy || []), currentUser.uid]
+                                    : (post.likedBy || []).filter(id => id !== currentUser.uid),
+                                stats: {
+                                    ...post.stats,
+                                    likes: newLikes
+                                }
+                            };
+                        }
+                        return post;
+                    });
+
+                    return {
+                        ...prevTabData,
+                        archived: {
+                            ...prevTabData.archived,
+                            posts: updatedPosts
+                        }
+                    };
+                }
+            });
         } catch (error) {
             console.error('Beğeni hatası:', error);
         }
@@ -178,58 +231,150 @@ const LikedPostsScreen = ({ navigation }) => {
         try {
             if (comment === 'delete') {
                 await deleteComment(postId, replyToId, currentUser.uid);
-                setPosts(currentPosts =>
-                    currentPosts.map(post => {
-                        if (post.id === postId) {
-                            return {
-                                ...post,
-                                comments: post.comments.filter(c => c.id !== replyToId),
-                                stats: {
-                                    ...post.stats,
-                                    comments: (post.stats?.comments || 1) - 1
-                                }
-                            };
-                        }
-                        return post;
-                    })
-                );
-            } else {
-                const newComment = await addComment(postId, currentUser.uid, comment, replyToId);
-                setPosts(currentPosts =>
-                    currentPosts.map(post => {
-                        if (post.id === postId) {
-                            if (replyToId) {
-                                const updatedComments = post.comments.map(c => {
-                                    if (c.id === replyToId) {
-                                        return {
-                                            ...c,
-                                            replies: [...(c.replies || []), newComment]
-                                        };
-                                    }
-                                    return c;
-                                });
+
+                // Aktif sekmeye göre doğru veri kümesini güncelleyelim
+                setTabData(prevTabData => {
+                    if (activeTab === 'liked') {
+                        // Beğenilen postlar sekmesindeki güncelleme
+                        const updatedPosts = prevTabData.liked.posts.map(post => {
+                            if (post.id === postId) {
                                 return {
                                     ...post,
-                                    comments: updatedComments,
+                                    comments: post.comments.filter(c => c.id !== replyToId),
                                     stats: {
                                         ...post.stats,
-                                        comments: (post.stats?.comments || 0) + 1
-                                    }
-                                };
-                            } else {
-                                return {
-                                    ...post,
-                                    comments: [...(post.comments || []), newComment],
-                                    stats: {
-                                        ...post.stats,
-                                        comments: (post.stats?.comments || 0) + 1
+                                        comments: (post.stats?.comments || 1) - 1
                                     }
                                 };
                             }
-                        }
-                        return post;
-                    })
-                );
+                            return post;
+                        });
+
+                        return {
+                            ...prevTabData,
+                            liked: {
+                                ...prevTabData.liked,
+                                posts: updatedPosts
+                            }
+                        };
+                    } else {
+                        // Arşivlenen postlar sekmesindeki güncelleme
+                        const updatedPosts = prevTabData.archived.posts.map(post => {
+                            if (post.id === postId) {
+                                return {
+                                    ...post,
+                                    comments: post.comments.filter(c => c.id !== replyToId),
+                                    stats: {
+                                        ...post.stats,
+                                        comments: (post.stats?.comments || 1) - 1
+                                    }
+                                };
+                            }
+                            return post;
+                        });
+
+                        return {
+                            ...prevTabData,
+                            archived: {
+                                ...prevTabData.archived,
+                                posts: updatedPosts
+                            }
+                        };
+                    }
+                });
+            } else {
+                const newComment = await addComment(postId, currentUser.uid, comment, replyToId);
+
+                // Aktif sekmeye göre doğru veri kümesini güncelleyelim
+                setTabData(prevTabData => {
+                    if (activeTab === 'liked') {
+                        // Beğenilen postlar sekmesindeki güncelleme
+                        const updatedPosts = prevTabData.liked.posts.map(post => {
+                            if (post.id === postId) {
+                                if (replyToId) {
+                                    const updatedComments = post.comments.map(c => {
+                                        if (c.id === replyToId) {
+                                            return {
+                                                ...c,
+                                                replies: [...(c.replies || []), newComment]
+                                            };
+                                        }
+                                        return c;
+                                    });
+                                    return {
+                                        ...post,
+                                        comments: updatedComments,
+                                        stats: {
+                                            ...post.stats,
+                                            comments: (post.stats?.comments || 0) + 1
+                                        }
+                                    };
+                                } else {
+                                    return {
+                                        ...post,
+                                        comments: [...(post.comments || []), newComment],
+                                        stats: {
+                                            ...post.stats,
+                                            comments: (post.stats?.comments || 0) + 1
+                                        }
+                                    };
+                                }
+                            }
+                            return post;
+                        });
+
+                        return {
+                            ...prevTabData,
+                            liked: {
+                                ...prevTabData.liked,
+                                posts: updatedPosts
+                            }
+                        };
+                    } else {
+                        // Arşivlenen postlar sekmesindeki güncelleme
+                        const updatedPosts = prevTabData.archived.posts.map(post => {
+                            if (post.id === postId) {
+                                if (replyToId) {
+                                    const updatedComments = post.comments.map(c => {
+                                        if (c.id === replyToId) {
+                                            return {
+                                                ...c,
+                                                replies: [...(c.replies || []), newComment]
+                                            };
+                                        }
+                                        return c;
+                                    });
+                                    return {
+                                        ...post,
+                                        comments: updatedComments,
+                                        stats: {
+                                            ...post.stats,
+                                            comments: (post.stats?.comments || 0) + 1
+                                        }
+                                    };
+                                } else {
+                                    return {
+                                        ...post,
+                                        comments: [...(post.comments || []), newComment],
+                                        stats: {
+                                            ...post.stats,
+                                            comments: (post.stats?.comments || 0) + 1
+                                        }
+                                    };
+                                }
+                            }
+                            return post;
+                        });
+
+                        return {
+                            ...prevTabData,
+                            archived: {
+                                ...prevTabData.archived,
+                                posts: updatedPosts
+                            }
+                        };
+                    }
+                });
             }
         } catch (error) {
             console.error('Yorum işlemi hatası:', error);
@@ -273,26 +418,66 @@ const LikedPostsScreen = ({ navigation }) => {
 
     const loadArchivedPosts = async (collectionId = null) => {
         try {
-            setLoading(true);
+            setTabData(prev => ({
+                ...prev,
+                archived: {
+                    ...prev.archived,
+                    loading: true
+                }
+            }));
+
             const archivedPosts = await fetchArchivedPosts(currentUser.uid);
+
             if (collectionId) {
                 // Belirli bir koleksiyondaki postları filtrele
                 const filteredPosts = archivedPosts.filter(post =>
                     post.archiveGroups?.includes(collectionId)
                 );
-                setPosts(filteredPosts);
+
+                setTabData(prev => ({
+                    ...prev,
+                    archived: {
+                        ...prev.archived,
+                        posts: filteredPosts,
+                        loading: false
+                    }
+                }));
             } else {
-                setPosts(archivedPosts);
+                setTabData(prev => ({
+                    ...prev,
+                    archived: {
+                        ...prev.archived,
+                        posts: archivedPosts,
+                        loading: false
+                    }
+                }));
             }
         } catch (error) {
             console.error('Arşivlenen gönderiler yüklenirken hata:', error);
-        } finally {
-            setLoading(false);
+            setTabData(prev => ({
+                ...prev,
+                archived: {
+                    ...prev.archived,
+                }
+            }));
         }
     };
 
     const handleCollectionPress = (collection) => {
+        // Önce koleksiyonu seçelim
         setSelectedCollection(collection);
+
+        // Mevcut postları temizleyelim ve loading durumunu true yapalım
+        setTabData(prev => ({
+            ...prev,
+            archived: {
+                ...prev.archived,
+                posts: [], // Postları temizle
+                loading: true
+            }
+        }));
+
+        // Sonra yeni postları yükleyelim
         loadArchivedPosts(collection.id);
     };
 
@@ -441,44 +626,64 @@ const LikedPostsScreen = ({ navigation }) => {
     ), [tabData.archived]);
 
     // Seçili koleksiyon görünümü için optimize edilmiş liste
-    const SelectedCollectionList = useCallback(() => (
-        <>
-            <View style={styles.selectedCollectionHeader}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => {
-                        setSelectedCollection(null);
-                        loadCollections();
-                    }}
-                >
-                    <Ionicons name="arrow-back" size={24} color="#000" />
-                </TouchableOpacity>
-                <Text style={styles.selectedCollectionTitle}>
-                    {selectedCollection.name}
-                </Text>
-                <View style={{ width: 24 }} />
-            </View>
-            <FlatList
-                data={tabData.archived.posts.filter(post =>
-                    post.archiveGroups?.includes(selectedCollection.id)
+    const SelectedCollectionList = useCallback(() => {
+        // Sadece seçili koleksiyona ait postları filtreleyelim
+        const filteredPosts = tabData.archived.posts.filter(post =>
+            post.archiveGroups?.includes(selectedCollection.id)
+        );
+
+        return (
+            <>
+                <View style={styles.selectedCollectionHeader}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => {
+                            setSelectedCollection(null);
+                            loadCollections();
+                        }}
+                    >
+                        <Ionicons name="arrow-back" size={24} color="#000" />
+                    </TouchableOpacity>
+                    <Text style={styles.selectedCollectionTitle}>
+                        {selectedCollection.name}
+                    </Text>
+                    <View style={{ width: 24 }} />
+                </View>
+
+                {tabData.archived.loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#2196F3" />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredPosts}
+                        numColumns={3}
+                        renderItem={renderGridItem}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={styles.gridContainer}
+                        refreshing={tabData.archived.refreshing}
+                        onRefresh={handleRefresh}
+                        removeClippedSubviews={true}
+                        maxToRenderPerBatch={9}
+                        windowSize={5}
+                        getItemLayout={(data, index) => ({
+                            length: GRID_SIZE,
+                            offset: GRID_SIZE * index,
+                            index,
+                        })}
+                        ListEmptyComponent={() => (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="images-outline" size={48} color="#ccc" />
+                                <Text style={styles.emptyText}>
+                                    Bu koleksiyonda henüz gönderi yok
+                                </Text>
+                            </View>
+                        )}
+                    />
                 )}
-                numColumns={3}
-                renderItem={renderGridItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.gridContainer}
-                refreshing={tabData.archived.refreshing}
-                onRefresh={handleRefresh}
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={9}
-                windowSize={5}
-                getItemLayout={(data, index) => ({
-                    length: GRID_SIZE,
-                    offset: GRID_SIZE * index,
-                    index,
-                })}
-            />
-        </>
-    ), [tabData.archived, selectedCollection]);
+            </>
+        );
+    }, [tabData.archived, selectedCollection]);
 
     const handleLoadMore = () => {
         if (!activeTabData.loading && activeTabData.hasMore && activeTab === 'liked') {
@@ -507,107 +712,28 @@ const LikedPostsScreen = ({ navigation }) => {
     }, [selectedCollection, tabData.archived]);
 
     const renderDetailModal = () => {
-        const selectedIndex = posts.findIndex(post => post.id === selectedPost?.id);
+        // Aktif sekmeye göre doğru veri kaynağını seçelim
+        const currentPosts = activeTab === 'liked'
+            ? tabData.liked.posts
+            : tabData.archived.posts;
 
         return (
-            <Modal
+            <PostDetailModal
                 visible={selectedPost !== null}
-                animationType="slide"
-                onRequestClose={() => setSelectedPost(null)}
-            >
-                <SafeAreaView style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <TouchableOpacity
-                            onPress={() => setSelectedPost(null)}
-                            style={styles.backButton}
-                        >
-                            <Ionicons name="close" size={24} color="#000" />
-                        </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Gönderi Detayı</Text>
-                        <View style={{ width: 24 }} />
-                    </View>
-                    {selectedPost && (
-                        <FlatList
-                            ref={listRef}
-                            data={posts}
-                            keyExtractor={(item) => item.id}
-                            renderItem={({ item }) => (
-                                <View
-                                    onLayout={(event) => {
-                                        const { height } = event.nativeEvent.layout;
-                                        setPostHeights(prev => ({
-                                            ...prev,
-                                            [item.id]: height
-                                        }));
-                                    }}
-                                >
-                                    <Activity
-                                        activity={item}
-                                        onLikePress={() => handleLikePress(item.id)}
-                                        onCommentPress={(comment, replyToId) => {
-                                            handleCommentSubmit(item.id, comment, replyToId);
-                                        }}
-                                        isLiked={item.likedBy?.includes(currentUser?.uid)}
-                                        currentUserId={currentUser?.uid}
-                                        onUpdate={(updatedPost) => {
-                                            handlePostUpdate(updatedPost);
-                                            if (updatedPost.id === selectedPost.id) {
-                                                setSelectedPost(updatedPost);
-                                            }
-                                        }}
-                                    />
-                                </View>
-                            )}
-                            showsVerticalScrollIndicator={false}
-                            contentContainerStyle={styles.modalContent}
-                            initialScrollIndex={selectedIndex}
-                            getItemLayout={(data, index) => {
-                                // Önceki gönderilerin toplam yüksekliğini hesapla
-                                let offset = 0;
-                                for (let i = 0; i < index; i++) {
-                                    const postId = data[i]?.id;
-                                    offset += postHeights[postId] || 0;
-                                }
-                                const length = postHeights[data[index]?.id] || 0;
-                                return {
-                                    length,
-                                    offset,
-                                    index,
-                                };
-                            }}
-                            onScrollToIndexFailed={(info) => {
-                                const wait = new Promise(resolve => setTimeout(resolve, 500));
-                                wait.then(() => {
-                                    if (selectedIndex !== -1) {
-                                        listRef.current?.scrollToIndex({
-                                            index: selectedIndex,
-                                            animated: true
-                                        });
-                                    }
-                                });
-                            }}
-                            onMomentumScrollEnd={(event) => {
-                                // Scroll durduğunda görünen gönderiyi seçili olarak işaretle
-                                let totalHeight = 0;
-                                let newIndex = 0;
-
-                                for (let i = 0; i < posts.length; i++) {
-                                    const postHeight = postHeights[posts[i].id] || 0;
-                                    if (totalHeight + postHeight / 2 > event.nativeEvent.contentOffset.y) {
-                                        newIndex = i;
-                                        break;
-                                    }
-                                    totalHeight += postHeight;
-                                }
-
-                                if (posts[newIndex]) {
-                                    setSelectedPost(posts[newIndex]);
-                                }
-                            }}
-                        />
-                    )}
-                </SafeAreaView>
-            </Modal>
+                onClose={() => setSelectedPost(null)}
+                selectedPost={selectedPost}
+                currentPosts={currentPosts}
+                currentUserId={currentUser?.uid}
+                onLikePress={handleLikePress}
+                onCommentPress={handleCommentSubmit}
+                onPostUpdate={(updatedPost) => {
+                    handlePostUpdate(updatedPost);
+                    if (updatedPost.id !== selectedPost.id) {
+                        setSelectedPost(updatedPost);
+                    }
+                }}
+                navigation={navigation}
+            />
         );
     };
 
@@ -768,9 +894,6 @@ const styles = StyleSheet.create({
     commentStatText: {
         color: '#E8F2FF',
     },
-    modalContent: {
-        paddingBottom: 20,
-    },
     modalContainer: {
         flex: 1,
         backgroundColor: '#fff',
@@ -783,7 +906,22 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
         backgroundColor: '#fff',
-        zIndex: 1,
+        zIndex: 10,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        paddingBottom: 15,
+    },
+    modalContent: {
+        paddingBottom: 20,
+        paddingTop: 0,
+    },
+    postContainer: {
+        backgroundColor: '#fff',
+        marginBottom: 1,
+        marginTop: 0,
     },
     collectionsContainer: {
         padding: 16,

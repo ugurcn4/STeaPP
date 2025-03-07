@@ -11,11 +11,14 @@ import {
 import FastImage from 'react-native-fast-image';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../../firebaseConfig';
+import FriendProfileModal from '../modals/friendProfileModal';
 
 const LikedByScreen = ({ route, navigation }) => {
     const { postId, likedBy } = route.params;
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
     useEffect(() => {
         fetchLikedByUsers();
@@ -42,10 +45,24 @@ const LikedByScreen = ({ route, navigation }) => {
         }
     };
 
+    const handleUserPress = (user) => {
+        const completeUserData = {
+            ...user,
+            name: user.informations?.name || 'İsimsiz Kullanıcı',
+            informations: {
+                ...user.informations,
+                username: user.informations?.username || user.informations?.name?.toLowerCase().replace(/\s+/g, '_') || 'kullanici'
+            }
+        };
+
+        setSelectedUser(completeUserData);
+        setModalVisible(true);
+    };
+
     const renderItem = ({ item }) => (
         <TouchableOpacity
             style={styles.userItem}
-            onPress={() => navigation.navigate('FriendDetail', { userId: item.id })}
+            onPress={() => handleUserPress(item)}
         >
             <FastImage
                 source={{
@@ -87,6 +104,13 @@ const LikedByScreen = ({ route, navigation }) => {
                     />
                 )}
             </TouchableOpacity>
+
+            <FriendProfileModal
+                visible={modalVisible}
+                onClose={() => setModalVisible(false)}
+                friend={selectedUser}
+                navigation={navigation}
+            />
         </TouchableOpacity>
     );
 };

@@ -229,7 +229,7 @@ const OnboardingScreen = ({ navigation, route }) => {
         >
             <View style={styles.header}>
                 <Image
-                    source={require('../../../assets/images/new-logo.png')}
+                    source={require('../../../assets/images/logo.png')}
                     style={styles.logo}
                 />
                 <TouchableOpacity

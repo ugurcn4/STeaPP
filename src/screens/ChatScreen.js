@@ -817,8 +817,14 @@ const ChatScreen = ({ route, navigation }) => {
     };
 
     const renderHeader = () => (
-        <View style={styles.headerContainer}>
-            <BlurView intensity={100} style={styles.headerBlur}>
+        <View style={[
+            styles.headerContainer,
+            Platform.OS === 'android' ? styles.androidHeaderContainer : {}
+        ]}>
+            <BlurView intensity={100} style={[
+                styles.headerBlur,
+                Platform.OS === 'android' ? styles.androidHeaderBlur : {}
+            ]}>
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backButton}
@@ -966,7 +972,11 @@ const ChatScreen = ({ route, navigation }) => {
         if (isLoading) return null;
 
         return (
-            <View style={[styles.emptyContainer, { transform: [{ scaleY: -1 }] }]}>
+            <View style={[
+                styles.emptyContainer,
+                // Platform'a göre transform uygula
+                Platform.OS === 'ios' ? { transform: [{ scaleY: -1 }] } : {}
+            ]}>
                 <Ionicons name="lock-closed" size={48} color="#666" style={styles.lockIcon} />
                 <Text style={styles.emptyTitle}>
                     Uçtan uca şifrelenmiş
@@ -1068,6 +1078,7 @@ const ChatScreen = ({ route, navigation }) => {
                     maxToRenderPerBatch={10}
                     windowSize={10}
                     removeClippedSubviews={true}
+                    style={Platform.OS === 'android' && messages.length === 0 ? { transform: [{ scaleY: 1 }] } : {}}
                     maintainVisibleContentPosition={{
                         minIndexForVisible: 0,
                         autoscrollToTopThreshold: 10
@@ -1113,9 +1124,15 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
     },
+    androidHeaderContainer: {
+        height: 70 + (StatusBar.currentHeight || 0),
+    },
     headerBlur: {
         height: '100%',
         paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight,
+    },
+    androidHeaderBlur: {
+        paddingTop: 0,
     },
     header: {
         flex: 1,
@@ -1123,6 +1140,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingBottom: 12,
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     backButton: {
         width: 40,
@@ -1168,7 +1186,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         backgroundColor: '#F8F9FB',
-        marginTop: Platform.OS === 'ios' ? 90 : 70,
+        marginTop: Platform.OS === 'ios' ? 90 : (70 + (StatusBar.currentHeight || 0)),
     },
     messagesList: {
         padding: 16,
