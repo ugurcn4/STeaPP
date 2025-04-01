@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, storage } from '../../firebaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -11,6 +11,9 @@ import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import FastImage from 'react-native-fast-image';
+import FriendProfileModal from './friendProfileModal';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -33,6 +36,11 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     const [verificationCode, setVerificationCode] = useState('');
     const [timer, setTimer] = useState(60);
     const [isTimerActive, setIsTimerActive] = useState(false);
+    const [friendProfileVisible, setFriendProfileVisible] = useState(false);
+    const [verificationStatus, setVerificationStatus] = useState({
+        hasBlueTick: false,
+        hasGreenTick: false
+    });
 
     const auth = getAuth();
 
@@ -60,6 +68,8 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     if (docSnap.exists()) {
                         setUserInfo(docSnap.data());
                         setUserData(docSnap.data());
+                        // Doğrulama durumunu kontrol et
+                        await checkVerificationStatus();
                     }
                 } catch (error) {
                     console.error('Kullanıcı verileri alınırken hata:', error);
@@ -97,6 +107,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     },
                     friendsCount: friends.length,
                 }));
+
+                // Doğrulama durumunu kontrol et
+                await checkVerificationStatus();
+
             } else {
                 await setDoc(userDoc, { informations: { email: user.email } }, { merge: true });
                 setUserData({ email: user.email, contact: {}, friendsCount: 0 });
@@ -109,8 +123,28 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     useEffect(() => {
         if (modalVisible) {
             fetchUserData();
+            // Doğrulama durumunu da kontrol et
+            checkVerificationStatus();
         }
     }, [modalVisible]);
+
+    // Modal kapandığında temizleme işlemleri için
+    useEffect(() => {
+        return () => {
+            // Modal kapandığında tüm alt modalları da kapatalım
+            setPhoneModalVisible(false);
+            setInstaModalVisible(false);
+            setBioModalVisible(false);
+            setImageModalVisible(false);
+            setFriendProfileVisible(false);
+
+            // Doğrulama adımlarını sıfırlayalım
+            setVerificationStep('input');
+            setVerificationCode('');
+            setTimer(60);
+            setIsTimerActive(false);
+        };
+    }, []);
 
     const handleAddPhoneNumber = async () => {
         if (!userInfo.phoneNumber || !userInfo.phoneNumber.match(/^\d{10,}$/)) {
@@ -256,10 +290,12 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     };
 
     const handleBioChange = (text) => {
-        setUserInfo((prevData) => ({
-            ...prevData,
-            bio: text,
-        }));
+        if (text.length <= 50) {
+            setUserInfo((prevData) => ({
+                ...prevData,
+                bio: text,
+            }));
+        }
     };
     const handlePhoneNumberChange = (text) => {
         setUserInfo((prevData) => ({
@@ -330,6 +366,18 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         }
     };
 
+    // Kullanıcının doğrulama durumunu kontrol et
+    const checkVerificationStatus = async () => {
+        if (user) {
+            try {
+                const verificationResult = await checkUserVerification(user.uid);
+                setVerificationStatus(verificationResult);
+            } catch (error) {
+                console.error("Doğrulama durumu kontrol hatası:", error);
+            }
+        }
+    };
+
     return (
         <Modal
             animationType="fade"
@@ -372,7 +420,16 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 </View>
                             </TouchableOpacity>
 
-                            <Text style={styles.userName}>{userData?.name || 'İsimsiz Kullanıcı'}</Text>
+                            <View style={styles.userNameContainer}>
+                                <Text style={styles.userName}>{userData?.name || 'İsimsiz Kullanıcı'}</Text>
+                                <VerificationBadge
+                                    hasBlueTick={verificationStatus.hasBlueTick}
+                                    hasGreenTick={verificationStatus.hasGreenTick}
+                                    size={18}
+                                    style={styles.verificationBadge}
+                                    showTooltip={false}
+                                />
+                            </View>
                             <Text style={styles.userBio}>{userInfo?.bio || 'Biyografi ekleyin'}</Text>
                         </View>
 
@@ -390,6 +447,26 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 <Text style={styles.statLabel}>Favori</Text>
                             </View>
                         </View>
+
+                        <TouchableOpacity
+                            style={styles.detailedProfileButton}
+                            onPress={() => {
+                                setFriendProfileVisible(true);
+                            }}
+                        >
+                            <LinearGradient
+                                colors={['#4CAF50', '#45a049']}
+                                style={styles.detailedProfileGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <View style={styles.detailedProfileContent}>
+                                    <MaterialCommunityIcons name="account-details" size={20} color="#fff" />
+                                    <Text style={styles.detailedProfileText}>Detaylı Profil Görünümü</Text>
+                                    <MaterialCommunityIcons name="chevron-right" size={24} color="#fff" />
+                                </View>
+                            </LinearGradient>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Info Cards Section */}
@@ -629,8 +706,8 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.inputContainer}>
-                            <MaterialCommunityIcons name="text" size={24} color="#4CAF50" />
+                        <View style={[styles.inputContainer, styles.bioInputContainer]}>
+                            <MaterialCommunityIcons name="text" size={24} color="#4CAF50" style={{ marginTop: 8 }} />
                             <TextInput
                                 style={[styles.input, styles.bioInput]}
                                 value={userInfo.bio}
@@ -638,9 +715,14 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 placeholder="Kendinizden bahsedin"
                                 placeholderTextColor="#999"
                                 multiline
-                                numberOfLines={4}
+                                maxLength={50}
+                                numberOfLines={2}
                             />
                         </View>
+
+                        <Text style={styles.characterCount}>
+                            {userInfo.bio ? userInfo.bio.length : 0}/50
+                        </Text>
 
                         <TouchableOpacity
                             style={styles.saveButton}
@@ -687,6 +769,26 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            <FriendProfileModal
+                visible={friendProfileVisible}
+                onClose={() => setFriendProfileVisible(false)}
+                friend={{
+                    id: user?.uid,
+                    name: userData?.name || userInfo?.name,
+                    profilePicture: userData?.profilePicture,
+                    bio: userData?.bio || userInfo?.bio,
+                    friends: userData?.friends || [],
+                    informations: {
+                        name: userData?.name || userInfo?.name || 'İsimsiz Kullanıcı',
+                        username: userData?.username || userInfo?.username,
+                        email: userData?.email || user?.email
+                    },
+                    phoneNumber: userData?.phoneNumber || userInfo?.phoneNumber,
+                    insta: userData?.insta || userInfo?.insta
+                }}
+                navigation={navigation}
+            />
 
         </Modal>
     );
@@ -751,6 +853,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 3,
         borderColor: '#fff',
+    },
+    userNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     userName: {
         fontSize: 24,
@@ -871,8 +977,10 @@ const styles = StyleSheet.create({
         color: '#2c3e50',
     },
     bioInput: {
-        minHeight: 100,
+        minHeight: 60,
         textAlignVertical: 'top',
+        paddingTop: 8,
+        paddingBottom: 8,
     },
     saveButton: {
         overflow: 'hidden',
@@ -957,6 +1065,56 @@ const styles = StyleSheet.create({
         color: '#4CAF50',
         fontSize: 14,
         fontWeight: '600',
+    },
+    characterCount: {
+        fontSize: 12,
+        color: '#666',
+        textAlign: 'right',
+        marginTop: 4,
+        marginBottom: 16,
+        marginRight: 8,
+    },
+    bioInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+    },
+    detailedProfileButton: {
+        width: '100%',
+        marginTop: 15,
+        marginBottom: 5,
+        borderRadius: 15,
+        overflow: 'hidden',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 1.5,
+    },
+    detailedProfileGradient: {
+        width: '100%',
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+    },
+    detailedProfileContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    detailedProfileText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '600',
+        flex: 1,
+        marginLeft: 10,
+    },
+    verificationBadge: {
+        marginLeft: 8,
+        alignSelf: 'center',
+        transform: [{ translateY: -1 }]
     },
 });
 

@@ -65,50 +65,82 @@ export const createPost = async (postData, imageUri) => {
 };
 
 // Gönderileri getir
-export const fetchPosts = async (currentUserId) => {
+export const fetchPosts = async (currentUserId, page = 1, pageSize = 10, friendsList = [], lastVisibleDoc = null) => {
     try {
         const postsRef = collection(db, 'posts');
-        const q = query(
-            postsRef,
-            orderBy('createdAt', 'desc')
-        );
+
+        // Ana sorguyu oluştur
+        let q;
+        if (lastVisibleDoc) {
+            // Eğer son görünen belge verilmişse, ondan sonrasını getir
+            q = query(
+                postsRef,
+                orderBy('createdAt', 'desc'),
+                startAfter(lastVisibleDoc),
+                limit(pageSize + 1) // Bir fazla getir, daha fazla olup olmadığını kontrol etmek için
+            );
+        } else {
+            // İlk sayfa için
+            q = query(
+                postsRef,
+                orderBy('createdAt', 'desc'),
+                limit(pageSize + 1) // Bir fazla getir, daha fazla olup olmadığını kontrol etmek için
+            );
+        }
 
         const querySnapshot = await getDocs(q);
+        const docs = querySnapshot.docs;
+
+        // Daha fazla gönderi olup olmadığını kontrol et
+        const hasMore = docs.length > pageSize;
+
+        // Eğer daha fazla gönderi varsa, son belgeyi ayır
+        const postsToProcess = hasMore ? docs.slice(0, pageSize) : docs;
+        const lastVisible = docs.length > 0 ? docs[docs.length - 1] : null;
+
         const posts = [];
 
-        // Kullanıcının arkadaş listesini al
-        const userDoc = await getDoc(doc(db, 'users', currentUserId));
-        const userFriends = userDoc.data()?.friends || [];
+        // Kullanıcı bilgilerini toplu olarak çekmek için map oluştur
+        const userIds = new Set();
+        postsToProcess.forEach(doc => {
+            userIds.add(doc.data().userId);
+        });
 
-        for (const docSnapshot of querySnapshot.docs) {
+        // Tüm kullanıcı bilgilerini tek seferde çek
+        const userDataMap = {};
+        const userPromises = Array.from(userIds).map(async (userId) => {
+            const userDocRef = doc(db, 'users', userId);
+            const userDocSnapshot = await getDoc(userDocRef);
+            if (userDocSnapshot.exists()) {
+                userDataMap[userId] = userDocSnapshot.data();
+            }
+        });
+
+        await Promise.all(userPromises);
+
+        for (const docSnapshot of postsToProcess) {
             const postData = docSnapshot.data();
 
             try {
-                // Post sahibinin gizlilik ayarlarını kontrol et
-                const postOwnerRef = doc(db, 'users', postData.userId);
-                const postOwnerDoc = await getDoc(postOwnerRef);
-                const postOwnerData = postOwnerDoc.data() || {};
+                // Kullanıcı bilgilerini map'ten al
+                const userData = userDataMap[postData.userId] || {};
 
-                // Gizlilik ayarlarını kontrol et
-                const privacySettings = postOwnerData.settings?.privacySettings || {};
-                const visibility = postOwnerData.settings?.visibility || 'public';
+                // Gizlilik kontrolü
+                const visibility = userData.settings?.visibility || 'public';
 
                 // Kullanıcı kendisi değilse ve profil görünürlüğü private ise ve arkadaş değilse, postu gösterme
                 if (postData.userId !== currentUserId &&
                     visibility === 'private' &&
-                    !userFriends.includes(postData.userId)) {
+                    !friendsList.includes(postData.userId)) {
                     continue;
                 }
 
                 // Post görünürlük kontrolü
-                // Eğer post public değilse ve kullanıcı arkadaş listesinde değilse, postu gösterme
-                if (!postData.isPublic && !userFriends.includes(postData.userId) && postData.userId !== currentUserId) {
+                if (!postData.isPublic &&
+                    !friendsList.includes(postData.userId) &&
+                    postData.userId !== currentUserId) {
                     continue;
                 }
-
-                const userDocRef = doc(db, 'users', postData.userId);
-                const userDocSnapshot = await getDoc(userDocRef);
-                const userData = userDocSnapshot.data() || {};
 
                 posts.push({
                     id: docSnapshot.id,
@@ -132,41 +164,58 @@ export const fetchPosts = async (currentUserId) => {
             }
         }
 
-        const postsWithUserData = await Promise.all(
-            posts.map(async (post) => {
-                // İlk beğenen kişinin bilgisini al
-                let firstLikerName = '';
-                if (post.likedBy && post.likedBy.length > 0) {
-                    const firstLikerId = post.likedBy[0];
-                    try {
-                        const firstLikerDoc = await getDoc(doc(db, 'users', firstLikerId));
+        // İlk beğenen kişilerin bilgilerini toplu olarak çek
+        const likerIds = new Set();
+        posts.forEach(post => {
+            if (post.likedBy && post.likedBy.length > 0) {
+                likerIds.add(post.likedBy[0]);
+            }
+        });
 
-                        if (firstLikerDoc.exists()) {
-                            const userData = firstLikerDoc.data();
-                            // Sırayla kontrol edelim
-                            if (userData.informations?.name) {
-                                firstLikerName = userData.informations.name;
-                            } else if (userData.informations?.username) {
-                                firstLikerName = userData.informations.username;
-                            } else if (userData.name) {
-                                firstLikerName = userData.name;
-                            } else {
-                                firstLikerName = 'İsimsiz Kullanıcı';
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Beğenen kullanıcı bilgisi alınırken hata:', error);
+        const likerDataMap = {};
+        const likerPromises = Array.from(likerIds).map(async (likerId) => {
+            const likerDocRef = doc(db, 'users', likerId);
+            const likerDocSnapshot = await getDoc(likerDocRef);
+            if (likerDocSnapshot.exists()) {
+                likerDataMap[likerId] = likerDocSnapshot.data();
+            }
+        });
+
+        await Promise.all(likerPromises);
+
+        // Beğenen kişi bilgilerini ekle
+        const postsWithUserData = posts.map(post => {
+            let firstLikerName = '';
+            if (post.likedBy && post.likedBy.length > 0) {
+                const firstLikerId = post.likedBy[0];
+                const likerData = likerDataMap[firstLikerId];
+
+                if (likerData) {
+                    if (likerData.informations?.name) {
+                        firstLikerName = likerData.informations.name;
+                    } else if (likerData.informations?.username) {
+                        firstLikerName = likerData.informations.username;
+                    } else if (likerData.name) {
+                        firstLikerName = likerData.name;
+                    } else {
                         firstLikerName = 'İsimsiz Kullanıcı';
                     }
+                } else {
+                    firstLikerName = 'İsimsiz Kullanıcı';
                 }
-                return {
-                    ...post,
-                    firstLikerName
-                };
-            })
-        );
+            }
 
-        return postsWithUserData;
+            return {
+                ...post,
+                firstLikerName
+            };
+        });
+
+        return {
+            posts: postsWithUserData,
+            lastVisible: lastVisible,
+            hasMore: hasMore
+        };
     } catch (error) {
         console.error('Gönderiler alınırken hata:', error);
         throw error;
@@ -493,6 +542,8 @@ export const toggleArchivePost = async (postId, userId) => {
 export const fetchArchivedPosts = async (userId) => {
     try {
         const postsRef = collection(db, 'posts');
+
+        // 1. Kullanıcının archivedBy alanında olduğu gönderileri çekelim
         const q = query(
             postsRef,
             where('archivedBy', 'array-contains', userId),
@@ -502,6 +553,7 @@ export const fetchArchivedPosts = async (userId) => {
         const querySnapshot = await getDocs(q);
         const posts = [];
 
+        // Postları işle ve ekle
         for (const docSnapshot of querySnapshot.docs) {
             const postData = docSnapshot.data();
             try {
@@ -531,6 +583,70 @@ export const fetchArchivedPosts = async (userId) => {
                 console.error('Kullanıcı bilgileri alınırken hata:', error);
             }
         }
+
+        // 2. Kullanıcının koleksiyonlarını çekelim
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+
+        if (userDoc.exists()) {
+            const userArchiveGroups = userDoc.data().archiveGroups || [];
+
+            // Ortak koleksiyonları belirleyelim
+            const sharedGroups = userArchiveGroups.filter(group => group.isShared).map(group => group.id);
+
+            if (sharedGroups.length > 0) {
+
+                // Ortak koleksiyonlardaki gönderileri çekelim
+                for (const groupId of sharedGroups) {
+                    // Gruptaki gönderileri çek
+                    const sharedPostsQuery = query(
+                        postsRef,
+                        where('archiveGroups', 'array-contains', groupId),
+                        orderBy('createdAt', 'desc')
+                    );
+
+                    const sharedPostsSnapshot = await getDocs(sharedPostsQuery);
+
+                    for (const docSnapshot of sharedPostsSnapshot.docs) {
+                        // Post zaten eklenmişse tekrar ekleme
+                        if (posts.some(post => post.id === docSnapshot.id)) {
+                            continue;
+                        }
+
+                        const postData = docSnapshot.data();
+                        try {
+                            const userDocRef = doc(db, 'users', postData.userId);
+                            const userDocSnapshot = await getDoc(userDocRef);
+                            const userData = userDocSnapshot.data() || {};
+
+                            posts.push({
+                                id: docSnapshot.id,
+                                ...postData,
+                                user: {
+                                    id: postData.userId,
+                                    name: userData.informations?.name || 'İsimsiz Kullanıcı',
+                                    username: userData.informations?.username,
+                                    avatar: userData.profilePicture || null
+                                },
+                                likedBy: postData.likedBy || [],
+                                archivedBy: postData.archivedBy || [],
+                                comments: postData.comments || [],
+                                createdAt: postData.createdAt?.toDate() || new Date(),
+                                imageUrl: postData.imageUrl,
+                                description: postData.description || '',
+                                tags: postData.tags || [],
+                                stats: postData.stats || { likes: 0, comments: 0 }
+                            });
+                        } catch (error) {
+                            console.error('Kullanıcı bilgileri alınırken hata:', error);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Son olarak gönderileri tarihe göre sırala
+        posts.sort((a, b) => b.createdAt - a.createdAt);
 
         return posts;
     } catch (error) {
@@ -578,10 +694,40 @@ export const createArchiveGroup = async (userId, groupData) => {
 export const updatePostArchiveGroups = async (postId, userId, groupIds) => {
     try {
         const postRef = doc(db, 'posts', postId);
+        const postDoc = await getDoc(postRef);
+
+        if (!postDoc.exists()) {
+            throw new Error('Gönderi bulunamadı');
+        }
+
+        const postData = postDoc.data();
+        let updatedGroupIds = groupIds;
+
+        // Eğer ortak koleksiyonlar varsa, diğer koleksiyonları da koruyalım
+        if (postData.archiveGroups && Array.isArray(postData.archiveGroups)) {
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+
+            if (userDoc.exists()) {
+                const userArchiveGroups = userDoc.data().archiveGroups || [];
+
+                // Kullanıcının ortak koleksiyonlarını bul
+                const userSharedGroups = userArchiveGroups.filter(group => group.isShared);
+                const userSharedGroupIds = userSharedGroups.map(group => group.id);
+
+                // Gönderinin mevcut koleksiyonlarından, diğer kullanıcılara ait olanları koru
+                const otherUsersGroupIds = postData.archiveGroups.filter(groupId =>
+                    !userSharedGroupIds.includes(groupId) && !groupIds.includes(groupId)
+                );
+
+                // Yeni seçilen grup ID'leri ile birleştir
+                updatedGroupIds = [...groupIds, ...otherUsersGroupIds];
+            }
+        }
 
         // Tek bir updateDoc işlemi ile tüm güncellemeleri yap
         await updateDoc(postRef, {
-            archiveGroups: groupIds,
+            archiveGroups: updatedGroupIds,
             archivedBy: arrayUnion(userId)
         });
 
@@ -709,6 +855,354 @@ export const quickSavePost = async (postId, userId) => {
         return defaultCollection;
     } catch (error) {
         console.error('Hızlı kaydetme hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyon oluştur
+export const createSharedArchiveGroup = async (userId, groupData, friendIds) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            throw new Error('Kullanıcı bulunamadı');
+        }
+
+        // Yeni grup için benzersiz bir ID oluştur
+        const groupId = Date.now().toString();
+
+        // Yeni grup verisi
+        const newGroup = {
+            id: groupId,
+            name: groupData.name,
+            description: groupData.description || '',
+            emoji: groupData.emoji || '👥',
+            createdAt: new Date().toISOString(),
+            isShared: true,
+            createdBy: userId,
+            members: [userId, ...friendIds],
+            postCount: 0
+        };
+
+        // Batch işlemi başlat
+        const batch = writeBatch(db);
+
+        // Oluşturucu kullanıcının arşiv gruplarını güncelle
+        const creatorArchiveGroups = userDoc.data().archiveGroups || [];
+        batch.update(userRef, {
+            archiveGroups: [...creatorArchiveGroups, newGroup]
+        });
+
+        // Arkadaşların kullanıcı verilerini güncelle
+        for (const friendId of friendIds) {
+            const friendRef = doc(db, 'users', friendId);
+            const friendDoc = await getDoc(friendRef);
+
+            if (friendDoc.exists()) {
+                const friendArchiveGroups = friendDoc.data().archiveGroups || [];
+                batch.update(friendRef, {
+                    archiveGroups: [...friendArchiveGroups, newGroup]
+                });
+            }
+        }
+
+        // Batch işlemini tamamla
+        await batch.commit();
+
+        return newGroup;
+    } catch (error) {
+        console.error('Ortak arşiv grubu oluşturma hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyona üye ekle
+export const addMemberToSharedGroup = async (groupId, newMemberId, currentUserId) => {
+    try {
+        // Grup bilgilerini al
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('archiveGroups', 'array-contains',
+            { id: groupId }));
+
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            throw new Error('Koleksiyon bulunamadı');
+        }
+
+        // Yeni üyenin kullanıcı belgesini al
+        const newMemberRef = doc(db, 'users', newMemberId);
+        const newMemberDoc = await getDoc(newMemberRef);
+
+        if (!newMemberDoc.exists()) {
+            throw new Error('Eklenecek kullanıcı bulunamadı');
+        }
+
+        // Batch işlemi başlat
+        const batch = writeBatch(db);
+
+        let groupData = null;
+
+        // Tüm ilgili kullanıcıları güncelle
+        for (const userDoc of querySnapshot.docs) {
+            const userData = userDoc.data();
+            const archiveGroups = userData.archiveGroups || [];
+
+            const groupIndex = archiveGroups.findIndex(group => group.id === groupId);
+
+            if (groupIndex !== -1) {
+                // Grup verisini kaydet
+                if (!groupData) {
+                    groupData = archiveGroups[groupIndex];
+                }
+
+                // Eğer kullanıcı zaten grup üyesi değilse ekle
+                if (!archiveGroups[groupIndex].members.includes(newMemberId)) {
+                    const updatedGroup = {
+                        ...archiveGroups[groupIndex],
+                        members: [...archiveGroups[groupIndex].members, newMemberId]
+                    };
+
+                    const updatedGroups = [...archiveGroups];
+                    updatedGroups[groupIndex] = updatedGroup;
+
+                    batch.update(userDoc.ref, {
+                        archiveGroups: updatedGroups
+                    });
+                }
+            }
+        }
+
+        // Yeni üyenin koleksiyonlarına ekle
+        if (groupData) {
+            const newMemberGroups = newMemberDoc.data().archiveGroups || [];
+
+            // Eğer kullanıcıda bu grup yoksa ekle
+            if (!newMemberGroups.find(group => group.id === groupId)) {
+                batch.update(newMemberRef, {
+                    archiveGroups: [...newMemberGroups, groupData]
+                });
+            }
+        }
+
+        // Batch işlemini tamamla
+        await batch.commit();
+
+        return true;
+    } catch (error) {
+        console.error('Ortak koleksiyona üye ekleme hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyondan üye çıkar
+export const removeMemberFromSharedGroup = async (groupId, memberId, currentUserId) => {
+    try {
+        // Grup yaratıcısı mı kontrol et
+        const userRef = doc(db, 'users', currentUserId);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            throw new Error('Kullanıcı bulunamadı');
+        }
+
+        const archiveGroups = userDoc.data().archiveGroups || [];
+        const groupIndex = archiveGroups.findIndex(group => group.id === groupId);
+
+        if (groupIndex === -1) {
+            throw new Error('Koleksiyon bulunamadı');
+        }
+
+        const group = archiveGroups[groupIndex];
+
+        // Sadece oluşturucu üyeleri çıkarabilir ya da kişi kendini çıkarabilir
+        if (group.createdBy !== currentUserId && memberId !== currentUserId) {
+            throw new Error('Bu işlem için yetkiniz yok');
+        }
+
+        // Tüm ilgili kullanıcıları bul
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('archiveGroups', 'array-contains', { id: groupId }));
+        const querySnapshot = await getDocs(q);
+
+        // Batch işlemi başlat
+        const batch = writeBatch(db);
+
+        // Tüm ilgili kullanıcıları güncelle
+        for (const userDoc of querySnapshot.docs) {
+            const userData = userDoc.data();
+            const userGroups = userData.archiveGroups || [];
+
+            const userGroupIndex = userGroups.findIndex(g => g.id === groupId);
+
+            if (userGroupIndex !== -1) {
+                const updatedGroup = {
+                    ...userGroups[userGroupIndex],
+                    members: userGroups[userGroupIndex].members.filter(id => id !== memberId)
+                };
+
+                // Eğer çıkarılacak üye kendisiyse, koleksiyonu tamamen kaldır
+                if (userDoc.id === memberId) {
+                    batch.update(userDoc.ref, {
+                        archiveGroups: userGroups.filter(g => g.id !== groupId)
+                    });
+                } else {
+                    // Değilse sadece üye listesini güncelle
+                    const updatedGroups = [...userGroups];
+                    updatedGroups[userGroupIndex] = updatedGroup;
+
+                    batch.update(userDoc.ref, {
+                        archiveGroups: updatedGroups
+                    });
+                }
+            }
+        }
+
+        // Batch işlemini tamamla
+        await batch.commit();
+
+        return true;
+    } catch (error) {
+        console.error('Ortak koleksiyondan üye çıkarma hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyonu sil
+export const deleteSharedArchiveGroup = async (groupId, userId) => {
+    try {
+        // Kullanıcı bilgilerini al
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            throw new Error('Kullanıcı bulunamadı');
+        }
+
+        const archiveGroups = userDoc.data().archiveGroups || [];
+        const group = archiveGroups.find(g => g.id === groupId);
+
+        if (!group) {
+            throw new Error('Koleksiyon bulunamadı');
+        }
+
+        // Sadece oluşturucu koleksiyonu silebilir
+        if (group.createdBy !== userId) {
+            throw new Error('Bu koleksiyonu silme yetkiniz yok');
+        }
+
+        // Tüm üyelerde koleksiyonu bul
+        const batch = writeBatch(db);
+
+        // Tüm üyeleri dolaş
+        for (const memberId of group.members) {
+            const memberRef = doc(db, 'users', memberId);
+            const memberDoc = await getDoc(memberRef);
+
+            if (memberDoc.exists()) {
+                const memberGroups = memberDoc.data().archiveGroups || [];
+                batch.update(memberRef, {
+                    archiveGroups: memberGroups.filter(g => g.id !== groupId)
+                });
+            }
+        }
+
+        // İlgili gönderileri güncelle
+        const postsRef = collection(db, 'posts');
+        const q = query(postsRef, where('archiveGroups', 'array-contains', groupId));
+        const postsSnapshot = await getDocs(q);
+
+        postsSnapshot.forEach(postDoc => {
+            const postData = postDoc.data();
+            batch.update(postDoc.ref, {
+                archiveGroups: postData.archiveGroups.filter(id => id !== groupId)
+            });
+        });
+
+        // Batch işlemini tamamla
+        await batch.commit();
+
+        return true;
+    } catch (error) {
+        console.error('Ortak koleksiyon silme hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyonları getir
+export const fetchSharedArchiveGroups = async (userId) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            return [];
+        }
+
+        const archiveGroups = userDoc.data().archiveGroups || [];
+
+        // Ortak koleksiyonları filtrele
+        return archiveGroups.filter(group => group.isShared === true);
+    } catch (error) {
+        console.error('Ortak koleksiyonları getirme hatası:', error);
+        throw error;
+    }
+};
+
+// Ortak koleksiyona gönderi ekle
+export const addPostToSharedCollection = async (postId, userId, sharedGroupId) => {
+    try {
+        // Önce ortak koleksiyonu bul
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            throw new Error('Kullanıcı bulunamadı');
+        }
+
+        const userGroups = userDoc.data().archiveGroups || [];
+        const sharedGroup = userGroups.find(group => group.id === sharedGroupId);
+
+        if (!sharedGroup || !sharedGroup.isShared) {
+            throw new Error('Ortak koleksiyon bulunamadı');
+        }
+
+        // Gönderiyi al
+        const postRef = doc(db, 'posts', postId);
+        const postDoc = await getDoc(postRef);
+
+        if (!postDoc.exists()) {
+            throw new Error('Gönderi bulunamadı');
+        }
+
+        const postData = postDoc.data();
+        const currentArchiveGroups = postData.archiveGroups || [];
+        const currentArchivedBy = postData.archivedBy || [];
+
+        // Koleksiyon üyelerini al
+        const memberIds = sharedGroup.members || [];
+
+        // Eklenmemiş üyeleri belirle
+        const membersToAdd = memberIds.filter(memberId => !currentArchivedBy.includes(memberId));
+
+        // Gönderiyi koleksiyona eklemek için tüm değişiklikleri tek seferde yap
+        const updates = {
+            archiveGroups: [...new Set([...currentArchiveGroups, sharedGroupId])]
+        };
+
+        // archivedBy alanı varsa güncelle, yoksa oluştur
+        if (membersToAdd.length > 0) {
+            // Tüm üyeleri ekleyeceğiz, arrayUnion yerine doğrudan set ediyoruz
+            updates.archivedBy = [...new Set([...currentArchivedBy, ...membersToAdd])];
+        }
+
+        // Tüm değişiklikleri tek seferde uygula
+        await updateDoc(postRef, updates);
+
+        return true;
+    } catch (error) {
+        console.error('Ortak koleksiyona gönderi ekleme hatası:', error);
         throw error;
     }
 }; 

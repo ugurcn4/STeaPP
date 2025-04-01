@@ -7,6 +7,7 @@ import MapPage from './MapPage';
 import SettingsPage from './SettingsPage';
 import ActivitiesScreen from './ActivitiesScreen';
 import OnboardingScreen from './OnboardingScreens/OnboardingScreen';
+import MaviTikSorgulamaPage from './SettingsPageScreens/MaviTikSorgulamaPage';
 
 export {
     HomePage,
@@ -17,4 +18,5 @@ export {
     SettingsPage,
     ActivitiesScreen,
     OnboardingScreen,
+    MaviTikSorgulamaPage
 };

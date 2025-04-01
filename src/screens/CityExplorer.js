@@ -530,10 +530,10 @@ const CityExplorer = ({ navigation }) => {
 
                         {!completedActivities.includes(activity.id) && (
                             <TouchableOpacity
-                                style={styles.startActivityButton}
-                                onPress={() => handleStartActivity(cityId, activity.id)}
+                                style={[styles.startActivityButton, { backgroundColor: '#cccccc' }]}
+                                disabled={true}
                             >
-                                <Text style={styles.startActivityButtonText}>Aktiviteyi Başlat</Text>
+                                <Text style={styles.startActivityButtonText}>Yakında Geliyor</Text>
                             </TouchableOpacity>
                         )}
                     </View>

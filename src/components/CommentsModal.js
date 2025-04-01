@@ -23,11 +23,48 @@ import Animated, {
     useSharedValue,
     runOnJS
 } from 'react-native-reanimated';
+import VerificationBadge from './VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 const CommentItem = ({ comment, onReply, currentUserId, postUserId, onDelete }) => {
     const canDelete = comment.userId === currentUserId || postUserId === currentUserId;
     const translateX = useSharedValue(0);
     const isOpen = useSharedValue(false);
+    const [verification, setVerification] = useState({ hasBlueTick: false, hasGreenTick: false });
+    const [replyVerifications, setReplyVerifications] = useState({});
+
+    useEffect(() => {
+        // Ana yorum için doğrulama durumunu kontrol et
+        const checkVerification = async () => {
+            try {
+                const verificationStatus = await checkUserVerification(comment.userId);
+                setVerification(verificationStatus);
+            } catch (error) {
+                console.error('Doğrulama durumu kontrolünde hata:', error);
+            }
+        };
+
+        // Yanıtlar için doğrulama durumlarını kontrol et
+        const checkReplyVerifications = async () => {
+            if (!comment.replies || !comment.replies.length) return;
+
+            const verificationData = {};
+
+            for (const reply of comment.replies) {
+                try {
+                    const status = await checkUserVerification(reply.userId);
+                    verificationData[reply.id] = status;
+                } catch (error) {
+                    console.error('Yanıt doğrulama durumu kontrolünde hata:', error);
+                }
+            }
+
+            setReplyVerifications(verificationData);
+        };
+
+        checkVerification();
+        checkReplyVerifications();
+    }, [comment.userId, comment.replies]);
 
     const panGesture = useAnimatedGestureHandler({
         onActive: (event) => {
@@ -80,7 +117,15 @@ const CommentItem = ({ comment, onReply, currentUserId, postUserId, onDelete }) 
                     />
                     <View style={styles.commentContent}>
                         <View style={styles.commentHeader}>
-                            <Text style={styles.username}>{comment.user.name}</Text>
+                            <View style={styles.usernameContainer}>
+                                <Text style={styles.username}>{comment.user.name}</Text>
+                                <VerificationBadge
+                                    hasBlueTick={verification.hasBlueTick}
+                                    hasGreenTick={verification.hasGreenTick}
+                                    size={12}
+                                    style={styles.verificationBadge}
+                                />
+                            </View>
                             <Text style={styles.timestamp}>
                                 {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true, locale: tr })}
                             </Text>
@@ -98,18 +143,30 @@ const CommentItem = ({ comment, onReply, currentUserId, postUserId, onDelete }) 
                         {/* Alt yorumlar */}
                         {comment.replies && comment.replies.length > 0 && (
                             <View style={styles.repliesContainer}>
-                                {comment.replies.map((reply) => (
-                                    <View key={reply.id} style={styles.replyItem}>
-                                        <FastImage
-                                            source={{ uri: reply.user.avatar || 'https://via.placeholder.com/30' }}
-                                            style={styles.replyAvatar}
-                                        />
-                                        <View style={styles.replyContent}>
-                                            <Text style={styles.username}>{reply.user.name}</Text>
-                                            <Text style={styles.replyText}>{reply.text}</Text>
+                                {comment.replies.map((reply) => {
+                                    const replyVerification = replyVerifications[reply.id] || { hasBlueTick: false, hasGreenTick: false };
+
+                                    return (
+                                        <View key={reply.id} style={styles.replyItem}>
+                                            <FastImage
+                                                source={{ uri: reply.user.avatar || 'https://via.placeholder.com/30' }}
+                                                style={styles.replyAvatar}
+                                            />
+                                            <View style={styles.replyContent}>
+                                                <View style={styles.replyUsernameContainer}>
+                                                    <Text style={styles.username}>{reply.user.name}</Text>
+                                                    <VerificationBadge
+                                                        hasBlueTick={replyVerification.hasBlueTick}
+                                                        hasGreenTick={replyVerification.hasGreenTick}
+                                                        size={10}
+                                                        style={styles.verificationBadgeReply}
+                                                    />
+                                                </View>
+                                                <Text style={styles.replyText}>{reply.text}</Text>
+                                            </View>
                                         </View>
-                                    </View>
-                                ))}
+                                    );
+                                })}
                             </View>
                         )}
                     </View>
@@ -158,7 +215,6 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
         onAddComment(newComment, replyTo?.id);
         setNewComment('');
         setReplyTo(null);
-        Keyboard.dismiss();
     };
 
     const handleReply = (comment) => {
@@ -207,7 +263,7 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
                                 styles.commentsList,
                                 { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 100 }
                             ]}
-                            keyboardShouldPersistTaps="handled"
+                            keyboardShouldPersistTaps="always"
                             showsVerticalScrollIndicator={false}
                         />
 
@@ -236,6 +292,7 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
                                     value={newComment}
                                     onChangeText={setNewComment}
                                     multiline
+                                    blurOnSubmit={false}
                                 />
                                 <TouchableOpacity
                                     style={[
@@ -311,13 +368,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 4,
     },
+    usernameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     username: {
         fontWeight: '500',
-        marginRight: 8,
+        marginRight: 2,
     },
     timestamp: {
         fontSize: 12,
         color: '#666',
+        marginLeft: 8,
     },
     commentText: {
         fontSize: 14,
@@ -442,6 +504,16 @@ const styles = StyleSheet.create({
         right: 12,
         top: 12,
         zIndex: 1,
+    },
+    verificationBadge: {
+        marginLeft: 2,
+    },
+    replyUsernameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    verificationBadgeReply: {
+        marginLeft: 2,
     },
 });
 

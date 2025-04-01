@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Modal,
     View,
@@ -66,6 +66,37 @@ const PostDetailModal = ({
         }
     };
 
+    // Optimize edilmiş renderItem fonksiyonu
+    const renderItem = useCallback(({ item }) => (
+        <View
+            onLayout={(event) => {
+                const { height } = event.nativeEvent.layout;
+                setPostHeights(prev => ({
+                    ...prev,
+                    [item.id]: height
+                }));
+            }}
+            style={styles.postContainer}
+        >
+            <Activity
+                activity={item}
+                onLikePress={() => onLikePress(item.id)}
+                onCommentPress={(comment, replyToId) => {
+                    onCommentPress(item.id, comment, replyToId);
+                }}
+                isLiked={item.likedBy?.includes(currentUserId)}
+                currentUserId={currentUserId}
+                onUpdate={(updatedPost) => {
+                    onPostUpdate(updatedPost);
+                }}
+                navigation={navigation}
+            />
+        </View>
+    ), [currentUserId, onLikePress, onCommentPress, onPostUpdate, navigation]);
+
+    // Optimize edilmiş keyExtractor
+    const keyExtractor = useCallback((item) => item.id, []);
+
     return (
         <Modal
             visible={visible}
@@ -87,33 +118,8 @@ const PostDetailModal = ({
                     <FlatList
                         ref={listRef}
                         data={currentPosts}
-                        keyExtractor={(item) => item.id}
-                        renderItem={({ item }) => (
-                            <View
-                                onLayout={(event) => {
-                                    const { height } = event.nativeEvent.layout;
-                                    setPostHeights(prev => ({
-                                        ...prev,
-                                        [item.id]: height
-                                    }));
-                                }}
-                                style={styles.postContainer}
-                            >
-                                <Activity
-                                    activity={item}
-                                    onLikePress={() => onLikePress(item.id)}
-                                    onCommentPress={(comment, replyToId) => {
-                                        onCommentPress(item.id, comment, replyToId);
-                                    }}
-                                    isLiked={item.likedBy?.includes(currentUserId)}
-                                    currentUserId={currentUserId}
-                                    onUpdate={(updatedPost) => {
-                                        onPostUpdate(updatedPost);
-                                    }}
-                                    navigation={navigation}
-                                />
-                            </View>
-                        )}
+                        keyExtractor={keyExtractor}
+                        renderItem={renderItem}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.modalContent}
                         initialScrollIndex={selectedIndex}
@@ -148,26 +154,11 @@ const PostDetailModal = ({
                         scrollEventThrottle={16}
                         maintainVisibleContentPosition={{
                             minIndexForVisible: 0,
-                            autoscrollToTopThreshold: 10
                         }}
-                        decelerationRate="normal"
-                        onMomentumScrollEnd={(event) => {
-                            let totalHeight = 0;
-                            let newIndex = 0;
-
-                            for (let i = 0; i < currentPosts.length; i++) {
-                                const postHeight = postHeights[currentPosts[i].id] || 500;
-                                if (totalHeight + postHeight / 2 > event.nativeEvent.contentOffset.y) {
-                                    newIndex = i;
-                                    break;
-                                }
-                                totalHeight += postHeight;
-                            }
-
-                            if (currentPosts[newIndex] && currentPosts[newIndex].id !== selectedPost.id) {
-                                onPostUpdate(currentPosts[newIndex]);
-                            }
-                        }}
+                        windowSize={5}
+                        maxToRenderPerBatch={5}
+                        updateCellsBatchingPeriod={50}
+                        removeClippedSubviews={true}
                     />
                 )}
             </SafeAreaView>

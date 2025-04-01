@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform, Image } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../redux/userSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -29,6 +29,14 @@ const SettingsPage = ({ navigation }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const sections = [
+        {
+            title: "Mavi Tik Sorgulama",
+            iconName: "checkmark-circle",
+            screen: "MaviTikSorgulama",
+            iconColor: '#1E90FF',
+            isNew: true,
+            badge: "Yeni Özellik"
+        },
         {
             title: "Bildirimler",
             iconName: "notifications-outline",
@@ -119,6 +127,30 @@ const SettingsPage = ({ navigation }) => {
         }
     };
 
+    const renderVerificationBanner = () => (
+        <ShadowWrapper style={[styles.flashBanner, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={styles.flashBannerContent}>
+                <View style={styles.flashIconContainer}>
+                    <Ionicons name="flash" size={24} color="#FFD700" />
+                </View>
+                <View style={styles.flashTextContainer}>
+                    <Text style={[styles.flashTitle, { color: currentTheme.text }]}>
+                        Mavi Tik & Yeşil Tik
+                    </Text>
+                    <Text style={[styles.flashDescription, { color: currentTheme.textSecondary }]}>
+                        Profil doğrulama özelliği artık kullanımda! Hemen sorgulayın.
+                    </Text>
+                </View>
+                <TouchableOpacity
+                    style={styles.flashButton}
+                    onPress={() => handleNavigation('MaviTikSorgulama')}
+                >
+                    <Text style={styles.flashButtonText}>İncele</Text>
+                </TouchableOpacity>
+            </View>
+        </ShadowWrapper>
+    );
+
     const renderLogoutButton = () => (
         <TouchableOpacity
             style={[
@@ -158,7 +190,11 @@ const SettingsPage = ({ navigation }) => {
             </ShadowWrapper>
 
             <View style={styles.content}>
+                {/* Mavi Tik Banner */}
+                {renderVerificationBanner()}
+
                 {/* Tema Seçimi Kartı */}
+                {/*
                 <ShadowWrapper style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
                     <Text style={[styles.cardTitle, { color: currentTheme.text }]}>Tema</Text>
                     <View style={styles.themeOptions}>
@@ -205,6 +241,7 @@ const SettingsPage = ({ navigation }) => {
                         </TouchableOpacity>
                     </View>
                 </ShadowWrapper>
+                */}
 
                 {/* Ayarlar Kartları */}
                 {filteredSections.length > 0 ? (
@@ -221,6 +258,11 @@ const SettingsPage = ({ navigation }) => {
                                         <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
                                             {section.title}
                                         </Text>
+                                        {section.isNew && (
+                                            <View style={styles.badgeContainer}>
+                                                <Text style={styles.badgeText}>{section.badge}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                     <Ionicons name="chevron-forward" size={24} color={currentTheme.text} />
                                 </View>
@@ -359,5 +401,64 @@ const styles = StyleSheet.create({
     },
     logoutButtonTextAndroid: {
         color: '#FFF',
+    },
+    flashBanner: {
+        borderRadius: 20,
+        padding: 15,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(0,105,255,0.2)',
+    },
+    flashBannerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    flashIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255, 215, 0, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    flashTextContainer: {
+        flex: 1,
+    },
+    flashTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    flashDescription: {
+        fontSize: 14,
+    },
+    flashButton: {
+        backgroundColor: '#1E90FF',
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        borderRadius: 20,
+        marginLeft: 10,
+    },
+    flashButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    badgeContainer: {
+        backgroundColor: '#FF6347',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+        marginTop: 5,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });

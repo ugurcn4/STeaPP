@@ -12,31 +12,36 @@ import NearbyRestaurants from '../screens/HomePageCards/NearbyRestaurants';
 
 const Stack = createNativeStackNavigator();
 
+// Onboarding tamamlandı kontrolü için kullanacağımız aynı anahtar
+const ONBOARDING_COMPLETED_KEY = 'onboarding_completed';
+
 const Auth = () => {
-    const [isFirstLaunch, setIsFirstLaunch] = useState(false);
+    const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        checkIfFirstLaunch();
+        checkIfOnboardingCompleted();
     }, []);
 
-    const checkIfFirstLaunch = async () => {
+    const checkIfOnboardingCompleted = async () => {
         try {
-            const hasLaunched = await AsyncStorage.getItem('hasLaunched');
-            if (hasLaunched === null) {
-                await AsyncStorage.setItem('hasLaunched', 'true');
-                setIsFirstLaunch(true);
-            } else {
-                setIsFirstLaunch(false);
-            }
+            const onboardingCompleted = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+            setIsOnboardingCompleted(onboardingCompleted === 'true');
+            setLoading(false);
         } catch (error) {
-            console.error('İlk başlatma kontrolü hatası:', error);
-            setIsFirstLaunch(false);
+            console.error('Onboarding kontrolü hatası:', error);
+            setIsOnboardingCompleted(false);
+            setLoading(false);
         }
     };
 
+    if (loading) {
+        return null; // Loading sırasında boş ekran göster
+    }
+
     return (
         <Stack.Navigator
-            initialRouteName={isFirstLaunch ? "Onboarding" : "Giriş Yap"}
+            initialRouteName={isOnboardingCompleted ? "Giriş Yap" : "Onboarding"}
             screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="Giriş Yap" component={LoginPage} />

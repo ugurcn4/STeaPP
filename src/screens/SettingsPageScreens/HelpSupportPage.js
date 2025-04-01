@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert } from 'react-native';
 import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -74,21 +74,21 @@ const HelpSupportPage = ({ navigation }) => {
             title: 'Destek Merkezi',
             icon: 'help-circle-outline',
             color: '#4CAF50',
-            action: () => Linking.openURL('https://support.yourapp.com')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/destek-merkezi')
         },
         {
             id: 2,
             title: 'E-posta ile İletişim',
             icon: 'mail-outline',
             color: '#2196F3',
-            action: () => Linking.openURL('mailto:support@yourapp.com')
+            action: () => Linking.openURL('mailto:ucarugur57@gmail.com')
         },
         {
             id: 3,
             title: 'Canlı Destek',
             icon: 'chatbubbles-outline',
             color: '#FF9800',
-            action: () => Linking.openURL('https://chat.yourapp.com')
+            action: () => Linking.openURL('https://www.instagram.com/ugurrucr/')
         }
     ];
 
@@ -152,14 +152,33 @@ const HelpSupportPage = ({ navigation }) => {
                 {supportLinks.map((item) => (
                     <TouchableOpacity
                         key={item.id}
-                        style={[styles.supportItem, { borderColor: item.color }]}
+                        style={[styles.supportOption, { backgroundColor: item.color + '10' }]}
                         onPress={item.action}
                     >
-                        <Ionicons name={item.icon} size={24} color={item.color} />
-                        <Text style={[styles.supportText, { color: currentTheme.text }]}>
-                            {item.title}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={20} color={item.color} />
+                        <View style={[styles.supportIconContainer, { backgroundColor: item.color + '20' }]}>
+                            <Ionicons name={item.icon} size={24} color={item.color} />
+                        </View>
+                        <View style={styles.supportInfo}>
+                            <Text style={[styles.supportTitle, { color: currentTheme.text }]}>
+                                {item.title}
+                            </Text>
+                            {item.id === 1 && (
+                                <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
+                                    Sık sorulan sorular ve yardım makaleleri
+                                </Text>
+                            )}
+                            {item.id === 2 && (
+                                <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
+                                    STeaPP Destek Merkezine e-posta gönderin
+                                </Text>
+                            )}
+                            {item.id === 3 && (
+                                <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
+                                    Instagram üzerinden mesaj gönderin
+                                </Text>
+                            )}
+                        </View>
+                        <Ionicons name="chevron-forward" size={24} color={currentTheme.textSecondary} />
                     </TouchableOpacity>
                 ))}
             </View>
@@ -248,19 +267,38 @@ const styles = StyleSheet.create({
     supportSection: {
         marginBottom: 30,
     },
-    supportItem: {
+    supportOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 15,
+        padding: 16,
         backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 12,
-        marginBottom: 10,
-        borderLeftWidth: 4,
+        borderRadius: 16,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
     },
-    supportText: {
-        fontSize: 16,
-        marginLeft: 15,
+    supportIconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    supportInfo: {
         flex: 1,
+    },
+    supportTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 5,
+    },
+    supportDescription: {
+        fontSize: 14,
+        opacity: 0.7,
     },
     note: {
         textAlign: 'center',

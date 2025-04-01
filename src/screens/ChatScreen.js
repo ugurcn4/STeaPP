@@ -48,9 +48,58 @@ import {
 } from '../services/onlineStatusService';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import FastImage from 'react-native-fast-image';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 
 const { width } = Dimensions.get('window');
+
+// Mesajları tarihe göre gruplandıran yardımcı fonksiyon
+const groupMessagesByDate = (messages) => {
+    const groups = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    messages.forEach(message => {
+        const messageDate = message.timestamp.toDate();
+        messageDate.setHours(0, 0, 0, 0);
+
+        let dateKey;
+
+        if (messageDate.getTime() === today.getTime()) {
+            dateKey = 'Bugün';
+        } else if (messageDate.getTime() === yesterday.getTime()) {
+            dateKey = 'Dün';
+        } else {
+            // Son 7 gün içindeyse gün adını göster
+            const diffDays = Math.round((today - messageDate) / (1000 * 60 * 60 * 24));
+            if (diffDays < 7) {
+                const options = { weekday: 'long' };
+                dateKey = messageDate.toLocaleDateString('tr-TR', options);
+                // İlk harfi büyük yap
+                dateKey = dateKey.charAt(0).toUpperCase() + dateKey.slice(1);
+            } else {
+                // 7 günden eskiyse tam tarih göster
+                dateKey = messageDate.toLocaleDateString('tr-TR', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
+            }
+        }
+
+        if (!groups[dateKey]) {
+            groups[dateKey] = [];
+        }
+
+        groups[dateKey].push(message);
+    });
+
+    return groups;
+};
 
 const ChatScreen = ({ route, navigation }) => {
     const [messages, setMessages] = useState([]);
@@ -75,6 +124,8 @@ const ChatScreen = ({ route, navigation }) => {
     const [selectedMessage, setSelectedMessage] = useState(null);
     const [favoritesModalVisible, setFavoritesModalVisible] = useState(false);
     const [favoriteMessages, setFavoriteMessages] = useState([]);
+    const [friendVerification, setFriendVerification] = useState({ hasBlueTick: false, hasGreenTick: false });
+    const [groupedMessages, setGroupedMessages] = useState({});
 
     useEffect(() => {
         navigation.setOptions({
@@ -131,6 +182,10 @@ const ChatScreen = ({ route, navigation }) => {
                         b.timestamp.toMillis() - a.timestamp.toMillis()
                     );
 
+                    // Mesajları tarihe göre gruplandır
+                    const grouped = groupMessagesByDate(sortedMessages);
+                    setGroupedMessages(grouped);
+
                     if (!initialLoad && messages.length < sortedMessages.length) {
                         setNewMessageReceived(true);
                         // Yeni mesaj geldiğinde ve alıcıysak okundu olarak işaretle
@@ -167,6 +222,19 @@ const ChatScreen = ({ route, navigation }) => {
                     updateOnlineStatus(uid, false);
                 }
             });
+
+            // Arkadaşın doğrulama durumunu kontrol et
+            const checkFriendVerification = async () => {
+                try {
+                    const verificationStatus = await checkUserVerification(friendData.id);
+                    setFriendVerification(verificationStatus);
+                } catch (error) {
+                    console.error('Doğrulama durumu kontrolünde hata:', error);
+                }
+            };
+
+            checkFriendVerification();
+
             return () => {
                 if (unsubscribeMessages) {
                     unsubscribeMessages();
@@ -616,6 +684,62 @@ const ChatScreen = ({ route, navigation }) => {
         }
     };
 
+    // Mesajları ve tarih ayırıcılarını içeren düz bir liste oluştur
+    const getMessagesWithDateSeparators = () => {
+        const result = [];
+
+        // Tarihleri sırala (en yeni en üstte)
+        const sortedDates = Object.keys(groupedMessages).sort((a, b) => {
+            // Bugün ve Dün için özel sıralama
+            if (a === 'Bugün') return -1;
+            if (b === 'Bugün') return 1;
+            if (a === 'Dün') return -1;
+            if (b === 'Dün') return 1;
+
+            // Diğer tarihler için
+            return 0; // Mesajlar zaten tarih sırasına göre gruplandırıldı
+        });
+
+        sortedDates.forEach(date => {
+            // Önce bu tarihe ait mesajları ekle
+            groupedMessages[date].forEach(message => {
+                result.push({
+                    ...message,
+                    type: 'message'
+                });
+            });
+
+            // Sonra tarih ayırıcısını ekle
+            result.push({
+                id: `date-${date}`,
+                type: 'date',
+                date: date
+            });
+        });
+
+        return result;
+    };
+
+    // Tarih ayırıcısı bileşeni
+    const DateSeparator = ({ date }) => (
+        <View style={styles.dateSeparatorContainer}>
+            <View style={styles.dateSeparatorLine} />
+            <View style={styles.dateSeparatorTextContainer}>
+                <Text style={styles.dateSeparatorText}>{date}</Text>
+            </View>
+            <View style={styles.dateSeparatorLine} />
+        </View>
+    );
+
+    // renderItem fonksiyonunu güncelle
+    const renderItem = ({ item }) => {
+        if (item.type === 'date') {
+            return <DateSeparator date={item.date} />;
+        }
+
+        return renderMessage({ item });
+    };
+
     const renderMessage = ({ item }) => {
         const isMine = item.senderId === currentUserId;
         const isFavorite = favoriteMessages.some(fav => fav.messageId === item.id);
@@ -853,9 +977,17 @@ const ChatScreen = ({ route, navigation }) => {
                             resizeMode={FastImage.resizeMode.cover}
                         />
                         <View style={styles.userTextInfo}>
-                            <Text style={styles.userName} numberOfLines={1}>
-                                {friendData.informations?.name || friendData.name || 'İsimsiz'}
-                            </Text>
+                            <View style={styles.userNameContainer}>
+                                <Text style={styles.userName} numberOfLines={1}>
+                                    {friendData.informations?.name || friendData.name || 'İsimsiz'}
+                                </Text>
+                                <VerificationBadge
+                                    hasBlueTick={friendVerification.hasBlueTick}
+                                    hasGreenTick={friendVerification.hasGreenTick}
+                                    size={12}
+                                    style={styles.verificationBadge}
+                                />
+                            </View>
                             {renderUserStatus()}
                         </View>
                     </TouchableOpacity>
@@ -1063,8 +1195,8 @@ const ChatScreen = ({ route, navigation }) => {
             <View style={styles.content}>
                 <FlatList
                     ref={flatListRef}
-                    data={messages}
-                    renderItem={renderMessage}
+                    data={getMessagesWithDateSeparators()}
+                    renderItem={renderItem}
                     keyExtractor={item => item.id}
                     contentContainerStyle={[
                         styles.messagesList,
@@ -1167,11 +1299,19 @@ const styles = StyleSheet.create({
         marginLeft: 12,
         justifyContent: 'center',
     },
+    userNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     userName: {
         fontSize: 17,
         fontWeight: '600',
         color: '#1A1A1A',
         marginBottom: 2,
+        marginRight: 2,
+    },
+    verificationBadge: {
+        marginLeft: 2,
     },
     headerActions: {
         flexDirection: 'row',
@@ -1565,6 +1705,31 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 20,
         paddingHorizontal: 32,
+    },
+    dateSeparatorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 12,
+        paddingHorizontal: 16,
+    },
+    dateSeparatorLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    dateSeparatorTextContainer: {
+        paddingHorizontal: 8,
+        backgroundColor: '#F8F9FB',
+        borderRadius: 10,
+        marginHorizontal: 8,
+    },
+    dateSeparatorText: {
+        fontSize: 12,
+        color: '#65676B',
+        fontWeight: '600',
+        paddingVertical: 4,
+        paddingHorizontal: 8,
     },
 });
 

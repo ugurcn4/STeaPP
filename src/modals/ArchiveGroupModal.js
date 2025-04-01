@@ -12,7 +12,8 @@ import {
     FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { deleteArchiveGroup } from '../services/postService';
+import { deleteArchiveGroup, addPostToSharedCollection } from '../services/postService';
+import SharedCollectionModal from './SharedCollectionModal';
 
 const { height } = Dimensions.get('window');
 const MODAL_HEIGHT = height * 0.7; // Sabit bir yükseklik
@@ -28,7 +29,8 @@ const ArchiveGroupModal = ({
     onCreateGroup,
     onSave,
     userId,
-    onGroupsUpdated
+    onGroupsUpdated,
+    postId
 }) => {
     const [showNewGroupForm, setShowNewGroupForm] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
@@ -37,6 +39,7 @@ const ArchiveGroupModal = ({
     const [selectedForDeletion, setSelectedForDeletion] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showSharedCollectionModal, setShowSharedCollectionModal] = useState(false);
 
     const handleCreateGroup = async () => {
         try {
@@ -98,6 +101,18 @@ const ArchiveGroupModal = ({
                 // Hata mesajı gösterilebilir
                 // TODO: Hata bildirimi göster
             }
+        }
+    };
+
+    const handleCreateSharedCollection = () => {
+        // Ortak koleksiyon modalını aç
+        setShowSharedCollectionModal(true);
+    };
+
+    const handleSharedCollectionCreated = async () => {
+        // Koleksiyonları güncelle
+        if (onGroupsUpdated) {
+            await onGroupsUpdated();
         }
     };
 
@@ -220,7 +235,14 @@ const ArchiveGroupModal = ({
                     // Yeni seçili gruplar listesini oluştur
                     const newSelectedGroups = [group.id]; // Tek bir grup seçilecek
 
-                    // Değişiklikleri kaydet ve modal'ı kapat
+                    // Eğer seçilen grup ortak bir koleksiyon ise, özel fonksiyonu kullan
+                    if (group.isShared && postId) {
+                        await addPostToSharedCollection(postId, userId, group.id);
+                        onClose(); // Modalı kapat
+                        return;
+                    }
+
+                    // Normal grup ise standart kaydetme işlemi
                     await onSave(newSelectedGroups);
                 } catch (error) {
                     console.error('Koleksiyon seçme hatası:', error);
@@ -233,17 +255,35 @@ const ArchiveGroupModal = ({
             onLongPress={() => handleLongPress(group)}
             delayLongPress={500}
         >
-            <View style={styles.collectionImageContainer}>
+            <View style={[
+                styles.collectionImageContainer,
+                group.isShared && styles.sharedCollectionContainer
+            ]}>
                 <Text style={styles.collectionEmoji}>{group.emoji}</Text>
+                {group.isShared && (
+                    <View style={styles.sharedBadge}>
+                        <Ionicons name="people" size={12} color="#fff" />
+                    </View>
+                )}
             </View>
             <View style={styles.collectionInfo}>
-                <Text style={styles.collectionName}>{group.name}</Text>
+                <View style={styles.collectionNameRow}>
+                    <Text style={styles.collectionName}>{group.name}</Text>
+                    {group.isShared && (
+                        <Text style={styles.sharedLabel}>Ortak</Text>
+                    )}
+                </View>
                 {group.description ? (
                     <Text style={styles.collectionDescription} numberOfLines={2}>
                         {group.description}
                     </Text>
                 ) : (
                     <Text style={styles.collectionPrivacy}>Gizli</Text>
+                )}
+                {group.isShared && group.members && (
+                    <Text style={styles.membersCount}>
+                        {group.members.length} üye
+                    </Text>
                 )}
             </View>
             <View style={styles.addButton}>
@@ -301,7 +341,7 @@ const ArchiveGroupModal = ({
 
                             <TouchableOpacity
                                 style={styles.createCollectionButton}
-                                onPress={() => setShowNewGroupForm(true)}
+                                onPress={handleCreateSharedCollection}
                             >
                                 <View style={styles.createCollectionContent}>
                                     <Ionicons name="people-outline" size={24} color="#666" />
@@ -322,6 +362,13 @@ const ArchiveGroupModal = ({
 
                 {showDeleteConfirm && renderDeleteConfirmation()}
                 {showEmojiPicker && renderEmojiPicker()}
+
+                <SharedCollectionModal
+                    visible={showSharedCollectionModal}
+                    onClose={() => setShowSharedCollectionModal(false)}
+                    userId={userId}
+                    onSuccessCreate={handleSharedCollectionCreated}
+                />
             </View>
         </Modal>
     );
@@ -597,6 +644,35 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#666',
         marginTop: 2,
+    },
+    collectionNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    sharedLabel: {
+        fontSize: 12,
+        color: '#2196F3',
+        marginLeft: 6,
+        fontWeight: '500',
+    },
+    sharedCollectionContainer: {
+        backgroundColor: '#e6f2ff',
+    },
+    sharedBadge: {
+        position: 'absolute',
+        right: -4,
+        bottom: -4,
+        backgroundColor: '#2196F3',
+        borderRadius: 10,
+        width: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    membersCount: {
+        fontSize: 12,
+        color: '#888',
+        marginTop: 4,
     },
 });
 

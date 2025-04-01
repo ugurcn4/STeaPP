@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable, ScrollView, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import MapView, { Polyline, Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
@@ -17,13 +17,13 @@ import {
 import { onAuthStateChanged, getAuth } from 'firebase/auth';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { fetchFriends } from './FriendsPage';
 import { haversine } from '../helpers/locationUtils';
 import {
     shouldCollectPoint,
     GPS_ACCURACY,
     MOVEMENT_CONSTANTS,
-    isGPSStable,
     evaluateGPSQuality,
     isGPSUsable,
     isStationary,
@@ -34,16 +34,28 @@ import FastImage from 'react-native-fast-image';
 import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
 import { ref, set, remove, get, onValue, off } from 'firebase/database';
 import { rtdb } from '../../firebaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import Animated, {
+    useAnimatedGestureHandler,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+    runOnJS
+} from 'react-native-reanimated';
+import LineStyleModal from '../modals/LineStyleModal';
+import DurationModal from '../modals/DurationModal';
 
 // Yol renk ve stilleri
 const PATH_STYLES = {
     colors: {
-        newPath: '#FFD700', // Daha parlak bir sarı
+        newPath: '#FFD700',
         discovered: '#4CAF50',
         undiscovered: '#808080'
     },
-    width: 6 // Direkt kalınlık değeri
+    width: 6
 };
+
 
 const CustomMarker = ({ photo, name }) => {
     return (
@@ -86,7 +98,6 @@ const MapPage = ({ navigation, route }) => {
     const mapRef = useRef(null);
     const [liveLocations, setLiveLocations] = useState([]);
     const [activeShares, setActiveShares] = useState([]);
-    const [sharedWithMe, setSharedWithMe] = useState([]);
     const [locations, setLocations] = useState({
         active: {},
         shared: {}
@@ -111,10 +122,73 @@ const MapPage = ({ navigation, route }) => {
     const [isMoving, setIsMoving] = useState(true);
     const [lastLocations, setLastLocations] = useState([]);
     const [locationSubscription, setLocationSubscription] = useState(null);
-    const [selectedMarker, setSelectedMarker] = useState(null);
     const [selectedLocation, setSelectedLocation] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [activeLocationShares, setActiveLocationShares] = useState({});
+    const [isBackgroundDrawing, setIsBackgroundDrawing] = useState(false);
+    const [showDurationModal, setShowDurationModal] = useState(false);
+    const [selectedDuration, setSelectedDuration] = useState(null);
+    const [showLineStyleModal, setShowLineStyleModal] = useState(false);
+    const [selectedLineStyle, setSelectedLineStyle] = useState({
+        color: PATH_STYLES.colors.discovered,
+        width: PATH_STYLES.width,
+        pattern: 'solid'
+    });
+
+    // Süre seçenekleri
+    const durationOptions = [
+        { id: '30min', label: '30 Dakika', value: 30 },
+        { id: '1hour', label: '1 Saat', value: 60 },
+        { id: '2hours', label: '2 Saat', value: 120 },
+        { id: '4hours', label: '4 Saat', value: 240 },
+        { id: '8hours', label: '8 Saat', value: 480 },
+        { id: 'unlimited', label: 'Sınırsız', value: -1 }
+    ];
+
+    // Animasyon değerleri
+    const translateY = useSharedValue(0);
+
+    // Gesture handler fonksiyonları
+    const onGestureEvent = useAnimatedGestureHandler({
+        onStart: (_, ctx) => {
+            ctx.startY = translateY.value;
+        },
+        onActive: (event, ctx) => {
+            // Sadece aşağı doğru sürüklemeye izin ver
+            if (event.translationY > 0) {
+                translateY.value = ctx.startY + event.translationY;
+            }
+        },
+        onEnd: (event) => {
+            // Eğer yeterince aşağı sürüklendiyse modalı kapat
+            if (event.translationY > 100) {
+                // Önce modalı kapat, sonra animasyonu tamamla
+                runOnJS(setShowDurationModal)(false);
+            } else {
+                // Yeteri kadar sürüklenmemişse eski konumuna geri getir
+                translateY.value = withTiming(0, { duration: 200 });
+            }
+        },
+    });
+
+    // Animasyon stilini tanımla
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateY: translateY.value }],
+        };
+    });
+
+    // Modal kapandığında translateY değerini sıfırla
+    useEffect(() => {
+        if (!showDurationModal) {
+            translateY.value = 0;
+        }
+    }, [showDurationModal]);
+
+    // Modal açıldığında veya kapandığında handler
+    const onHandlerStateChange = (event) => {
+        // Bu fonksiyonu boş bırakalım, tüm işlemleri onGestureEvent içinde yapacağız
+    };
 
     useEffect(() => {
         let locationSubscription;
@@ -135,6 +209,17 @@ const MapPage = ({ navigation, route }) => {
 
                 const initialLocation = await Location.getCurrentPositionAsync({});
                 setLocation(initialLocation);
+
+                // Region state'ini güncelleyelim
+                if (initialLocation && initialLocation.coords) {
+                    setRegion({
+                        latitude: initialLocation.coords.latitude,
+                        longitude: initialLocation.coords.longitude,
+                        latitudeDelta: 0.005,
+                        longitudeDelta: 0.005,
+                    });
+                }
+
                 setLoading(false);
 
                 const subscription = await Location.watchPositionAsync(
@@ -146,7 +231,7 @@ const MapPage = ({ navigation, route }) => {
                     (newLocation) => {
                         setLocation(newLocation);
 
-                        // Sadece followsUserLocation true ise konumu takip et
+                        // Konum takibi - followsUserLocation'a bağlı
                         if (followsUserLocation && mapRef.current) {
                             mapRef.current.animateToRegion({
                                 latitude: newLocation.coords.latitude,
@@ -156,57 +241,16 @@ const MapPage = ({ navigation, route }) => {
                             }, 1000);
                         }
 
-                        // GPS kalibrasyonu ve diğer işlemler followsUserLocation'dan bağımsız devam etsin
-                        setLastLocations(prev => {
-                            const newLocations = [...prev, {
-                                latitude: newLocation.coords.latitude,
-                                longitude: newLocation.coords.longitude,
-                                timestamp: new Date()
-                            }].slice(-MOVEMENT_CONSTANTS.STATIONARY_CHECK_COUNT);
-                            return newLocations;
+                        // Konum değiştiğinde region state'ini de güncelle
+                        setRegion({
+                            latitude: newLocation.coords.latitude,
+                            longitude: newLocation.coords.longitude,
+                            latitudeDelta: 0.005,
+                            longitudeDelta: 0.005,
                         });
 
-                        setAccuracyHistory(prev => {
-                            const newHistory = [...prev, newLocation.coords.accuracy];
-                            return newHistory.slice(-GPS_ACCURACY.SAMPLE_SIZE);
-                        });
-
-                        const quality = evaluateGPSQuality(newLocation.coords.accuracy);
-                        setGpsQuality(quality);
-
-                        // GPS kalibrasyonunu followsUserLocation'dan bağımsız yap
-                        if (!isGPSCalibrated) {
-                            const timeSinceStart = Date.now() - calibrationStartTime;
-                            const stable = isGPSStable(accuracyHistory);
-
-                            if (timeSinceStart >= GPS_ACCURACY.CALIBRATION_TIME && stable) {
-                                setIsGPSCalibrated(true);
-                            }
-                        }
-
-                        // Hareket durumunu kontrol et
-                        const speedMs = newLocation.coords.speed || 0;
-                        const stationary = isStationary(speedMs, lastLocations);
-
-                        if (stationary !== !isMoving) {
-                            setIsMoving(!stationary);
-                        }
-
-                        // Diğer işlemler sadece hareket halindeyken yapılsın
-                        if (!stationary) {
-                            // Hız hesaplamaları...
-                            let speedKmh = 0;
-                            if (newLocation.coords.speed != null && newLocation.coords.speed >= 0) {
-                                speedKmh = Math.round(newLocation.coords.speed * 3.6);
-                                if (speedKmh < 3) speedKmh = 0;
-                            }
-                            setCurrentSpeed(speedKmh);
-
-                            // Konum takibi ve yol çizimi
-                            if (isGPSCalibrated && currentUserId) {
-                                trackUserLocation(newLocation, currentUserId);
-                            }
-                        }
+                        // GPS kalibrasyonu ve diğer işlemler followsUserLocation'dan bağımsız
+                        updateLocationData(newLocation, currentUserId);
                     }
                 );
 
@@ -214,6 +258,76 @@ const MapPage = ({ navigation, route }) => {
             } catch (error) {
                 console.error('Konum takibi başlatılamadı:', error);
                 setLoading(false);
+            }
+        };
+
+        // Yeni fonksiyon: Konum verilerini güncelleme
+        const updateLocationData = (newLocation, currentUserId) => {
+            // Son konumları güncelle
+            setLastLocations(prev => {
+                const newLocations = [...prev, {
+                    latitude: newLocation.coords.latitude,
+                    longitude: newLocation.coords.longitude,
+                    timestamp: new Date()
+                }].slice(-MOVEMENT_CONSTANTS.STATIONARY_CHECK_COUNT);
+                return newLocations;
+            });
+
+            // GPS doğruluğu geçmişini güncelle - daha hızlı dolması için her zaman ekle
+            setAccuracyHistory(prev => {
+                const newHistory = [...prev, newLocation.coords.accuracy];
+                return newHistory.slice(-GPS_ACCURACY.SAMPLE_SIZE);
+            });
+
+            // GPS kalitesini değerlendir
+            const quality = evaluateGPSQuality(newLocation.coords.accuracy);
+            setGpsQuality(quality);
+
+            // GPS kalibrasyonu kontrolü - iyileştirilmiş versiyon
+            if (!isGPSCalibrated) {
+                const timeSinceStart = Date.now() - calibrationStartTime;
+
+                // Kalibrasyon için iki koşul:
+                // 1. Minimum süre geçmiş olmalı
+                // 2. Ya GPS kalitesi iyi olmalı ya da yeterli örnek toplanmış olmalı
+                const hasMinimumTime = timeSinceStart >= GPS_ACCURACY.CALIBRATION_TIME;
+                const hasGoodQuality = quality === 'OPTIMAL' || quality === 'GOOD';
+                const hasEnoughSamples = accuracyHistory.length >= GPS_ACCURACY.SAMPLE_SIZE;
+
+                if (hasMinimumTime && (hasGoodQuality || hasEnoughSamples)) {
+                    setIsGPSCalibrated(true);
+                }
+            }
+
+            // Hareket durumunu kontrol et - iyileştirilmiş versiyon
+            const speedMs = newLocation.coords.speed || 0;
+            const isCurrentlyStationary = isStationary(speedMs, lastLocations);
+
+            // Hareket durumunu güncelle, ancak sadece değişiklik varsa
+            if (isCurrentlyStationary !== !isMoving) {
+                // Durağan durumdan hareketli duruma geçişte hemen güncelle
+                if (!isCurrentlyStationary && !isMoving) {
+                    setIsMoving(true);
+                }
+                // Hareketli durumdan durağan duruma geçişte biraz bekle (kararlılık için)
+                else if (isCurrentlyStationary && isMoving) {
+                    // Durağan duruma geçiş için bir zamanlayıcı kullanabiliriz
+                    // Ancak bu örnekte basitlik için doğrudan güncelliyoruz
+                    setIsMoving(false);
+                }
+            }
+
+            // Hız hesaplamaları
+            let speedKmh = 0;
+            if (newLocation.coords.speed != null && newLocation.coords.speed >= 0) {
+                speedKmh = Math.round(newLocation.coords.speed * 3.6);
+                if (speedKmh < 3) speedKmh = 0;
+            }
+            setCurrentSpeed(speedKmh);
+
+            // Konum takibi ve yol çizimi
+            if (isGPSCalibrated && currentUserId) {
+                trackUserLocation(newLocation, currentUserId);
             }
         };
 
@@ -233,7 +347,7 @@ const MapPage = ({ navigation, route }) => {
                 locationSubscription.remove();
             }
         };
-    }, [followsUserLocation]);
+    }, []); // followsUserLocation'ı dependency array'den çıkardık
 
     useEffect(() => {
         if (!userId) return;
@@ -413,7 +527,7 @@ const MapPage = ({ navigation, route }) => {
                     longitude: point.longitude,
                     timestamp: point.timestamp
                 })),
-                firstDiscovery: new Date(),
+                firstDiscovery: serverTimestamp(),
                 visitCount: 1,
                 type: 'discovered',
                 city: locationInfo.city || 'Bilinmeyen',
@@ -430,7 +544,7 @@ const MapPage = ({ navigation, route }) => {
                     longitude: point.longitude,
                     timestamp: point.timestamp
                 })),
-                firstDiscovery: new Date(),
+                firstDiscovery: serverTimestamp(),
                 visitCount: 1,
                 type: 'discovered',
                 city: 'Bilinmeyen',
@@ -577,8 +691,98 @@ const MapPage = ({ navigation, route }) => {
         setSelectedPath(null);
     };
 
-    const handleMarkerPress = (location) => {
-        setSelectedLocation(location);
+    const handleMarkerPress = (share) => {
+        // Konum uzaklığını hesapla
+        let distance = 0;
+
+        if (location && location.coords) {
+            // Paylaşılan konumun koordinatlarını belirle
+            let shareLatitude, shareLongitude;
+
+            if (share.location) {
+                shareLatitude = share.location.latitude;
+                shareLongitude = share.location.longitude;
+            } else if (share.latitude && share.longitude) {
+                shareLatitude = share.latitude;
+                shareLongitude = share.longitude;
+            }
+
+            // Eğer paylaşılan konum koordinatları varsa mesafeyi hesapla
+            if (shareLatitude && shareLongitude) {
+                distance = haversine(
+                    location.coords.latitude,
+                    location.coords.longitude,
+                    shareLatitude,
+                    shareLongitude
+                );
+            }
+        }
+
+        // Zaman bilgisini hesapla
+        let lastUpdateText = 'Bilinmiyor';
+        if (share && share.lastUpdate) {
+            try {
+                const now = new Date();
+
+                // Firestore Timestamp, Date nesnesi veya ISO string olabilir
+                let lastUpdate;
+
+                if (typeof share.lastUpdate === 'object' && share.lastUpdate !== null) {
+                    // Firestore Timestamp nesnesi ise
+                    if (typeof share.lastUpdate.toDate === 'function') {
+                        lastUpdate = share.lastUpdate.toDate();
+                    }
+                    // Zaten bir Date nesnesi ise
+                    else if (share.lastUpdate instanceof Date) {
+                        lastUpdate = share.lastUpdate;
+                    }
+                    // Seconds ve nanoseconds alanları varsa (Firestore Timestamp benzeri)
+                    else if (share.lastUpdate.seconds !== undefined) {
+                        lastUpdate = new Date(share.lastUpdate.seconds * 1000);
+                    }
+                    // Hiçbiri değilse şu anki zamanı kullan
+                    else {
+                        lastUpdate = now;
+                    }
+                }
+                // String ise Date nesnesine çevir
+                else if (typeof share.lastUpdate === 'string') {
+                    lastUpdate = new Date(share.lastUpdate);
+                }
+                // Sayı ise milisaniye olarak kabul et
+                else if (typeof share.lastUpdate === 'number') {
+                    lastUpdate = new Date(share.lastUpdate);
+                }
+                // Hiçbiri değilse şu anki zamanı kullan
+                else {
+                    lastUpdate = now;
+                }
+
+                const diffMs = now - lastUpdate;
+                const diffMins = Math.floor(diffMs / 60000);
+
+                if (diffMins < 1) {
+                    lastUpdateText = 'Şimdi';
+                } else if (diffMins < 60) {
+                    lastUpdateText = `${diffMins} dakika önce`;
+                } else if (diffMins < 24 * 60) {
+                    const hours = Math.floor(diffMins / 60);
+                    lastUpdateText = `${hours} saat önce`;
+                } else {
+                    const days = Math.floor(diffMins / (24 * 60));
+                    lastUpdateText = `${days} gün önce`;
+                }
+            } catch (error) {
+                console.error('Zaman hesaplama hatası:', error);
+                lastUpdateText = 'Bilinmiyor';
+            }
+        }
+
+        setSelectedLocation({
+            ...share,
+            distance: distance,
+            lastUpdateText: lastUpdateText
+        });
         setModalVisible(true);
     };
 
@@ -606,102 +810,442 @@ const MapPage = ({ navigation, route }) => {
         }
     }, [route?.params]);
 
-    // Canlı konum paylaşımını başlat
-    const startLiveLocationShare = async (friendId) => {
+
+    // Arka plan çizim başlatma fonksiyonu
+    const startBackgroundDrawing = async (durationMinutes) => {
         try {
-            // 1. Firestore'da paylaşım kaydı oluştur (locationShares yerine users/{userId}/shares)
-            const shareRef = await addDoc(collection(db, `users/${userId}/shares`), {
-                type: 'live',
-                friendId: friendId,
-                status: 'active',
-                startTime: serverTimestamp(),
-                lastUpdate: serverTimestamp()
-            });
-
-            // 2. Karşı tarafa paylaşımı ekle
-            await addDoc(collection(db, `users/${friendId}/receivedShares`), {
-                type: 'live',
-                fromUserId: userId,
-                status: 'active',
-                startTime: serverTimestamp(),
-                lastUpdate: serverTimestamp()
-            });
-
-            // 3. RTDB'de başlangıç konumu oluştur
-            const locationRef = ref(rtdb, `locations/${shareRef.id}`);
-            await set(locationRef, {
-                latitude: location?.coords?.latitude,
-                longitude: location?.coords?.longitude,
-                accuracy: location?.coords?.accuracy,
-                heading: location?.coords?.heading,
-                speed: location?.coords?.speed,
-                timestamp: serverTimestamp()
-            });
-
-            // 4. Arka plan konum takibini başlat
-            const started = await startBackgroundLocationUpdates(userId);
-            if (!started) {
-                throw new Error('Arka plan konum takibi başlatılamadı');
+            // Arka plan konum izni kontrolü - iyileştirilmiş versiyon
+            let { status } = await Location.getForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+                if (newStatus !== 'granted') {
+                    Alert.alert(
+                        'İzin Gerekli',
+                        'Konum izni olmadan çizim yapılamaz.',
+                        [{ text: 'Tamam' }]
+                    );
+                    return;
+                }
             }
 
-            setActiveLocationShares(prev => ({
-                ...prev,
-                [shareRef.id]: { friendId, type: 'live' }
-            }));
+            // Arka plan izni kontrolü
+            let { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+            if (bgStatus !== 'granted') {
+                const { status: newBgStatus } = await Location.requestBackgroundPermissionsAsync();
+                if (newBgStatus !== 'granted') {
+                    Alert.alert(
+                        'Arka Plan İzni Gerekli',
+                        'Arka planda çizim yapabilmek için arka plan konum izni gereklidir.',
+                        [{ text: 'Tamam' }]
+                    );
+                    return;
+                }
+                // İzin yeni verildiyse, status'u güncelle
+                bgStatus = newBgStatus;
+            }
 
-            Alert.alert('Başarılı', 'Canlı konum paylaşımı başlatıldı');
+            // İzinler tamam, devam et
+            if (bgStatus === 'granted') {
+                // Benzersiz bir oturum ID'si oluştur
+                const sessionId = new Date().toISOString();
+                await AsyncStorage.setItem('backgroundDrawingSessionId', sessionId);
+                await AsyncStorage.setItem('backgroundSavedPathsCount', '0');
+
+                // Arka plan çizim durumunu kaydet
+                await AsyncStorage.setItem('backgroundDrawingEnabled', 'true');
+                if (durationMinutes > 0) {
+                    const endTime = new Date();
+                    endTime.setMinutes(endTime.getMinutes() + durationMinutes);
+                    await AsyncStorage.setItem('backgroundDrawingEndTime', endTime.toISOString());
+                } else {
+                    // Sınırsız süre için
+                    await AsyncStorage.removeItem('backgroundDrawingEndTime');
+                }
+
+                // Arka plan konum takibini başlat
+                const success = await startBackgroundLocationUpdates(userId, true);
+
+                if (!success) {
+                    throw new Error('Arka plan konum takibi başlatılamadı');
+                }
+
+                setIsBackgroundDrawing(true);
+                setShowDurationModal(false);
+
+                Alert.alert(
+                    'Arka Plan Çizimi Başlatıldı',
+                    durationMinutes > 0
+                        ? `Arka planda çizim ${durationMinutes} dakika boyunca devam edecek.`
+                        : 'Arka planda çizim sınırsız süreyle devam edecek.',
+                    [{ text: 'Tamam' }]
+                );
+            }
         } catch (error) {
-            console.error('Konum paylaşımı hatası:', error);
-            Alert.alert('Hata', 'Konum paylaşımı başlatılamadı');
+            console.error('Arka plan çizimi başlatılamadı:', error);
+            Alert.alert('Hata', 'Arka plan çizimi başlatılamadı: ' + error.message);
         }
     };
 
-    // Konum paylaşımını durdur
-    const stopLiveLocationShare = async (shareId) => {
+    // Arka plan çizimini durdurma fonksiyonu
+    const stopBackgroundDrawing = async () => {
         try {
-            // 1. Firestore'da paylaşımı yapan kullanıcının shares koleksiyonunu güncelle
-            await updateDoc(firestoreDoc(db, `users/${userId}/shares/${shareId}`), {
+            await AsyncStorage.setItem('backgroundDrawingEnabled', 'false');
+            await stopBackgroundLocationUpdates();
+
+            // Kaydedilen yol sayısını al
+            const savedPathsCount = parseInt(await AsyncStorage.getItem('backgroundSavedPathsCount') || '0');
+
+            setIsBackgroundDrawing(false);
+
+            Alert.alert(
+                'Arka Plan Çizimi Durduruldu',
+                savedPathsCount > 0
+                    ? `Toplam ${savedPathsCount} yol parçası kaydedildi.`
+                    : 'Kaydedilen yol bulunamadı.',
+                [{ text: 'Tamam' }]
+            );
+        } catch (error) {
+            console.error('Arka plan çizimi durdurulamadı:', error);
+            Alert.alert('Hata', 'Arka plan çizimi durdurulamadı.');
+        }
+    };
+
+    // Uygulama başladığında arka plan çizim durumunu kontrol et
+    useEffect(() => {
+        const checkBackgroundDrawingStatus = async () => {
+            try {
+                const isEnabled = await AsyncStorage.getItem('backgroundDrawingEnabled');
+                const endTimeStr = await AsyncStorage.getItem('backgroundDrawingEndTime');
+
+                if (isEnabled === 'true') {
+                    // Süre kontrolü
+                    if (endTimeStr) {
+                        const endTime = new Date(endTimeStr);
+                        const now = new Date();
+
+                        if (now > endTime) {
+                            // Süre dolmuş, çizimi durdur
+                            await stopBackgroundDrawing();
+                            return;
+                        }
+                    }
+
+                    setIsBackgroundDrawing(true);
+                }
+            } catch (error) {
+                console.error('Arka plan çizim durumu kontrol edilemedi:', error);
+            }
+        };
+
+        if (userId) {
+            checkBackgroundDrawingStatus();
+        }
+    }, [userId]);
+
+    const handleStopShare = async (shareId) => {
+        try {
+            // Paylaşım ve kullanıcı bilgilerini kontrol et
+            if (!shareId) {
+                Alert.alert('Hata', 'Paylaşım kimliği alınamadı');
+                return;
+            }
+
+            if (!userId) {
+                Alert.alert('Hata', 'Kullanıcı kimliği alınamadı');
+                return;
+            }
+
+            // Paylaşımı ve paylaşan kullanıcı bilgilerini al
+            const shareDoc = await getDoc(firestoreDoc(db, `users/${userId}/receivedShares/${shareId}`));
+
+            if (!shareDoc.exists()) {
+                console.error('Paylaşım belgesi bulunamadı');
+                Alert.alert('Hata', 'Paylaşım bilgileri alınamadı');
+                return;
+            }
+
+            const shareData = shareDoc.data();
+            const fromUserId = shareData?.fromUserId;
+
+            if (!fromUserId) {
+                console.error('Paylaşan kullanıcı ID bilgisi bulunamadı');
+                Alert.alert('Hata', 'Paylaşım bilgileri alınamadı');
+                return;
+            }
+
+            // 1. Paylaşımı alan kullanıcının receivedShares koleksiyonunu güncelle
+            await updateDoc(firestoreDoc(db, `users/${userId}/receivedShares/${shareId}`), {
                 status: 'ended',
                 endTime: serverTimestamp()
             });
 
-            // 2. Karşı tarafın receivedShares koleksiyonunu güncelle
-            const friendId = activeLocationShares[shareId].friendId;
-            const receivedSharesQuery = query(
-                collection(db, `users/${friendId}/receivedShares`),
-                where('fromUserId', '==', userId),
-                where('status', '==', 'active')
-            );
-            const querySnapshot = await getDocs(receivedSharesQuery);
-            querySnapshot.forEach(async (doc) => {
-                await updateDoc(doc.ref, {
-                    status: 'ended',
-                    endTime: serverTimestamp()
+            // 2. Karşı tarafın shares koleksiyonunu güncelle
+            try {
+                const sentSharesQuery = query(
+                    collection(db, `users/${fromUserId}/shares`),
+                    where('friendId', '==', userId),
+                    where('status', '==', 'active')
+                );
+                const querySnapshot = await getDocs(sentSharesQuery);
+
+                const updatePromises = [];
+                querySnapshot.forEach((doc) => {
+                    updatePromises.push(
+                        updateDoc(doc.ref, {
+                            status: 'ended',
+                            endTime: serverTimestamp()
+                        })
+                    );
                 });
-            });
 
-            // 3. RTDB'den konum verilerini temizle
-            const locationRef = ref(rtdb, `locations/${shareId}`);
-            await remove(locationRef);
-
-            // 4. Aktif paylaşımları güncelle
-            setActiveLocationShares(prev => {
-                const newShares = { ...prev };
-                delete newShares[shareId];
-                return newShares;
-            });
-
-            // 5. Eğer başka aktif paylaşım yoksa arka plan takibi durdur
-            if (Object.keys(activeLocationShares).length === 0) {
-                await stopBackgroundLocationUpdates();
+                await Promise.all(updatePromises);
+            } catch (error) {
+                console.error('Karşı taraf paylaşımı durdurma hatası:', error);
             }
 
-            Alert.alert('Başarılı', 'Konum paylaşımı durduruldu');
+            // 3. Eğer canlı konum paylaşımı ise RTDB'den konum verilerini temizle
+            if (shareData.type === 'live' && shareData.shareId) {
+                try {
+                    const locationRef = ref(rtdb, `locations/${shareData.shareId}`);
+                    await remove(locationRef);
+                } catch (error) {
+                    console.error('RTDB konum silme hatası:', error);
+                }
+            }
+
+            closeModal();
+            Alert.alert('Başarılı', 'Paylaşım durduruldu');
         } catch (error) {
-            console.error('Konum paylaşımı durdurma hatası:', error);
-            Alert.alert('Hata', 'Konum paylaşımı durdurulamadı');
+            console.error('Paylaşım durdurma hatası:', error);
+            Alert.alert('Hata', 'Paylaşım durdurulamadı: ' + error.message);
         }
     };
+
+    const handleShareMyLocation = async () => {
+        try {
+            // Kullanıcı ve seçili konum bilgilerini kontrol et
+            if (!userId) {
+                Alert.alert('Hata', 'Kullanıcı kimliği alınamadı');
+                return;
+            }
+
+            if (!selectedLocation || !selectedLocation.senderId) {
+                Alert.alert('Hata', 'Kullanıcı bilgileri alınamadı');
+                return;
+            }
+
+            // Konum izinlerini kontrol et
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('İzin Hatası', 'Konum izni verilmedi');
+                return;
+            }
+
+            // Mevcut konumu al
+            const currentLocation = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Highest
+            }).catch(error => {
+                console.error('Konum alma hatası:', error);
+                throw new Error('Konum alınamadı');
+            });
+
+            if (!currentLocation || !currentLocation.coords) {
+                Alert.alert('Hata', 'Konum bilgileri alınamadı');
+                return;
+            }
+
+            // Konum bilgilerini al (şehir, ilçe vs.)
+            const response = await Location.reverseGeocodeAsync({
+                latitude: currentLocation.coords.latitude,
+                longitude: currentLocation.coords.longitude
+            }).catch(error => {
+                console.error('Ters geocoding hatası:', error);
+                return null;
+            });
+
+            const locationInfo = response && response.length > 0 ? {
+                city: response[0].city || response[0].region || 'Bilinmiyor',
+                district: response[0].district || response[0].subregion || 'Bilinmiyor',
+                street: response[0].street || '',
+                country: response[0].country || 'Bilinmiyor'
+            } : {
+                city: 'Bilinmiyor',
+                district: 'Bilinmiyor',
+                street: '',
+                country: 'Bilinmiyor'
+            };
+
+            // Kullanıcı bilgilerini al
+            const userDoc = await getDoc(firestoreDoc(db, 'users', userId));
+            if (!userDoc.exists()) {
+                console.error('Kullanıcı belgesi bulunamadı');
+                Alert.alert('Hata', 'Kullanıcı bilgileri alınamadı');
+                return;
+            }
+
+            const userData = userDoc.data();
+
+            // Kullanıcı bilgilerini güvenli bir şekilde hazırla
+            const userName = userData?.informations?.name || 'İsimsiz';
+            const userUsername = userData?.informations?.username || '';
+            const userPhoto = userData?.profilePicture || '';
+
+            // Karşı kullanıcı bilgilerini hazırla - null/undefined değerleri kontrol et
+            const friendData = {
+                friendName: selectedLocation.senderName || 'İsimsiz',
+                friendUsername: selectedLocation.senderUsername || '',  // Undefined ise boş string kullan
+                friendPhoto: selectedLocation.senderPhoto || ''  // Undefined ise boş string kullan
+            };
+            // Aktif paylaşım kontrolü
+            const activeShareQuery = query(
+                collection(db, `users/${userId}/shares`),
+                where('friendId', '==', selectedLocation.senderId),
+                where('status', '==', 'active'),
+                where('type', '==', 'instant')
+            );
+
+            const activeShareSnapshot = await getDocs(activeShareQuery);
+            if (!activeShareSnapshot.empty) {
+                Alert.alert(
+                    'Bilgi',
+                    'Bu kişiyle zaten aktif bir konum paylaşımınız var. Yine de yeni bir paylaşım başlatmak istiyor musunuz?',
+                    [
+                        {
+                            text: 'İptal',
+                            style: 'cancel'
+                        },
+                        {
+                            text: 'Devam Et',
+                            onPress: async () => {
+                                try {
+                                    await createShare();
+                                } catch (error) {
+                                    console.error('Paylaşım oluşturma hatası:', error);
+                                    Alert.alert('Hata', 'Konum paylaşılamadı: ' + error.message);
+                                }
+                            }
+                        }
+                    ]
+                );
+                return;
+            }
+
+            // Doğrudan paylaşım oluştur
+            await createShare();
+
+            // Paylaşım oluşturma fonksiyonu
+            async function createShare() {
+                // 1. Firestore'da paylaşım kaydı oluştur (shares)
+                const shareRef = await addDoc(collection(db, `users/${userId}/shares`), {
+                    type: 'instant',
+                    friendId: selectedLocation.senderId,
+                    status: 'active',
+                    startTime: serverTimestamp(),
+                    lastUpdate: serverTimestamp(),
+                    locationInfo: locationInfo,
+                    location: {
+                        latitude: currentLocation.coords.latitude,
+                        longitude: currentLocation.coords.longitude
+                    },
+                    friendName: friendData.friendName,
+                    friendUsername: friendData.friendUsername,
+                    friendPhoto: friendData.friendPhoto
+                });
+
+                // 2. Karşı tarafa paylaşımı ekle (receivedShares)
+                await addDoc(collection(db, `users/${selectedLocation.senderId}/receivedShares`), {
+                    type: 'instant',
+                    fromUserId: userId,
+                    shareId: shareRef.id,
+                    status: 'active',
+                    startTime: serverTimestamp(),
+                    lastUpdate: serverTimestamp(),
+                    locationInfo: locationInfo,
+                    location: {
+                        latitude: currentLocation.coords.latitude,
+                        longitude: currentLocation.coords.longitude
+                    },
+                    senderName: userName,
+                    senderUsername: userUsername,
+                    senderPhoto: userPhoto
+                });
+
+                closeModal();
+                Alert.alert('Başarılı', 'Konum paylaşımı başlatıldı');
+            }
+        } catch (error) {
+            console.error('Konum paylaşım hatası:', error);
+            Alert.alert('Hata', 'Konum paylaşılamadı: ' + error.message);
+        }
+    };
+    // Çizgi stili seçildiğinde çağrılacak fonksiyon
+    const handleSelectLineStyle = (style) => {
+        setSelectedLineStyle(style);
+        setShowLineStyleModal(false);
+
+        // Kullanıcı tercihlerini AsyncStorage'a kaydet
+        saveLineStylePreference(style);
+    };
+
+    // Çizgi stilini AsyncStorage'a kaydet
+    const saveLineStylePreference = async (style) => {
+        try {
+            await AsyncStorage.setItem('userLineStylePreference', JSON.stringify(style));
+        } catch (error) {
+            console.error('Çizgi stili kaydedilemedi:', error);
+        }
+    };
+
+    // Kullanıcı tercihlerini yükle
+    const loadLineStylePreference = async () => {
+        try {
+            const savedStyle = await AsyncStorage.getItem('userLineStylePreference');
+            if (savedStyle) {
+                setSelectedLineStyle(JSON.parse(savedStyle));
+            }
+        } catch (error) {
+            console.error('Çizgi stili yüklenemedi:', error);
+        }
+    };
+
+    // Component mount olduğunda tercihleri yükle
+    useEffect(() => {
+        loadLineStylePreference();
+    }, []);
+
+    const [region, setRegion] = useState({
+        latitude: location?.coords?.latitude || 37.78825,
+        longitude: location?.coords?.longitude || -122.4324,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+    });
+
+    // Sayfa yüklendiğinde hemen kullanıcı konumunu almaya çalış
+    useEffect(() => {
+        const getInitialLocation = async () => {
+            try {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+
+                const currentLocation = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced // Daha hızlı konum için
+                });
+
+                if (currentLocation && currentLocation.coords) {
+                    setLocation(currentLocation);
+                    setRegion({
+                        latitude: currentLocation.coords.latitude,
+                        longitude: currentLocation.coords.longitude,
+                        latitudeDelta: 0.005,
+                        longitudeDelta: 0.005,
+                    });
+                }
+            } catch (error) {
+                console.error('İlk konum alınamadı:', error);
+            }
+        };
+
+        getInitialLocation();
+    }, []);
 
     if (loading) {
         return (
@@ -723,12 +1267,8 @@ const MapPage = ({ navigation, route }) => {
                 onPanDrag={handleMapInteraction}
                 onPinchEnd={handleMapInteraction}
                 onRotateEnd={handleMapInteraction}
-                initialRegion={{
-                    latitude: location?.coords?.latitude || 37.78825,
-                    longitude: location?.coords?.longitude || -122.4324,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                }}
+                initialRegion={region}
+                region={region}
                 zoomControlEnabled={false}
                 mapToolbarEnabled={false}
                 showsMyLocationButton={false}
@@ -737,6 +1277,52 @@ const MapPage = ({ navigation, route }) => {
                 scrollEnabled={true}
                 pitchEnabled={true}
             >
+                {/* Kaydedilmiş yolları göster */}
+                {savedPaths.map((path, index) => {
+                    // Çizgi rengi ve stilini belirle
+                    const isGradient = selectedLineStyle.color.startsWith('gradient');
+                    const lineColor = isGradient
+                        ? (selectedLineStyle.color === 'gradient-red' ? '#F44336' : '#2196F3')
+                        : selectedLineStyle.color;
+
+                    // Çizgi şablonu için dashed pattern
+                    const lineDashPattern = selectedLineStyle.pattern === 'dotted'
+                        ? [2, 2]
+                        : selectedLineStyle.pattern === 'dashed'
+                            ? [8, 4]
+                            : undefined;
+
+                    return (
+                        <Polyline
+                            key={`path-${index}`}
+                            coordinates={path.points}
+                            strokeWidth={selectedLineStyle.width}
+                            strokeColor={lineColor}
+                            lineDashPattern={lineDashPattern}
+                            onPress={() => handlePathPress(path)}
+                            tappable={true}
+                            zIndex={5}
+                        />
+                    );
+                })}
+
+                {/* Aktif çizim yolunu göster */}
+                {pathCoordinates.length > 0 && (
+                    <Polyline
+                        coordinates={pathCoordinates}
+                        strokeWidth={selectedLineStyle.width}
+                        strokeColor={selectedLineStyle.color.startsWith('gradient')
+                            ? (selectedLineStyle.color === 'gradient-red' ? '#F44336' : '#2196F3')
+                            : selectedLineStyle.color}
+                        lineDashPattern={selectedLineStyle.pattern === 'dotted'
+                            ? [2, 2]
+                            : selectedLineStyle.pattern === 'dashed'
+                                ? [8, 4]
+                                : undefined}
+                        zIndex={10}
+                    />
+                )}
+
                 {/* Tüm konumlar için tek tip marker */}
                 {[...receivedInstantLocations, ...receivedLocations]
                     .filter(share => {
@@ -771,31 +1357,6 @@ const MapPage = ({ navigation, route }) => {
                         );
                     })
                 }
-
-                {/* Kaydedilmiş yollar */}
-                {savedPaths.map((path, index) => (
-                    <Polyline
-                        key={index}
-                        coordinates={path.points}
-                        strokeColor={selectedPath && selectedPath.id === path.id
-                            ? '#FFA726'
-                            : PATH_STYLES.colors.discovered}
-                        strokeWidth={PATH_STYLES.width}
-                        lineCap="round"
-                        geodesic={true}
-                        tappable={true}
-                        onPress={() => handlePathPress(path)}
-                    />
-                ))}
-
-                {/* Aktif yol çizgisi */}
-                <Polyline
-                    coordinates={pathCoordinates}
-                    strokeColor={PATH_STYLES.colors.newPath}
-                    strokeWidth={PATH_STYLES.width}
-                    lineCap="round"
-                    geodesic={true}
-                />
             </MapView>
 
             <View style={styles.statusBar}>
@@ -952,11 +1513,10 @@ const MapPage = ({ navigation, route }) => {
                                 </View>
                                 <View style={styles.userInfo}>
                                     <Text style={styles.userName}>{selectedLocation?.senderName || 'İsimsiz'}</Text>
-                                    <Text style={styles.userUsername}>@{selectedLocation?.senderUsername || 'kullanıcı'}</Text>
                                     <View style={styles.locationInfoContainer}>
                                         <Ionicons name="location" size={16} color="#666666" />
                                         <Text style={styles.locationInfo}>
-                                            {selectedLocation?.locationInfo?.city}, {selectedLocation?.locationInfo?.district}
+                                            {selectedLocation?.locationInfo?.city || 'Bilinmeyen Şehir'}, {selectedLocation?.locationInfo?.district || 'Bilinmeyen Bölge'}
                                         </Text>
                                     </View>
                                     <View style={styles.shareTypeContainer}>
@@ -1005,7 +1565,7 @@ const MapPage = ({ navigation, route }) => {
                                     <Ionicons name="time-outline" size={20} color="#666666" />
                                     <View style={styles.locationDetailText}>
                                         <Text style={styles.detailLabel}>Son Güncelleme</Text>
-                                        <Text style={styles.detailValue}>5 dakika önce</Text>
+                                        <Text style={styles.detailValue}>{selectedLocation?.lastUpdateText}</Text>
                                     </View>
                                 </View>
 
@@ -1013,7 +1573,13 @@ const MapPage = ({ navigation, route }) => {
                                     <Ionicons name="speedometer-outline" size={20} color="#666666" />
                                     <View style={styles.locationDetailText}>
                                         <Text style={styles.detailLabel}>Uzaklık</Text>
-                                        <Text style={styles.detailValue}>2.5 km</Text>
+                                        <Text style={styles.detailValue}>
+                                            {selectedLocation?.distance !== undefined ? (
+                                                selectedLocation.distance < 1000
+                                                    ? `${Math.round(selectedLocation.distance)} m`
+                                                    : `${(selectedLocation.distance / 1000).toFixed(1)} km`
+                                            ) : 'Hesaplanıyor...'}
+                                        </Text>
                                     </View>
                                 </View>
                             </View>
@@ -1022,12 +1588,14 @@ const MapPage = ({ navigation, route }) => {
                             <View style={styles.actionButtons}>
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
+                                    onPress={handleShareMyLocation}
                                 >
                                     <Text style={styles.actionButtonText}>Konumumu Paylaş</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                                    onPress={() => selectedLocation?.id && handleStopShare(selectedLocation.id)}
                                 >
                                     <Text style={styles.actionButtonText}>Paylaşımı Durdur</Text>
                                 </TouchableOpacity>
@@ -1036,6 +1604,57 @@ const MapPage = ({ navigation, route }) => {
                     </View>
                 </Pressable>
             </Modal>
+
+            {/* Arka Plan Çizim Butonu ve Etiketi - En üstte olması için en son render edelim */}
+            <View style={{ position: 'absolute', zIndex: 1000 }}>
+                {isBackgroundDrawing && (
+                    <View style={styles.backgroundDrawingLabel}>
+                        <Text style={styles.backgroundDrawingLabelText}>AKTİF</Text>
+                    </View>
+                )}
+                <TouchableOpacity
+                    style={[
+                        styles.backgroundDrawingButton,
+                        isBackgroundDrawing && styles.backgroundDrawingActiveButton
+                    ]}
+                    onPress={() => isBackgroundDrawing ? stopBackgroundDrawing() : setShowDurationModal(true)}
+                >
+                    <Ionicons
+                        name={isBackgroundDrawing ? "brush" : "brush-outline"}
+                        size={24}
+                        color={isBackgroundDrawing ? "#FFFFFF" : "#333333"}
+                    />
+                </TouchableOpacity>
+
+                {/* Çizgi Tasarım Butonu */}
+                <TouchableOpacity
+                    style={styles.emojiButton}
+                    onPress={() => setShowLineStyleModal(true)}
+                >
+                    <Ionicons
+                        name="color-palette-outline"
+                        size={24}
+                        color="#333333"
+                    />
+                </TouchableOpacity>
+            </View>
+
+            {/* Süre Seçim Modalı - Artık ayrı bir komponent olarak kullanıyoruz */}
+            <DurationModal
+                visible={showDurationModal}
+                onClose={() => setShowDurationModal(false)}
+                selectedDuration={selectedDuration}
+                setSelectedDuration={setSelectedDuration}
+                onStartDrawing={startBackgroundDrawing}
+            />
+
+            {/* Çizgi Tasarım Modalı - Artık ayrı bir komponent olarak kullanıyoruz */}
+            <LineStyleModal
+                visible={showLineStyleModal}
+                onClose={() => setShowLineStyleModal(false)}
+                selectedLineStyle={selectedLineStyle}
+                onSelectLineStyle={handleSelectLineStyle}
+            />
         </View>
     );
 };
@@ -1409,6 +2028,67 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
         elevation: 5,
+    },
+    backgroundDrawingButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 120 : 100, // Biraz daha aşağıya taşıdık
+        left: 16,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+        zIndex: 1000,
+    },
+    backgroundDrawingActiveButton: {
+        backgroundColor: '#4CAF50',
+    },
+    backgroundDrawingLabel: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 100 : 80, // Butonun üstünde
+        left: 16,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        width: 56,
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    backgroundDrawingLabelText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    // Emoji butonu stili (aynı stil çizgi tasarım butonu için de kullanılacak)
+    emojiButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 190 : 170, // Çizim butonunun altında
+        left: 16,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+        zIndex: 1000,
     },
 });
 

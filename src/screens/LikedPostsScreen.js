@@ -9,7 +9,10 @@ import {
     StatusBar,
     TouchableOpacity,
     Dimensions,
-    Modal
+    Modal,
+    Animated,
+    Easing,
+    Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Activity from '../components/Activity';
@@ -20,6 +23,120 @@ import PostDetailModal from '../modals/PostDetailModal';
 
 const { width } = Dimensions.get('window');
 const GRID_SIZE = width / 3;
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
+
+// Shimmer animasyonu bileşeni
+const ShimmerEffect = ({ width, height, style }) => {
+    const animatedValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.timing(animatedValue, {
+                toValue: 1,
+                duration: 2000,
+                easing: Easing.linear,
+                useNativeDriver: true // Native driver kullanarak performansı artırıyoruz
+            })
+        ).start();
+    }, []);
+
+    const translateX = animatedValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-width, width]
+    });
+
+    return (
+        <View style={[{ width, height, overflow: 'hidden', backgroundColor: '#e0e0e0' }, style]}>
+            <Animated.View
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: '#f5f5f5',
+                    position: 'absolute',
+                    opacity: 0.5,
+                    transform: [{ translateX }]
+                }}
+            />
+        </View>
+    );
+};
+
+// Grid görünümü için yer tutucu bileşen
+const GridSkeleton = React.memo(() => {
+    // Daha az yer tutucu kullanarak başlangıç yüklemesini hızlandıralım
+    const skeletonItems = new Array(15).fill(null);
+
+    return (
+        <View style={styles.gridContainer}>
+            <FlatList
+                data={skeletonItems}
+                numColumns={3}
+                renderItem={({ index }) => (
+                    <View key={`grid-skeleton-${index}`} style={styles.skeletonGridItem}>
+                        <ShimmerEffect
+                            width={GRID_SIZE - 2}
+                            height={GRID_SIZE - 2}
+                            style={{ borderRadius: 8 }}
+                        />
+                        <View style={styles.skeletonOverlay}>
+                            <View style={styles.statsContainer}>
+                                <View style={[styles.skeletonStatItem, styles.likeSkeletonStatItem]} />
+                                <View style={[styles.skeletonStatItem, styles.commentSkeletonStatItem]} />
+                            </View>
+                        </View>
+                    </View>
+                )}
+                keyExtractor={(_, index) => `skeleton-${index}`}
+                scrollEnabled={false}
+            />
+        </View>
+    );
+});
+
+// Koleksiyon görünümü için yer tutucu bileşen
+const CollectionSkeleton = React.memo(() => {
+    const skeletonItems = new Array(9).fill(null);
+
+    return (
+        <View style={styles.collectionsContainer}>
+            <FlatList
+                data={skeletonItems}
+                numColumns={3}
+                renderItem={({ index }) => (
+                    <View
+                        key={`collection-skeleton-${index}`}
+                        style={[
+                            styles.skeletonCollectionCard,
+                            index % 3 !== 2 && { marginRight: 8 }
+                        ]}
+                    >
+                        <View style={styles.skeletonCollectionEmoji}>
+                            <ShimmerEffect
+                                width={48}
+                                height={48}
+                                style={{ borderRadius: 24 }}
+                            />
+                        </View>
+                        <View style={styles.collectionInfo}>
+                            <View style={styles.skeletonCollectionName}>
+                                <ShimmerEffect width={'80%'} height={12} style={{ borderRadius: 6 }} />
+                            </View>
+                            <View style={styles.skeletonCollectionDescription}>
+                                <ShimmerEffect width={'100%'} height={8} style={{ borderRadius: 4 }} />
+                            </View>
+                            <View style={styles.skeletonPostCount}>
+                                <ShimmerEffect width={'40%'} height={8} style={{ borderRadius: 4 }} />
+                            </View>
+                        </View>
+                    </View>
+                )}
+                keyExtractor={(_, index) => `collection-skeleton-${index}`}
+                scrollEnabled={false}
+                columnWrapperStyle={styles.row}
+            />
+        </View>
+    );
+});
 
 const LikedPostsScreen = ({ navigation }) => {
     const [selectedPost, setSelectedPost] = useState(null);
@@ -63,6 +180,15 @@ const LikedPostsScreen = ({ navigation }) => {
                         loading: true
                     }
                 }));
+            } else {
+                // Pagination için yükleme durumunu belirtelim ama sayfayı bloke etmeyelim
+                setTabData(prev => ({
+                    ...prev,
+                    [activeTab]: {
+                        ...prev[activeTab],
+                        paginationLoading: true
+                    }
+                }));
             }
 
             if (!activeTabData.hasMore && !isInitial && activeTab === 'liked') return;
@@ -82,6 +208,7 @@ const LikedPostsScreen = ({ navigation }) => {
                         lastDoc: lastVisible,
                         hasMore: newPosts.length === POSTS_PER_PAGE,
                         loading: false,
+                        paginationLoading: false,
                         refreshing: false
                     }
                 }));
@@ -93,6 +220,7 @@ const LikedPostsScreen = ({ navigation }) => {
                 [activeTab]: {
                     ...prev[activeTab],
                     loading: false,
+                    paginationLoading: false,
                     refreshing: false
                 }
             }));
@@ -136,13 +264,17 @@ const LikedPostsScreen = ({ navigation }) => {
                     }
                 };
             } else {
+                // Arşivlenenler sekmesindeyken, tüm arşivlenen gönderileri güncelle
+                // Bu, ortak koleksiyonlardaki gönderilerin de düzgün güncellenmesini sağlar
+                const updatedPosts = prev.archived.posts.map(post =>
+                    post.id === updatedPost.id ? updatedPost : post
+                );
+
                 return {
                     ...prev,
                     archived: {
                         ...prev.archived,
-                        posts: prev.archived.posts.map(post =>
-                            post.id === updatedPost.id ? updatedPost : post
-                        )
+                        posts: updatedPosts
                     }
                 };
             }
@@ -426,13 +558,30 @@ const LikedPostsScreen = ({ navigation }) => {
                 }
             }));
 
+            // Tüm arşivlenen gönderileri çek
             const archivedPosts = await fetchArchivedPosts(currentUser.uid);
 
             if (collectionId) {
-                // Belirli bir koleksiyondaki postları filtrele
-                const filteredPosts = archivedPosts.filter(post =>
-                    post.archiveGroups?.includes(collectionId)
-                );
+
+                // Kullanıcının koleksiyonunun türünü belirle
+                const selectedCollection = tabData.archived.collections.find(c => c.id === collectionId);
+                const isSharedCollection = selectedCollection?.isShared === true;
+
+                let filteredPosts = [];
+
+                if (isSharedCollection) {
+                    // Ortak koleksiyon için archiveGroups alanına göre filtrele
+                    filteredPosts = archivedPosts.filter(post =>
+                        post.archiveGroups?.includes(collectionId)
+                    );
+                } else {
+                    // Normal koleksiyon için kullanıcının archivedBy alanında olup olmadığına ve
+                    // archiveGroups alanına göre filtrele
+                    filteredPosts = archivedPosts.filter(post =>
+                        post.archivedBy?.includes(currentUser.uid) &&
+                        post.archiveGroups?.includes(collectionId)
+                    );
+                }
 
                 setTabData(prev => ({
                     ...prev,
@@ -458,6 +607,7 @@ const LikedPostsScreen = ({ navigation }) => {
                 ...prev,
                 archived: {
                     ...prev.archived,
+                    loading: false
                 }
             }));
         }
@@ -554,7 +704,7 @@ const LikedPostsScreen = ({ navigation }) => {
         <TouchableOpacity
             style={[
                 styles.collectionCard,
-                index % 2 === 0 && { marginRight: 8 }
+                index % 3 !== 2 && { marginRight: 8 }
             ]}
             onPress={() => handleCollectionPress(item)}
         >
@@ -566,7 +716,7 @@ const LikedPostsScreen = ({ navigation }) => {
                     {item.name}
                 </Text>
                 {item.description && (
-                    <Text style={styles.collectionDescription} numberOfLines={2}>
+                    <Text style={styles.collectionDescription} numberOfLines={1}>
                         {item.description}
                     </Text>
                 )}
@@ -589,12 +739,13 @@ const LikedPostsScreen = ({ navigation }) => {
             refreshing={tabData.liked.refreshing}
             onRefresh={handleRefresh}
             removeClippedSubviews={true}
-            maxToRenderPerBatch={9}
-            windowSize={5}
+            maxToRenderPerBatch={6}
+            initialNumToRender={9}
+            windowSize={3}
             onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
+            onEndReachedThreshold={0.2}
             ListFooterComponent={() => (
-                tabData.liked.loading && !tabData.liked.refreshing && tabData.liked.posts.length > 0 ? (
+                tabData.liked.paginationLoading ? (
                     <View style={styles.footerLoader}>
                         <ActivityIndicator color="#2196F3" />
                     </View>
@@ -602,7 +753,7 @@ const LikedPostsScreen = ({ navigation }) => {
             )}
             getItemLayout={(data, index) => ({
                 length: GRID_SIZE,
-                offset: GRID_SIZE * index,
+                offset: GRID_SIZE * Math.floor(index / 3),
                 index,
             })}
         />
@@ -615,22 +766,44 @@ const LikedPostsScreen = ({ navigation }) => {
             renderItem={renderCollectionItem}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.collectionsContainer}
-            numColumns={2}
+            numColumns={3}
             columnWrapperStyle={styles.row}
             refreshing={tabData.archived.refreshing}
             onRefresh={handleRefresh}
             removeClippedSubviews={true}
             maxToRenderPerBatch={6}
-            windowSize={5}
+            initialNumToRender={6}
+            windowSize={3}
         />
     ), [tabData.archived]);
 
     // Seçili koleksiyon görünümü için optimize edilmiş liste
     const SelectedCollectionList = useCallback(() => {
         // Sadece seçili koleksiyona ait postları filtreleyelim
-        const filteredPosts = tabData.archived.posts.filter(post =>
-            post.archiveGroups?.includes(selectedCollection.id)
-        );
+        const isSharedCollection = selectedCollection?.isShared === true;
+
+        // Filtereleme mantığını iyileştiriyoruz
+        let filteredPosts = [];
+
+        try {
+            if (isSharedCollection) {
+                // Ortak koleksiyon için archiveGroups alanına göre filtrele
+                // Bu filtreleme archiveGroups alanı var mı kontrolü yapıyor ve bu alan varsa seçili koleksiyonda mı diye bakıyor
+                filteredPosts = tabData.archived.posts.filter(post => {
+                    if (!post.archiveGroups) return false;
+                    return post.archiveGroups.includes(selectedCollection.id);
+                });
+            } else {
+                // Normal koleksiyon için kullanıcının archivedBy alanında olup olmadığına ve
+                // archiveGroups alanına göre filtrele
+                filteredPosts = tabData.archived.posts.filter(post => {
+                    return post.archivedBy?.includes(currentUser.uid) &&
+                        post.archiveGroups?.includes(selectedCollection.id);
+                });
+            }
+        } catch (error) {
+            console.error('Gönderileri filtrelemede hata:', error);
+        }
 
         return (
             <>
@@ -646,14 +819,15 @@ const LikedPostsScreen = ({ navigation }) => {
                     </TouchableOpacity>
                     <Text style={styles.selectedCollectionTitle}>
                         {selectedCollection.name}
+                        {isSharedCollection && (
+                            <Text style={styles.sharedCollectionBadge}> (Ortak)</Text>
+                        )}
                     </Text>
                     <View style={{ width: 24 }} />
                 </View>
 
                 {tabData.archived.loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#2196F3" />
-                    </View>
+                    <GridSkeleton />
                 ) : (
                     <FlatList
                         data={filteredPosts}
@@ -664,11 +838,12 @@ const LikedPostsScreen = ({ navigation }) => {
                         refreshing={tabData.archived.refreshing}
                         onRefresh={handleRefresh}
                         removeClippedSubviews={true}
-                        maxToRenderPerBatch={9}
-                        windowSize={5}
+                        maxToRenderPerBatch={6}
+                        initialNumToRender={9}
+                        windowSize={3}
                         getItemLayout={(data, index) => ({
                             length: GRID_SIZE,
-                            offset: GRID_SIZE * index,
+                            offset: GRID_SIZE * Math.floor(index / 3),
                             index,
                         })}
                         ListEmptyComponent={() => (
@@ -677,16 +852,21 @@ const LikedPostsScreen = ({ navigation }) => {
                                 <Text style={styles.emptyText}>
                                     Bu koleksiyonda henüz gönderi yok
                                 </Text>
+                                {isSharedCollection && (
+                                    <Text style={styles.emptySubText}>
+                                        Ortak koleksiyonlara diğer üyeler de gönderi ekleyebilir
+                                    </Text>
+                                )}
                             </View>
                         )}
                     />
                 )}
             </>
         );
-    }, [tabData.archived, selectedCollection]);
+    }, [tabData.archived, selectedCollection, currentUser.uid]);
 
     const handleLoadMore = () => {
-        if (!activeTabData.loading && activeTabData.hasMore && activeTab === 'liked') {
+        if (!activeTabData.loading && !activeTabData.paginationLoading && activeTabData.hasMore && activeTab === 'liked') {
             loadPosts(false);
         }
     };
@@ -713,9 +893,24 @@ const LikedPostsScreen = ({ navigation }) => {
 
     const renderDetailModal = () => {
         // Aktif sekmeye göre doğru veri kaynağını seçelim
-        const currentPosts = activeTab === 'liked'
-            ? tabData.liked.posts
-            : tabData.archived.posts;
+        let currentPosts = [];
+
+        if (activeTab === 'liked') {
+            currentPosts = tabData.liked.posts;
+        } else {
+            // Ortak koleksiyon görüntüleniyorsa
+            if (selectedCollection && selectedCollection.isShared) {
+                // Ortak koleksiyonda olup, seçili koleksiyonda olan tüm gönderileri göster
+                currentPosts = tabData.archived.posts.filter(post =>
+                    post.archiveGroups?.includes(selectedCollection.id)
+                );
+            } else {
+                // Normal koleksiyon veya tüm kaydedilenler için
+                currentPosts = tabData.archived.posts.filter(post =>
+                    post.archivedBy?.includes(currentUser.uid)
+                );
+            }
+        }
 
         return (
             <PostDetailModal
@@ -728,7 +923,8 @@ const LikedPostsScreen = ({ navigation }) => {
                 onCommentPress={handleCommentSubmit}
                 onPostUpdate={(updatedPost) => {
                     handlePostUpdate(updatedPost);
-                    if (updatedPost.id !== selectedPost.id) {
+                    if (selectedPost && updatedPost.id === selectedPost.id) {
+                        // Sadece seçili gönderi güncellendiğinde state'i güncelle
                         setSelectedPost(updatedPost);
                     }
                 }}
@@ -738,21 +934,30 @@ const LikedPostsScreen = ({ navigation }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" />
-            {renderHeader()}
-            {activeTabData.loading &&
-                (activeTab === 'liked' ? tabData.liked.posts.length === 0 : tabData.archived.collections.length === 0) ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#2196F3" />
-                </View>
-            ) : (
-                <>
-                    {activeTab === 'liked' ? <GridList /> : renderArchivedContent()}
-                    {renderDetailModal()}
-                </>
-            )}
-        </SafeAreaView>
+        <>
+            <StatusBar barStyle="dark-content" backgroundColor="#fff" translucent={true} />
+            <View style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: STATUSBAR_HEIGHT,
+                backgroundColor: '#fff',
+                zIndex: 9999
+            }} />
+            <SafeAreaView style={[styles.container, { paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0 }]}>
+                {renderHeader()}
+                {activeTabData.loading &&
+                    (activeTab === 'liked' ? tabData.liked.posts.length === 0 : tabData.archived.collections.length === 0) ? (
+                    activeTab === 'liked' ? <GridSkeleton /> : <CollectionSkeleton />
+                ) : (
+                    <>
+                        {activeTab === 'liked' ? <GridList /> : renderArchivedContent()}
+                        {renderDetailModal()}
+                    </>
+                )}
+            </SafeAreaView>
+        </>
     );
 };
 
@@ -924,27 +1129,28 @@ const styles = StyleSheet.create({
         marginTop: 0,
     },
     collectionsContainer: {
-        padding: 16,
+        padding: 8,
     },
     row: {
-        flex: 1,
+        flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 16,
+        marginBottom: 8,
     },
     collectionCard: {
         flex: 1,
-        maxWidth: '48%', // İki kart arasında boşluk bırakmak için
+        maxWidth: '31%',
         backgroundColor: '#fff',
         borderRadius: 12,
-        padding: 16,
+        padding: 10,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 1,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+        marginBottom: 8,
     },
     collectionEmoji: {
         width: 48,
@@ -998,6 +1204,94 @@ const styles = StyleSheet.create({
     footerLoader: {
         paddingVertical: 16,
         alignItems: 'center',
+    },
+    // Skeleton styles
+    skeletonGridItem: {
+        width: GRID_SIZE - 2,
+        height: GRID_SIZE - 2,
+        margin: 1,
+        position: 'relative',
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: 'transparent',
+    },
+    skeletonImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+        backgroundColor: '#e0e0e0',
+    },
+    skeletonOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 6,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+    },
+    skeletonStatItem: {
+        width: 40,
+        height: 18,
+        borderRadius: 12,
+        marginHorizontal: 6,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+    },
+    likeSkeletonStatItem: {
+        backgroundColor: 'rgba(255,75,106,0.15)',
+    },
+    commentSkeletonStatItem: {
+        backgroundColor: 'rgba(75,157,255,0.15)',
+    },
+    skeletonCollectionCard: {
+        flex: 1,
+        maxWidth: '31%',
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 10,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+        marginBottom: 8,
+    },
+    skeletonCollectionEmoji: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        marginBottom: 12,
+        overflow: 'hidden',
+    },
+    skeletonCollectionName: {
+        width: '80%',
+        height: 12,
+        marginBottom: 8,
+        overflow: 'hidden',
+        borderRadius: 6,
+    },
+    skeletonCollectionDescription: {
+        width: '100%',
+        height: 8,
+        marginBottom: 4,
+        overflow: 'hidden',
+        borderRadius: 4,
+    },
+    skeletonPostCount: {
+        width: '40%',
+        height: 8,
+        marginTop: 8,
+        overflow: 'hidden',
+        borderRadius: 4,
+    },
+    sharedCollectionBadge: {
+        fontSize: 14,
+        color: '#2196F3',
+        fontWeight: '500',
+        marginLeft: 6,
     },
 });
 

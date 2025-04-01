@@ -20,6 +20,8 @@ import { getRecentChats, deleteChat, deleteChatForEveryone } from '../services/m
 import NewChatModal from '../components/NewChatModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FastImage from 'react-native-fast-image';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 const DirectMessagesScreen = ({ navigation, route }) => {
     const [chats, setChats] = useState([]);
@@ -28,6 +30,7 @@ const DirectMessagesScreen = ({ navigation, route }) => {
     const [isNewChatModalVisible, setIsNewChatModalVisible] = useState(false);
     const [currentUserId, setCurrentUserId] = useState(null);
     const [swipedChatId, setSwipedChatId] = useState(null);
+    const [verifications, setVerifications] = useState({});
 
     useEffect(() => {
         const getUserId = async () => {
@@ -74,6 +77,27 @@ const DirectMessagesScreen = ({ navigation, route }) => {
             navigation.navigate('Chat', { friend: initialChat });
         }
     }, [route.params]);
+
+    useEffect(() => {
+        const loadVerifications = async () => {
+            if (!chats.length) return;
+
+            const verificationData = {};
+
+            for (const chat of chats) {
+                try {
+                    const status = await checkUserVerification(chat.user.id);
+                    verificationData[chat.user.id] = status;
+                } catch (error) {
+                    console.error('Doğrulama durumu kontrolünde hata:', error);
+                }
+            }
+
+            setVerifications(verificationData);
+        };
+
+        loadVerifications();
+    }, [chats]);
 
     const handleNewChat = () => {
         setIsNewChatModalVisible(true);
@@ -164,6 +188,7 @@ const DirectMessagesScreen = ({ navigation, route }) => {
 
     const renderChatItem = ({ item }) => {
         const rowTranslateAnimatedValue = new Animated.Value(0);
+        const verification = verifications[item.user.id] || { hasBlueTick: false, hasGreenTick: false };
 
         const animateRow = (toValue) => {
             Animated.spring(rowTranslateAnimatedValue, {
@@ -299,7 +324,15 @@ const DirectMessagesScreen = ({ navigation, route }) => {
 
                             <View style={styles.chatInfo}>
                                 <View style={styles.chatHeader}>
-                                    <Text style={styles.userName}>{item.user.name}</Text>
+                                    <View style={styles.userNameContainer}>
+                                        <Text style={styles.userName}>{item.user.name}</Text>
+                                        <VerificationBadge
+                                            hasBlueTick={verification.hasBlueTick}
+                                            hasGreenTick={verification.hasGreenTick}
+                                            size={12}
+                                            style={styles.verificationBadge}
+                                        />
+                                    </View>
                                     <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
                                 </View>
                                 <View style={styles.lastMessageContainer}>
@@ -465,10 +498,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
+    userNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     userName: {
         fontSize: 16,
         fontWeight: '600',
         color: '#000',
+        marginBottom: 4,
+        marginRight: 2,
+    },
+    verificationBadge: {
+        marginLeft: 2,
         marginBottom: 4,
     },
     timestamp: {

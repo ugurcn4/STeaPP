@@ -14,19 +14,19 @@ const AboutPage = ({ navigation }) => {
             id: 1,
             title: 'Kullanım Koşulları',
             icon: 'document-text-outline',
-            action: () => Linking.openURL('https://yourapp.com/terms')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/kullan%C4%B1m-ko%C5%9Fullar%C4%B1')
         },
         {
             id: 2,
             title: 'Gizlilik Politikası',
             icon: 'shield-checkmark-outline',
-            action: () => Linking.openURL('https://yourapp.com/privacy')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/gizlilik-politikas%C4%B1')
         },
         {
             id: 3,
             title: 'Lisans Bilgileri',
             icon: 'information-circle-outline',
-            action: () => Linking.openURL('https://yourapp.com/license')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/lisans-bilgileri')
         }
     ];
 
@@ -35,19 +35,19 @@ const AboutPage = ({ navigation }) => {
             id: 1,
             title: 'Instagram',
             icon: 'logo-instagram',
-            action: () => Linking.openURL('https://instagram.com/yourapp')
+            action: () => Linking.openURL('https://www.instagram.com/ugurrucr/')
         },
         {
             id: 2,
-            title: 'Twitter',
-            icon: 'logo-twitter',
-            action: () => Linking.openURL('https://twitter.com/yourapp')
+            title: 'LinkedIn',
+            icon: 'logo-linkedin',
+            action: () => Linking.openURL('https://www.linkedin.com/in/u%C4%9Fur-can-u%C3%A7ar-210061227/')
         },
         {
             id: 3,
             title: 'Web Sitesi',
             icon: 'globe-outline',
-            action: () => Linking.openURL('https://yourapp.com')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/kullan%C4%B1m-ko%C5%9Fullar%C4%B1')
         }
     ];
 
@@ -126,7 +126,7 @@ const AboutPage = ({ navigation }) => {
 
             <View style={styles.creditsSection}>
                 <Text style={[styles.credits, { color: currentTheme.text }]}>
-                    © 2024 STeaPP. Tüm hakları saklıdır.
+                    © 2025 STeaPP. Tüm hakları saklıdır.
                 </Text>
                 <Text style={styles.madeWith}>
                     Uğur Can UÇAR tarafından Türkiye'de geliştirildi.

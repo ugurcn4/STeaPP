@@ -25,7 +25,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { fetchNotifications, markNotificationAsRead } from '../redux/slices/notificationSlice';
 import NotificationItem from '../components/NotificationItem';
 import FastImage from 'react-native-fast-image';
-import { fetchPosts, toggleLikePost, addComment, deleteComment } from '../services/postService';
+import { fetchPosts, toggleLikePost, addComment, deleteComment, deletePost } from '../services/postService';
 import { getAuth } from 'firebase/auth';
 import { SafeAreaProvider, SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
 
@@ -56,40 +56,45 @@ const ActivitiesScreen = ({ navigation, route }) => {
     const [page, setPage] = useState(1);
     const [hasMorePosts, setHasMorePosts] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [lastVisibleDoc, setLastVisibleDoc] = useState(null);
 
     useEffect(() => {
         const initializeData = async () => {
+            setLoading(true);
             try {
                 const currentUid = await getCurrentUserUid();
 
                 if (currentUid) {
-                    dispatch(fetchNotifications(currentUid));
+                    // Tüm veri yükleme işlemlerini paralel olarak başlat
+                    const [friendsPromise, postsPromise, notificationsPromise, unreadCountPromise] = [
+                        fetchFriends(),
+                        loadPosts(true),
+                        dispatch(fetchNotifications(currentUid)),
+                        getUnreadMessageCount(currentUid)
+                    ];
+
+                    // Tüm işlemleri paralel olarak bekle
+                    const [friendsResult, _, __, unreadCount] = await Promise.all([
+                        friendsPromise,
+                        postsPromise,
+                        notificationsPromise,
+                        unreadCountPromise
+                    ]);
+
+                    // Sonuçları state'e kaydet
+                    setUnreadCount(unreadCount);
                 }
             } catch (error) {
-                // Hata durumunda sessizce devam et
+                console.error('Veri yükleme hatası:', error);
+            } finally {
+                setLoading(false);
             }
         };
 
         initializeData();
-        fetchFriends();
         checkAndDeleteExpiredStories();
 
         const interval = setInterval(checkAndDeleteExpiredStories, 60 * 60 * 1000);
-
-        const loadUnreadCount = async () => {
-            try {
-                const uid = await getCurrentUserUid();
-                if (uid) {
-                    const count = await getUnreadMessageCount(uid);
-                    setUnreadCount(count);
-                }
-            } catch (error) {
-                // Hata durumunda sessizce devam et
-            }
-        };
-
-        loadUnreadCount();
-        const unreadInterval = setInterval(loadUnreadCount, 30000);
 
         navigation.setOptions({
             cardStyle: { backgroundColor: '#fff' },
@@ -102,7 +107,6 @@ const ActivitiesScreen = ({ navigation, route }) => {
 
         return () => {
             clearInterval(interval);
-            clearInterval(unreadInterval);
         };
     }, [navigation, userId, dispatch]);
 
@@ -117,6 +121,7 @@ const ActivitiesScreen = ({ navigation, route }) => {
                 setLoading(true);
                 setPage(1);
                 setHasMorePosts(true);
+                setLastVisibleDoc(null);
             } else if (loadingMore || !hasMorePosts) {
                 return;
             } else {
@@ -126,8 +131,20 @@ const ActivitiesScreen = ({ navigation, route }) => {
             if (!currentUser?.uid) return;
 
             // Sayfalama parametreleri ekleyelim
-            const pageSize = 10;
-            const fetchedPosts = await fetchPosts(currentUser.uid, page, pageSize);
+            const pageSize = 5; // Daha az gönderi yükle, performans için
+
+            // Sayfalama ve limit ile sorgu yaparak daha az veri çek
+            const result = await fetchPosts(
+                currentUser.uid,
+                page,
+                pageSize,
+                friends.map(f => f.id), // Arkadaş listesini doğrudan gönder
+                lastVisibleDoc
+            );
+
+            const fetchedPosts = result.posts;
+            const newLastVisible = result.lastVisible;
+            const hasMore = result.hasMore;
 
             // Eğer sayfa yenileniyorsa, eski verileri temizle
             if (refresh || page === 1) {
@@ -142,8 +159,11 @@ const ActivitiesScreen = ({ navigation, route }) => {
                 });
             }
 
+            // Son görünen belgeyi kaydet
+            setLastVisibleDoc(newLastVisible);
+
             // Daha fazla gönderi var mı kontrolü
-            setHasMorePosts(fetchedPosts.length === pageSize);
+            setHasMorePosts(hasMore);
 
             // Bir sonraki sayfa için page değerini artır
             if (fetchedPosts.length > 0 && !refresh) {
@@ -155,7 +175,7 @@ const ActivitiesScreen = ({ navigation, route }) => {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [currentUser?.uid, page, hasMorePosts, loadingMore]);
+    }, [currentUser?.uid, page, hasMorePosts, loadingMore, friends, lastVisibleDoc]);
 
     // Daha fazla veri yükleme fonksiyonu
     const handleLoadMore = useCallback(() => {
@@ -285,58 +305,19 @@ const ActivitiesScreen = ({ navigation, route }) => {
         }
     }, [currentUser?.uid, isSubmittingComment]);
 
-    // Aktiviteler listesini render eden fonksiyon
-    const renderActivities = () => (
-        <FlatList
-            data={posts}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-                <MemoizedActivity
-                    activity={item}
-                    onLikePress={() => handleLikePress(item.id)}
-                    onCommentPress={(comment, replyToId) => handleCommentSubmit(item.id, comment, replyToId)}
-                    isLiked={item.likedBy?.includes(currentUser?.uid)}
-                    currentUserId={currentUser?.uid}
-                    navigation={navigation}
-                />
-            )}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            refreshControl={
-                <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={['#2196F3']}
-                    tintColor="#2196F3"
-                />
-            }
-            ListFooterComponent={() => (
-                <View>
-                    {loadingMore && hasMorePosts ? (
-                        <View style={styles.footerLoader}>
-                            <ActivityIndicator size="small" color="#2196F3" />
-                        </View>
-                    ) : null}
-                    <View style={styles.bottomSpacer} />
-                </View>
-            )}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={5}
-            windowSize={10}
-            initialNumToRender={3}
-            contentContainerStyle={styles.flatListContent}
-            ListHeaderComponent={() => (
-                <>
-                    <Stories friends={friends} navigation={navigation} />
-                    <View style={styles.separator} />
-                </>
-            )}
-        />
-    );
+    // Post silme işlemi
+    const handleDeletePost = useCallback((postId) => {
+        // Silinen postu state'den kaldır
+        setPosts(currentPosts => currentPosts.filter(post => post.id !== postId));
+    }, []);
 
-    // Bildirimler listesini render eden fonksiyon
-    const renderNotifications = () => {
-        if (notificationsLoading && !refreshing) {
+    // Aktiviteler listesini render eden fonksiyon
+    const renderActivities = () => {
+        // Memoize edilmiş postlar
+        const memoizedPosts = useMemo(() => posts, [posts]);
+
+        // İlk yükleme sırasında ve henüz post yoksa yükleme göstergesini göster
+        if (loading && !refreshing && !posts.length) {
             return (
                 <View style={styles.centerContainer}>
                     <ActivityIndicator size="large" color="#25D220" />
@@ -344,6 +325,97 @@ const ActivitiesScreen = ({ navigation, route }) => {
             );
         }
 
+        // Hiç gönderi yoksa ve yükleme tamamlandıysa boş ekran göster
+        if (!loading && !posts.length) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                        Henüz gönderi bulunmuyor
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.refreshButton}
+                        onPress={() => onRefresh()}
+                    >
+                        <Text style={styles.refreshButtonText}>Yenile</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={memoizedPosts}
+                keyExtractor={item => item.id}
+                renderItem={({ item }) => (
+                    <MemoizedActivity
+                        activity={item}
+                        onLikePress={() => handleLikePress(item.id)}
+                        onCommentPress={(comment, replyToId) => handleCommentSubmit(item.id, comment, replyToId)}
+                        onDeletePress={() => handleDeletePost(item.id)}
+                        isLiked={item.likedBy?.includes(currentUser?.uid)}
+                        currentUserId={currentUser?.uid}
+                        navigation={navigation}
+                    />
+                )}
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={['#2196F3']}
+                        tintColor="#2196F3"
+                    />
+                }
+                ListFooterComponent={() => (
+                    <View>
+                        {loadingMore && hasMorePosts ? (
+                            <View style={styles.footerLoader}>
+                                <ActivityIndicator size="small" color="#2196F3" />
+                            </View>
+                        ) : !hasMorePosts && posts.length > 0 ? (
+                            <View style={styles.endOfListContainer}>
+                                <Text style={styles.endOfListText}>
+                                    Tüm gönderileri gördünüz
+                                </Text>
+                            </View>
+                        ) : null}
+                        <View style={styles.bottomSpacer} />
+                    </View>
+                )}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                windowSize={10}
+                initialNumToRender={3}
+                updateCellsBatchingPeriod={50}
+                contentContainerStyle={styles.flatListContent}
+                ListHeaderComponent={() => (
+                    <>
+                        <Stories friends={friends} navigation={navigation} />
+                        <View style={styles.separator} />
+                        {loading && refreshing ? (
+                            <View style={styles.headerLoader}>
+                                <ActivityIndicator size="small" color="#25D220" />
+                            </View>
+                        ) : null}
+                    </>
+                )}
+            />
+        );
+    };
+
+    // Bildirimler listesini render eden fonksiyon
+    const renderNotifications = () => {
+        // Bildirimler yüklenirken ve yenileme yapılmıyorsa yükleme göstergesini göster
+        if (notificationsLoading && !refreshing && !notifications.length) {
+            return (
+                <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color="#25D220" />
+                </View>
+            );
+        }
+
+        // Bildirim yoksa boş ekran göster
         if (!notifications || notifications.length === 0) {
             return (
                 <View style={styles.emptyContainer}>
@@ -354,9 +426,12 @@ const ActivitiesScreen = ({ navigation, route }) => {
             );
         }
 
+        // Bildirimleri memoize edelim
+        const memoizedNotifications = useMemo(() => notifications, [notifications]);
+
         return (
             <FlatList
-                data={notifications}
+                data={memoizedNotifications}
                 keyExtractor={item => item.id}
                 renderItem={({ item }) => (
                     <NotificationItem
@@ -380,8 +455,16 @@ const ActivitiesScreen = ({ navigation, route }) => {
                 removeClippedSubviews={true}
                 maxToRenderPerBatch={10}
                 initialNumToRender={7}
+                windowSize={10}
                 contentContainerStyle={styles.flatListContent}
                 ListFooterComponent={() => <View style={styles.bottomSpacer} />}
+                ListHeaderComponent={() => (
+                    notificationsLoading && refreshing ? (
+                        <View style={styles.headerLoader}>
+                            <ActivityIndicator size="small" color="#25D220" />
+                        </View>
+                    ) : null
+                )}
             />
         );
     };
@@ -443,62 +526,71 @@ const ActivitiesScreen = ({ navigation, route }) => {
         }
     };
 
-    const renderHeader = () => (
-        <View style={styles.header}>
-            <View style={styles.headerTabs}>
-                <TouchableOpacity
-                    onPress={() => setActiveTab('activities')}
-                    style={styles.headerTab}
-                >
-                    <Text style={[
-                        styles.headerTabText,
-                        activeTab === 'activities' && styles.activeHeaderTabText
-                    ]}>
-                        Keşfet
-                    </Text>
-                </TouchableOpacity>
-                <Text style={styles.headerTabDivider}>|</Text>
-                <TouchableOpacity
-                    onPress={() => setActiveTab('notifications')}
-                    style={styles.headerTab}
-                >
-                    <Text style={[
-                        styles.headerTabText,
-                        activeTab === 'notifications' && styles.activeHeaderTabText
-                    ]}>
-                        Bildirimler
-                    </Text>
-                </TouchableOpacity>
-            </View>
-            <View style={styles.headerRight}>
-                <TouchableOpacity
-                    onPress={() => navigation.navigate('CreatePost')}
-                    style={styles.headerIcon}
-                >
-                    <Ionicons name="add-circle-outline" size={24} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                    onPress={() => navigation.navigate('LikedPosts')}
-                    style={styles.headerIcon}
-                >
-                    <Ionicons name="heart-outline" size={24} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                    onPress={() => navigation.navigate('DirectMessages')}
-                    style={styles.messageIconContainer}
-                >
-                    <Ionicons name="chatbubble-outline" size={24} color="#000" />
-                    {unreadCount > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadCount}>
-                                {unreadCount > 99 ? '99+' : unreadCount}
-                            </Text>
+    // Header'ı memoize edelim
+    const renderHeader = useMemo(() => {
+        return (
+            <PanGestureHandler onGestureEvent={onGestureEvent}>
+                <Animated.View>
+                    <View style={styles.header}>
+                        <View style={styles.headerTabs}>
+                            <TouchableOpacity
+                                onPress={() => setActiveTab('activities')}
+                                style={styles.headerTab}
+                            >
+                                <Text style={[
+                                    styles.headerTabText,
+                                    activeTab !== 'activities' && styles.inactiveTabText
+                                ]}>
+                                    Keşfet
+                                </Text>
+                            </TouchableOpacity>
+                            <Text style={styles.headerTabDivider}>|</Text>
+                            <TouchableOpacity
+                                onPress={() => setActiveTab('notifications')}
+                                style={styles.headerTab}
+                            >
+                                <Text style={[
+                                    styles.headerTabText,
+                                    activeTab !== 'notifications' && styles.inactiveTabText
+                                ]}>
+                                    Bildirimler
+                                </Text>
+                            </TouchableOpacity>
                         </View>
-                    )}
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+                        <View style={styles.headerActions}>
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('CreatePost')}
+                                style={styles.headerAction}
+                            >
+                                <Ionicons name="add-circle-outline" size={24} color="#262626" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('LikedPosts')}
+                                style={styles.headerAction}
+                            >
+                                <Ionicons name="heart-outline" size={24} color="#262626" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('DirectMessages')}
+                                style={styles.headerAction}
+                            >
+                                <View style={styles.messageIconContainer}>
+                                    <Ionicons name="chatbubble-outline" size={24} color="#262626" />
+                                    {unreadCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadBadgeText}>
+                                                {unreadCount > 99 ? '99+' : unreadCount}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Animated.View>
+            </PanGestureHandler>
+        );
+    }, [activeTab, unreadCount, navigation, onGestureEvent]);
 
     // Route params'ı dinle
     useEffect(() => {
@@ -511,22 +603,17 @@ const ActivitiesScreen = ({ navigation, route }) => {
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <PanGestureHandler
-                onHandlerStateChange={onGestureEvent}
-                activeOffsetX={[-20, 20]}
+            <SafeAreaViewRN
+                style={styles.container}
+                edges={['top']}
             >
-                <SafeAreaViewRN
-                    style={styles.container}
-                    edges={['top']}
-                >
-                    <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+                <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-                    {renderHeader()}
+                {renderHeader}
 
-                    {/* ScrollView yerine içerik tabına göre değişen listeler */}
-                    {activeTab === 'activities' ? renderActivities() : renderNotifications()}
-                </SafeAreaViewRN>
-            </PanGestureHandler>
+                {/* ScrollView yerine içerik tabına göre değişen listeler */}
+                {activeTab === 'activities' ? renderActivities() : renderNotifications()}
+            </SafeAreaViewRN>
         </GestureHandlerRootView>
     );
 };
@@ -556,10 +643,109 @@ const styles = StyleSheet.create({
     headerTabText: {
         fontSize: 24,
         fontWeight: '600',
+        color: '#262626',
+    },
+    inactiveTabText: {
         color: '#8E8E8E',
     },
-    activeHeaderTabText: {
-        color: '#262626',
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    headerAction: {
+        marginLeft: 20,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#DBDBDB',
+        marginVertical: 10,
+    },
+    centerContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 50,
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 100,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: '#8E8E8E',
+        textAlign: 'center',
+    },
+    footerLoader: {
+        paddingVertical: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    bottomSpacer: {
+        height: 80,
+    },
+    headerLoader: {
+        paddingVertical: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    flatListContent: {
+        paddingBottom: 20,
+    },
+    skeletonContainer: {
+        padding: 16,
+        backgroundColor: '#fff',
+        marginBottom: 8,
+    },
+    skeletonHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    skeletonAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f0f0f0',
+        marginRight: 12,
+    },
+    skeletonName: {
+        width: 120,
+        height: 16,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 4,
+    },
+    skeletonImage: {
+        width: '100%',
+        height: 300,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 8,
+        marginBottom: 12,
+    },
+    skeletonActions: {
+        flexDirection: 'row',
+        marginBottom: 8,
+    },
+    skeletonAction: {
+        width: 24,
+        height: 24,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 12,
+        marginRight: 16,
+    },
+    skeletonText: {
+        width: '80%',
+        height: 16,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 4,
+        marginBottom: 8,
+    },
+    skeletonTextShort: {
+        width: '40%',
+        height: 16,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 4,
     },
     headerTabDivider: {
         fontSize: 24,
@@ -573,36 +759,6 @@ const styles = StyleSheet.create({
     },
     headerIcon: {
         marginRight: 16,
-    },
-    content: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingBottom: 80,
-    },
-    separator: {
-        height: 0.5,
-        backgroundColor: '#DBDBDB',
-        marginBottom: 0,
-        marginTop: 0,
-    },
-    activityPlaceholder: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 40,
-        paddingHorizontal: 20,
-    },
-    placeholderText: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#262626',
-        marginBottom: 8,
-    },
-    placeholderSubText: {
-        fontSize: 14,
-        color: '#8E8E8E',
-        textAlign: 'center',
     },
     messageIconContainer: {
         position: 'relative',
@@ -624,123 +780,35 @@ const styles = StyleSheet.create({
         borderColor: '#fff',
         zIndex: 1,
     },
-    unreadCount: {
+    unreadBadgeText: {
         color: '#fff',
         fontSize: 10,
         fontWeight: '700',
         textAlign: 'center',
     },
-    centerContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 20,
+    activeHeaderTabText: {
+        color: '#262626',
     },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+    refreshButton: {
+        padding: 16,
+        backgroundColor: '#2196F3',
+        borderRadius: 8,
+        marginTop: 16,
     },
-    emptyText: {
+    refreshButtonText: {
+        color: '#fff',
         fontSize: 16,
-        color: '#666',
+        fontWeight: '700',
         textAlign: 'center',
     },
-    activityCard: {
+    endOfListContainer: {
+        padding: 16,
         backgroundColor: '#fff',
-        borderRadius: 15,
-        marginHorizontal: 12,
-        marginVertical: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-        overflow: 'hidden',
+        marginBottom: 8,
     },
-    activityHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-    },
-    userInfoContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatarImage: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderColor: '#E91E63',
-    },
-    userTextContainer: {
-        marginLeft: 10,
-    },
-    username: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#333',
-    },
-    timestamp: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 2,
-    },
-    moreButton: {
-        padding: 5,
-    },
-    contentContainer: {
-        position: 'relative',
-    },
-    activityImage: {
-        width: '100%',
-        height: 300,
-        borderRadius: 8,
-    },
-    contentOverlay: {
-        backgroundColor: 'rgba(0,0,0,0.03)',
-        padding: 12,
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
-    },
-    contentText: {
-        fontSize: 14,
-        color: '#333',
-        lineHeight: 20,
-    },
-    activityFooter: {
-        padding: 12,
-    },
-    interactionContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-    },
-    interactionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 8,
-    },
-    interactionCount: {
-        marginLeft: 5,
-        fontSize: 14,
-        color: '#666',
-        fontWeight: '500',
-    },
-    footerLoader: {
-        paddingVertical: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    flatListContent: {
-        paddingBottom: 20,
-    },
-    bottomSpacer: {
-        height: 80,
+    endOfListText: {
+        color: '#8E8E8E',
+        textAlign: 'center',
     },
 });
 

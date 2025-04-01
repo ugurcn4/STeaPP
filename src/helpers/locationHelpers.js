@@ -93,7 +93,7 @@ export const shareLocation = async (userId, friendId, location) => {
 };
 
 // Aktif paylaşım kontrolü
-const checkActiveShare = async (userId, friendId, type) => {
+export const checkActiveShare = async (userId, friendId, type) => {
     try {
         const sharesRef = collection(db, `users/${userId}/shares`);
         const q = query(

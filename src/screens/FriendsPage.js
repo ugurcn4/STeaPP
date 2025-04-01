@@ -6,8 +6,6 @@ import {
     TextInput,
     TouchableOpacity,
     FlatList,
-    Image,
-    Dimensions,
     Alert,
     ScrollView,
     RefreshControl,
@@ -33,14 +31,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import {
     shareLocation,
     getCurrentLocation,
-    shareLiveLocation,
     getShares,
-    stopShare,
     shareInstantLocation,
-    startLiveLocation,
-    stopSharing,
     listenToActiveShares,
     getReceivedShares,
+    checkActiveShare
 } from '../helpers/locationHelpers';
 import Toast from 'react-native-toast-message';
 import FriendProfileModal from '../modals/friendProfileModal';
@@ -50,6 +45,8 @@ import FastImage from 'react-native-fast-image';
 import { ref, set, remove } from 'firebase/database';
 import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
 import * as Location from 'expo-location';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 // Stil dosyasını içe aktar
 import styles from '../styles/FriendsPageStyles';
 
@@ -189,6 +186,16 @@ const FriendsPage = ({ navigation }) => {
                             const friendSnapshot = await getDoc(friendRef);
                             if (friendSnapshot.exists()) {
                                 const friendData = friendSnapshot.data();
+
+                                // Doğrulama durumunu kontrol et
+                                let verificationStatus = { hasBlueTick: false, hasGreenTick: false };
+                                try {
+                                    verificationStatus = await checkUserVerification(friendId);
+                                } catch (error) {
+                                    console.error('Kullanıcı doğrulama durumu kontrolünde hata:', error);
+                                    // Hata durumunda varsayılan değerleri kullan
+                                }
+
                                 return {
                                     id: friendId,
                                     name: friendData.informations?.name || 'İsimsiz',
@@ -204,7 +211,8 @@ const FriendsPage = ({ navigation }) => {
                                         location: friendData.informations?.location,
                                         interests: friendData.informations?.interests || [],
                                         settings: friendData.informations?.settings
-                                    }
+                                    },
+                                    verification: verificationStatus
                                 };
                             }
                             return null;
@@ -304,6 +312,10 @@ const FriendsPage = ({ navigation }) => {
                             return null;
                         }
 
+                        // Doğrulama durumunu kontrol et
+                        const verificationStatus = await checkUserVerification(user.id);
+                        user.verification = verificationStatus;
+
                         return user;
                     } catch (error) {
                         console.error('Kullanıcı gizlilik ayarları kontrol hatası:', error);
@@ -395,9 +407,20 @@ const FriendsPage = ({ navigation }) => {
                     resizeMode={FastImage.resizeMode.cover}
                 />
                 <View style={styles.searchResultInfo}>
-                    <Text style={styles.searchResultName}>
-                        {user.informations?.name || 'İsimsiz Kullanıcı'}
-                    </Text>
+                    <View style={styles.searchResultNameContainer}>
+                        <Text style={styles.searchResultName}>
+                            {user.informations?.name || 'İsimsiz Kullanıcı'}
+                        </Text>
+                        {user.verification && (
+                            <VerificationBadge
+                                hasBlueTick={user.verification.hasBlueTick}
+                                hasGreenTick={user.verification.hasGreenTick}
+                                size={16}
+                                style={styles.searchVerificationBadge}
+                                showTooltip={false}
+                            />
+                        )}
+                    </View>
                     {user.informations?.username && (
                         <Text style={styles.searchResultEmail}>
                             @{user.informations.username}
@@ -516,6 +539,38 @@ const FriendsPage = ({ navigation }) => {
             // Mevcut konumu al
             const currentLocation = await getCurrentLocation();
 
+            // Aktif paylaşımları kontrol et
+            const activeSharePromises = friendIds.map(async (friendId) => {
+                const hasActiveShare = await checkActiveShare(currentUserId, friendId, 'instant');
+                return { friendId, hasActiveShare };
+            });
+
+            const activeShareResults = await Promise.all(activeSharePromises);
+            const friendsWithActiveShares = activeShareResults.filter(result => result.hasActiveShare);
+
+            if (friendsWithActiveShares.length > 0) {
+                // Aktif paylaşımı olan arkadaşları listeden çıkar
+                const friendsToShare = friendIds.filter(friendId =>
+                    !friendsWithActiveShares.some(result => result.friendId === friendId)
+                );
+
+                if (friendsToShare.length === 0) {
+                    showToast('error', 'Hata', 'Seçilen tüm arkadaşlarla zaten aktif anlık konum paylaşımınız bulunmakta');
+                    return;
+                }
+
+                // Aktif paylaşımı olan arkadaşlar için uyarı göster
+                if (friendsWithActiveShares.length === 1) {
+                    const friendName = friends.find(f => f.id === friendsWithActiveShares[0].friendId)?.name || 'Bir arkadaşınız';
+                    showToast('info', 'Bilgi', `${friendName} ile zaten aktif bir anlık konum paylaşımınız var`);
+                } else {
+                    showToast('info', 'Bilgi', `${friendsWithActiveShares.length} arkadaşınızla zaten aktif anlık konum paylaşımınız var`);
+                }
+
+                // Sadece aktif paylaşımı olmayan arkadaşlarla devam et
+                friendIds = friendsToShare;
+            }
+
             // Konum bilgilerini al ve Promise'in çözümlenmesini bekle
             const locationInfo = await getLocationInfo(
                 currentLocation.latitude,
@@ -630,6 +685,38 @@ const FriendsPage = ({ navigation }) => {
 
             // Mevcut konumu al
             const currentLocation = await getCurrentLocation();
+
+            // Aktif paylaşımları kontrol et
+            const activeSharePromises = friendIds.map(async (friendId) => {
+                const hasActiveShare = await checkActiveShare(currentUserId, friendId, 'live');
+                return { friendId, hasActiveShare };
+            });
+
+            const activeShareResults = await Promise.all(activeSharePromises);
+            const friendsWithActiveShares = activeShareResults.filter(result => result.hasActiveShare);
+
+            if (friendsWithActiveShares.length > 0) {
+                // Aktif paylaşımı olan arkadaşları listeden çıkar
+                const friendsToShare = friendIds.filter(friendId =>
+                    !friendsWithActiveShares.some(result => result.friendId === friendId)
+                );
+
+                if (friendsToShare.length === 0) {
+                    showToast('error', 'Hata', 'Seçilen tüm arkadaşlarla zaten aktif canlı konum paylaşımınız bulunmakta');
+                    return;
+                }
+
+                // Aktif paylaşımı olan arkadaşlar için uyarı göster
+                if (friendsWithActiveShares.length === 1) {
+                    const friendName = friends.find(f => f.id === friendsWithActiveShares[0].friendId)?.name || 'Bir arkadaşınız';
+                    showToast('info', 'Bilgi', `${friendName} ile zaten aktif bir canlı konum paylaşımınız var`);
+                } else {
+                    showToast('info', 'Bilgi', `${friendsWithActiveShares.length} arkadaşınızla zaten aktif canlı konum paylaşımınız var`);
+                }
+
+                // Sadece aktif paylaşımı olmayan arkadaşlarla devam et
+                friendIds = friendsToShare;
+            }
 
             // Konum bilgilerini al ve Promise'in çözümlenmesini bekle
             const locationInfo = await getLocationInfo(
@@ -991,7 +1078,18 @@ const FriendsPage = ({ navigation }) => {
                     resizeMode={FastImage.resizeMode.cover}
                 />
                 <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{friend.name || 'İsimsiz'}</Text>
+                    <View style={styles.friendNameContainer}>
+                        <Text style={styles.friendName}>{friend.name || 'İsimsiz'}</Text>
+                        {friend.verification && (
+                            <VerificationBadge
+                                hasBlueTick={friend.verification.hasBlueTick}
+                                hasGreenTick={friend.verification.hasGreenTick}
+                                size={16}
+                                style={styles.friendVerificationBadge}
+                                showTooltip={false}
+                            />
+                        )}
+                    </View>
                     {shares.some(share => share.friendId === friend.id) && (
                         <View style={styles.activeShareContainer}>
                             <MaterialIcons
@@ -1053,7 +1151,24 @@ const FriendsPage = ({ navigation }) => {
             {loading ? (
                 <ActivityIndicator size="large" color="#2196F3" style={styles.loader} />
             ) : (
-                <ScrollView>
+                <ScrollView
+                    contentContainerStyle={styles.searchResultsContainer}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={() => {
+                                if (searchQuery.trim() !== '') {
+                                    setRefreshing(true);
+                                    handleSearchChange(searchQuery);
+                                }
+                            }}
+                            colors={['#2196F3']} // Android için
+                            tintColor="#2196F3" // iOS için
+                            title="Yenileniyor..." // iOS için
+                        />
+                    }
+                >
                     {searchResults.map((user) => renderSearchResultCard(user))}
                 </ScrollView>
             )}
@@ -1575,6 +1690,131 @@ const FriendsPage = ({ navigation }) => {
         );
     };
 
+    // Eksik olan renderReceivedShareCard fonksiyonunu ekleyelim
+    const renderReceivedShareCard = (share) => {
+        // Konum bilgilerini kontrol et
+        const hasLocationInfo = share.locationInfo &&
+            (share.locationInfo.city || share.locationInfo.district);
+
+        // Konum koordinatlarını kontrol et
+        const hasValidLocation = share.location &&
+            typeof share.location.latitude === 'number' &&
+            typeof share.location.longitude === 'number';
+
+        return (
+            <TouchableOpacity
+                style={styles.shareCardNew}
+                onPress={() => viewLocationDetail(share)}
+            >
+                <LinearGradient
+                    colors={share.type === 'live' ? ['#E3F2FD', '#BBDEFB'] : ['#E8F5E9', '#C8E6C9']}
+                    style={styles.shareCardGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.shareHeaderNew}>
+                        <View style={styles.shareUserInfo}>
+                            <FastImage
+                                source={
+                                    share.senderPhoto
+                                        ? {
+                                            uri: share.senderPhoto,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.immutable
+                                        }
+                                        : {
+                                            uri: `https://ui-avatars.com/api/?name=${share.senderName || 'Unknown'}&background=random`,
+                                            priority: FastImage.priority.normal,
+                                            cache: FastImage.cacheControl.web
+                                        }
+                                }
+                                style={styles.friendAvatarNew}
+                                resizeMode={FastImage.resizeMode.cover}
+                            />
+                            <View style={styles.shareInfoNew}>
+                                <Text style={styles.friendNameNew}>{share.senderName || 'İsimsiz'}</Text>
+                                {share.senderUsername && (
+                                    <Text style={styles.usernameNew}>@{share.senderUsername}</Text>
+                                )}
+                            </View>
+                        </View>
+
+                        <View style={styles.shareTypeContainerNew}>
+                            <MaterialIcons
+                                name={share.type === 'live' ? 'location-on' : 'my-location'}
+                                size={18}
+                                color={share.type === 'live' ? '#2196F3' : '#4CAF50'}
+                            />
+                            <Text style={[
+                                styles.shareTypeTextNew,
+                                { color: share.type === 'live' ? '#2196F3' : '#4CAF50' }
+                            ]}>
+                                {share.type === 'live' ? 'Canlı Konum' : 'Anlık Konum'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.shareDetailsNew}>
+                        {hasLocationInfo &&
+                            share.locationInfo.city && share.locationInfo.city !== 'Bilinmiyor' &&
+                            share.locationInfo.district && share.locationInfo.district !== 'Bilinmiyor' ? (
+                            <View style={styles.locationInfoNew}>
+                                <View style={styles.locationIconContainer}>
+                                    <MaterialIcons name="place" size={20} color="#555" />
+                                </View>
+                                <Text style={styles.locationTextNew}>
+                                    {share.locationInfo.district}, {share.locationInfo.city}
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.locationInfoNew}>
+                                <View style={styles.locationIconContainer}>
+                                    <MaterialIcons name="place" size={20} color="#555" />
+                                </View>
+                                <Text style={styles.locationTextNew}>
+                                    Konum bilgisi yükleniyor...
+                                </Text>
+                            </View>
+                        )}
+
+                        <View style={styles.timeInfoNew}>
+                            <View style={styles.timeRowNew}>
+                                <View style={styles.timeIconContainer}>
+                                    <MaterialIcons name="access-time" size={18} color="#666" />
+                                </View>
+                                <Text style={styles.timeTextNew}>
+                                    Başlangıç: {getTimeAgo(share.startTime)}
+                                </Text>
+                            </View>
+                            {share.type === 'live' && share.lastUpdate && (
+                                <View style={styles.timeRowNew}>
+                                    <View style={styles.timeIconContainer}>
+                                        <MaterialIcons name="update" size={18} color="#666" />
+                                    </View>
+                                    <Text style={styles.timeTextNew}>
+                                        Son güncelleme: {getTimeAgo(share.lastUpdate)}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+
+                    <View style={styles.viewLocationButtonContainer}>
+                        <LinearGradient
+                            colors={['#2196F3', '#1976D2']}
+                            style={styles.viewLocationButton}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        >
+                            <MaterialIcons name="map" size={16} color="#FFF" />
+                            <Text style={styles.viewLocationButtonText}>Konumu Görüntüle</Text>
+                        </LinearGradient>
+                    </View>
+                </LinearGradient>
+            </TouchableOpacity>
+        );
+    };
+
     // Arkadaş seçimi için yardımcı fonksiyon - birden fazla arkadaş seçimine izin ver
     const handleFriendSelect = (friendId) => {
         setSelectedFriends(prev => {
@@ -1710,62 +1950,6 @@ const FriendsPage = ({ navigation }) => {
                         <Text style={styles.emptyRequestsText}>Bekleyen istek bulunmuyor</Text>
                     </View>
                 )}
-
-                {/* Arkadaş Ekleme Seçenekleri */}
-                <View style={styles.addFriendsSection}>
-                    <Text style={styles.sectionTitle}>Arkadaş Ekle</Text>
-
-                    {/* QR Kod ile Ekle */}
-                    <TouchableOpacity
-                        style={styles.addOptionCard}
-                        onPress={() => navigation.navigate('QRCode')}
-                    >
-                        <View style={styles.addOptionIcon}>
-                            <Ionicons name="qr-code" size={24} color="#4CAF50" />
-                        </View>
-                        <View style={styles.addOptionInfo}>
-                            <Text style={styles.addOptionTitle}>QR Kod ile Ekle</Text>
-                            <Text style={styles.addOptionDescription}>
-                                QR kodunu tarayarak hızlıca arkadaş ekle
-                            </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={24} color="#666" />
-                    </TouchableOpacity>
-
-                    {/* Kişilerden Bul */}
-                    <TouchableOpacity
-                        style={styles.addOptionCard}
-                        onPress={() => navigation.navigate('Contacts')}
-                    >
-                        <View style={styles.addOptionIcon}>
-                            <Ionicons name="people" size={24} color="#2196F3" />
-                        </View>
-                        <View style={styles.addOptionInfo}>
-                            <Text style={styles.addOptionTitle}>Kişilerden Bul</Text>
-                            <Text style={styles.addOptionDescription}>
-                                Rehberindeki arkadaşlarını bul
-                            </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={24} color="#666" />
-                    </TouchableOpacity>
-
-                    {/* Yakındakileri Bul */}
-                    <TouchableOpacity
-                        style={styles.addOptionCard}
-                        onPress={() => navigation.navigate('NearbyFriends')}
-                    >
-                        <View style={styles.addOptionIcon}>
-                            <Ionicons name="location" size={24} color="#FF9800" />
-                        </View>
-                        <View style={styles.addOptionInfo}>
-                            <Text style={styles.addOptionTitle}>Yakındakileri Bul</Text>
-                            <Text style={styles.addOptionDescription}>
-                                Yakınındaki kullanıcıları keşfet
-                            </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={24} color="#666" />
-                    </TouchableOpacity>
-                </View>
             </ScrollView>
         );
     };
@@ -1817,14 +2001,20 @@ const FriendsPage = ({ navigation }) => {
                     ListHeaderComponent={
                         <>
                             {renderLocationSharingOptions()}
-                            {shares.length > 0 && renderActiveShares()}
-                            <Text style={styles.tipText}>
-                                İpucu: Arkadaşı çıkarmak için kartın üzerine uzun basın
-                            </Text>
+                            <View style={styles.divider} /> {/* Ayırıcı çizgi ekleyin */}
                         </>
                     }
                     contentContainerStyle={styles.friendsListContainer}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={['#2196F3']} // Android için
+                            tintColor="#2196F3" // iOS için
+                            title="Yenileniyor..." // iOS için
+                        />
+                    }
                 />
             </View>
         );

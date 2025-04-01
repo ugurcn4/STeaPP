@@ -23,75 +23,6 @@ const NotificationsPage = ({ navigation }) => {
         loadNotificationSettings();
     }, []);
 
-    const sendTestNotification = async () => {
-        try {
-            // Önce izinleri detaylı kontrol et
-            const permissionStatus = await Notifications.getPermissionsAsync();
-
-            if (permissionStatus.status !== 'granted') {
-                // İzin yoksa, izin iste
-                const { status } = await Notifications.requestPermissionsAsync();
-                if (status !== 'granted') {
-                    Alert.alert(
-                        "İzin Gerekli",
-                        "Bildirim göndermek için izin gerekiyor. Lütfen ayarlardan bildirimlere izin verin.",
-                        [
-                            {
-                                text: "Ayarlara Git",
-                                onPress: () => Linking.openSettings()
-                            },
-                            {
-                                text: "İptal",
-                                style: "cancel"
-                            }
-                        ]
-                    );
-                    return;
-                }
-            }
-
-            if (settings.allNotifications) {
-                // Test bildirimi oluştur
-                const notification = {
-                    content: {
-                        title: "Test Bildirimi",
-                        body: "Bu bir test bildirimidir! 🔔",
-                        data: { type: 'test' },
-                        sound: 'default',
-                        priority: 'max',
-                        vibrate: [0, 250, 250, 250],
-                        badge: 1,
-                    },
-                    trigger: null // Hemen gönder
-                };
-
-                // Bildirimi gönder
-                const notificationId = await Notifications.scheduleNotificationAsync(notification);
-
-                // Başarılı mesajı
-                Alert.alert(
-                    "Bildirim Gönderildi",
-                    `Bildirim ID: ${notificationId}\nLütfen bildirim gelip gelmediğini kontrol edin.`,
-                    [{ text: "Tamam", style: "default" }]
-                );
-
-            } else {
-                Alert.alert(
-                    "Bildirimler Kapalı",
-                    "Bildirimleri test etmek için önce 'Tüm Bildirimler' ayarını açın.",
-                    [{ text: "Tamam", style: "default" }]
-                );
-            }
-        } catch (error) {
-            console.error('Test bildirimi gönderme hatası:', error);
-            Alert.alert(
-                "Hata",
-                `Bildirim gönderilirken bir hata oluştu:\n${error.message}`,
-                [{ text: "Tamam", style: "default" }]
-            );
-        }
-    };
-
     if (loading) {
         return (
             <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
@@ -179,32 +110,23 @@ const NotificationsPage = ({ navigation }) => {
                 </View>
             </View>
 
-            <TouchableOpacity
-                style={[
-                    styles.testButton,
-                    { opacity: settings.allNotifications ? 1 : 0.5 }
-                ]}
-                onPress={sendTestNotification}
-            >
-                <Ionicons
-                    name="notifications"
-                    size={24}
-                    color="#FFFFFF"
-                />
-                <Text style={styles.testButtonText}>
-                    Test Bildirimi Gönder
-                </Text>
-            </TouchableOpacity>
-
             {error && (
                 <Text style={styles.errorText}>
                     {error}
                 </Text>
             )}
 
-            <Text style={[styles.warningText, { color: currentTheme.text }]}>
-                Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
-            </Text>
+            <View style={styles.infoContainer}>
+                <Ionicons
+                    name="notifications-outline"
+                    size={48}
+                    color={currentTheme.text}
+                    style={styles.infoIcon}
+                />
+                <Text style={[styles.warningText, { color: currentTheme.text }]}>
+                    Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
+                </Text>
+            </View>
         </View>
     );
 };
@@ -252,27 +174,19 @@ const styles = StyleSheet.create({
         marginTop: 20,
         textAlign: 'center',
     },
-    testButton: {
-        flexDirection: 'row',
+    infoContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4CAF50',
-        padding: 15,
-        borderRadius: 10,
-        marginHorizontal: 20,
-        marginTop: 20,
+        marginTop: 30,
+        paddingHorizontal: 20,
     },
-    testButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-        marginLeft: 10,
+    infoIcon: {
+        marginBottom: 15,
+        opacity: 0.8,
     },
     warningText: {
         fontSize: 14,
         textAlign: 'center',
-        marginTop: 20,
-        paddingHorizontal: 20,
         opacity: 0.8
     },
 });

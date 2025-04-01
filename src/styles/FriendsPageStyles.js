@@ -86,10 +86,11 @@ const FriendsPageStyles = StyleSheet.create({
     },
     friendsListContainer: {
         padding: 16,
-        paddingBottom: 100, // Alt kısımda ekstra boşluk
+        paddingTop: 8,
+        paddingBottom: 100,
     },
     listContainer: {
-        flexGrow: 1, // İçeriğin tam görünmesi için
+        flexGrow: 1,
     },
     friendCard: {
         backgroundColor: '#FFFFFF',
@@ -124,6 +125,14 @@ const FriendsPageStyles = StyleSheet.create({
     friendInfo: {
         marginLeft: 16,
         flex: 1,
+        justifyContent: 'center',
+    },
+    friendNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    friendVerificationBadge: {
+        marginLeft: 6,
     },
     friendName: {
         fontSize: 18,
@@ -224,7 +233,15 @@ const FriendsPageStyles = StyleSheet.create({
     },
     searchResultInfo: {
         flex: 1,
-        marginLeft: 16,
+        justifyContent: 'center',
+        marginLeft: 12,
+    },
+    searchResultNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    searchVerificationBadge: {
+        marginLeft: 6,
     },
     searchResultName: {
         fontSize: 16,
@@ -316,6 +333,7 @@ const FriendsPageStyles = StyleSheet.create({
         backgroundColor: '#FFF',
         marginHorizontal: 16,
         marginTop: 16,
+        marginBottom: 24,
         borderRadius: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -470,13 +488,13 @@ const FriendsPageStyles = StyleSheet.create({
     },
     sharesContentContainer: {
         padding: 16,
-        paddingBottom: 100, // Alt kısımda ekstra boşluk
+        paddingBottom: 100,
     },
     sharesSection: {
         marginBottom: 24,
     },
     quickShareSection: {
-        marginBottom: 24, // Alt kısımda ek boşluk
+        marginBottom: 24,
     },
     emptyContainer: {
         flex: 1,
@@ -565,6 +583,7 @@ const FriendsPageStyles = StyleSheet.create({
     },
     friendSelectContainer: {
         marginVertical: 16,
+        marginBottom: 24,
     },
     subsectionTitle: {
         fontSize: 16,
@@ -594,7 +613,7 @@ const FriendsPageStyles = StyleSheet.create({
         textAlign: 'center',
     },
     shareOptionsContainer: {
-        marginTop: 16,
+        marginTop: 24,
     },
     shareOption: {
         flexDirection: 'row',
@@ -726,7 +745,7 @@ const FriendsPageStyles = StyleSheet.create({
     welcomeText: {
         fontSize: 24,
         fontWeight: '600',
-        color: '#666666', // Daha soluk bir gri renk
+        color: '#666666',
         marginBottom: 20,
         textAlign: 'center',
     },
@@ -775,7 +794,6 @@ const FriendsPageStyles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 4,
     },
-    // Yeni paylaşım kartı stilleri
     shareCardNew: {
         borderRadius: 16,
         marginBottom: 16,
@@ -891,6 +909,34 @@ const FriendsPageStyles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
         marginLeft: 6,
+    },
+    viewLocationButtonContainer: {
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    viewLocationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+    },
+    viewLocationButtonText: {
+        color: '#FFF',
+        fontWeight: '600',
+        marginLeft: 6,
+        fontSize: 14,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#E0E0E0',
+        marginHorizontal: 16,
+        marginVertical: 16,
+    },
+    searchResultsContainer: {
+        paddingVertical: 10,
+        flexGrow: 1
     },
 });
 

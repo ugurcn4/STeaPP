@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, TextInput, Platform, FlatList, ActivityIndicator, SafeAreaView } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow } from 'date-fns';
@@ -12,12 +12,16 @@ import Toast from 'react-native-toast-message';
 import FriendProfileModal from '../modals/friendProfileModal';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import ZoomableImage from './ZoomableImage';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 const { width } = Dimensions.get('window');
 
 const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserId, onUpdate, onDelete, navigation }) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [isCommentsModalVisible, setIsCommentsModalVisible] = useState(false);
+    const [isLikedByModalVisible, setIsLikedByModalVisible] = useState(false);
     const maxLength = 100; // Maksimum karakter sayısı
     const [localLiked, setLocalLiked] = useState(isLiked);
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
@@ -36,6 +40,10 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
     const [isSaving, setIsSaving] = useState(false);
     const [selectedFriend, setSelectedFriend] = useState(null);
     const [friendModalVisible, setFriendModalVisible] = useState(false);
+    const [likedByUsers, setLikedByUsers] = useState([]);
+    const [loadingLikedBy, setLoadingLikedBy] = useState(false);
+    const [isImageZoomed, setIsImageZoomed] = useState(false);
+    const [userVerification, setUserVerification] = useState({ hasBlueTick: false, hasGreenTick: false });
 
     useEffect(() => {
         setLocalLiked(isLiked);
@@ -57,6 +65,22 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             loadArchiveGroups();
         }
     }, [showArchiveModal]);
+
+    useEffect(() => {
+        if (activity.userId) {
+            const fetchUserVerification = async () => {
+                try {
+                    const verificationStatus = await checkUserVerification(activity.userId);
+                    setUserVerification(verificationStatus);
+                } catch (error) {
+                    console.error('Kullanıcı doğrulama durumu kontrolünde hata:', error);
+                    setUserVerification({ hasBlueTick: false, hasGreenTick: false });
+                }
+            };
+
+            fetchUserVerification();
+        }
+    }, [activity.userId]);
 
     const handleLikePress = useCallback(() => {
         setLocalLiked(!localLiked);
@@ -190,25 +214,39 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
         if (activity.description.length <= maxLength || isDescriptionExpanded) {
             return (
-                <Text style={styles.description}>
-                    <Text style={styles.username}>{activity.user.name}</Text>
-                    {" "}{activity.description}
-                </Text>
+                <View style={styles.descriptionContainer}>
+                    <View style={styles.userNameVerificationRow}>
+                        <Text style={styles.username}>{activity.user.name}</Text>
+                        <VerificationBadge
+                            hasBlueTick={userVerification.hasBlueTick}
+                            hasGreenTick={userVerification.hasGreenTick}
+                            size={14}
+                            style={styles.verificationBadgeInline}
+                        />
+                        <Text style={styles.descriptionText}>{activity.description}</Text>
+                    </View>
+                </View>
             );
         }
 
         return (
-            <View>
-                <Text style={styles.description}>
+            <View style={styles.descriptionContainer}>
+                <View style={styles.userNameVerificationRow}>
                     <Text style={styles.username}>{activity.user.name}</Text>
-                    {" "}{activity.description.slice(0, maxLength)}...{" "}
-                    <Text
-                        style={styles.seeMore}
-                        onPress={() => setIsDescriptionExpanded(true)}
-                    >
-                        devamını gör
+                    <VerificationBadge
+                        hasBlueTick={userVerification.hasBlueTick}
+                        hasGreenTick={userVerification.hasGreenTick}
+                        size={14}
+                        style={styles.verificationBadgeInline}
+                    />
+                    <Text style={styles.descriptionText}>
+                        {activity.description.slice(0, maxLength)}...
+                        <Text
+                            style={styles.seeMore}
+                            onPress={() => setIsDescriptionExpanded(true)}
+                        > devamını gör</Text>
                     </Text>
-                </Text>
+                </View>
             </View>
         );
     };
@@ -220,15 +258,24 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             <View style={styles.commentsContainer}>
                 {activity.comments.slice(0, 2).map((comment, index) => (
                     <View key={comment.id} style={styles.commentItem}>
-                        <Text style={styles.commentText}>
+                        <View style={styles.userNameVerificationRow}>
                             <Text
                                 style={styles.commentUsername}
                                 onPress={() => handleCommentUserPress(comment.user)}
                             >
                                 {comment.user?.name || 'Kullanıcı'}
                             </Text>
-                            {" "}{comment.text}
-                        </Text>
+                            {/* Sadece yorum gönderen kişi gönderi sahibiyse rozeti göster */}
+                            {comment.userId === activity.userId && (
+                                <VerificationBadge
+                                    hasBlueTick={userVerification.hasBlueTick}
+                                    hasGreenTick={userVerification.hasGreenTick}
+                                    size={12}
+                                    style={styles.verificationBadgeInline}
+                                />
+                            )}
+                            <Text style={styles.commentText}>{comment.text}</Text>
+                        </View>
                     </View>
                 ))}
                 {activity.comments.length > 2 && (
@@ -271,9 +318,12 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             setLastTap(null); // Reset
 
             // Tıklama pozisyonunu kaydet
+            const locationX = event.nativeEvent.locationX || event.nativeEvent.x || 0;
+            const locationY = event.nativeEvent.locationY || event.nativeEvent.y || 0;
+
             setHeartPosition({
-                x: event.nativeEvent.locationX,
-                y: event.nativeEvent.locationY
+                x: locationX,
+                y: locationY
             });
 
             // Kalp animasyonunu göster
@@ -361,16 +411,16 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
         try {
             setIsSaving(true);
-            
+
             // Eğer zaten arşivlenmişse, arşivden kaldır
             if (isArchived) {
                 // Arşivden kaldırma işlemi
                 await toggleArchivePost(activity.id, currentUserId);
-                
+
                 // UI'ı güncelle
                 setIsArchived(false);
                 setSelectedGroups([]);
-                
+
                 // Başarılı kaldırma bildirimi göster
                 Toast.show({
                     type: 'success',
@@ -381,11 +431,11 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             } else {
                 // Yeni kaydetme işlemi
                 const defaultCollection = await quickSavePost(activity.id, currentUserId);
-                
+
                 // UI'ı güncelle
                 setIsArchived(true);
                 setSelectedGroups([defaultCollection.id]);
-                
+
                 // Başarılı kaydetme bildirimi göster
                 Toast.show({
                     type: 'success',
@@ -469,6 +519,99 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
         fetchGroups();
     }, []);
 
+    // Beğenenleri yükle
+    const fetchLikedByUsers = async () => {
+        if (!activity.likedBy || activity.likedBy.length === 0) return;
+
+        try {
+            setLoadingLikedBy(true);
+            const userPromises = activity.likedBy.map(userId =>
+                getDoc(doc(db, 'users', userId))
+            );
+
+            const userDocs = await Promise.all(userPromises);
+            const usersData = userDocs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })).filter(user => user.informations); // Geçerli kullanıcıları filtrele
+
+            // Doğrulama durumlarını al
+            const verificationPromises = usersData.map(async (user) => {
+                try {
+                    const verificationStatus = await checkUserVerification(user.id);
+                    return {
+                        ...user,
+                        verification: verificationStatus
+                    };
+                } catch (error) {
+                    console.error('Kullanıcı doğrulama durumu kontrolünde hata:', error);
+                    return {
+                        ...user,
+                        verification: { hasBlueTick: false, hasGreenTick: false }
+                    };
+                }
+            });
+
+            const usersWithVerification = await Promise.all(verificationPromises);
+            setLikedByUsers(usersWithVerification);
+        } catch (error) {
+            console.error('Beğenen kullanıcılar yüklenirken hata:', error);
+        } finally {
+            setLoadingLikedBy(false);
+        }
+    };
+
+    // Modal açıldığında beğenenleri yükle
+    useEffect(() => {
+        if (isLikedByModalVisible) {
+            fetchLikedByUsers();
+        }
+    }, [isLikedByModalVisible]);
+
+    // Beğenenler listesi için optimize edilmiş render item
+    const renderLikedByItem = useCallback(({ item }) => (
+        <TouchableOpacity
+            style={styles.likedByUserItem}
+            onPress={() => {
+                const completeUserData = {
+                    ...item,
+                    name: item.informations?.name || 'İsimsiz Kullanıcı',
+                    informations: {
+                        ...item.informations,
+                        username: item.informations?.username || item.informations?.name?.toLowerCase().replace(/\s+/g, '_') || 'kullanici'
+                    }
+                };
+                setSelectedFriend(completeUserData);
+                setIsLikedByModalVisible(false);
+                setFriendModalVisible(true);
+            }}
+        >
+            <FastImage
+                source={{
+                    uri: item.profilePicture || 'https://via.placeholder.com/100',
+                    priority: FastImage.priority.normal,
+                }}
+                style={styles.likedByUserAvatar}
+            />
+            <View style={styles.likedByUserInfo}>
+                <View style={styles.likedByUserNameRow}>
+                    <Text style={styles.likedByUserName}>{item.informations?.name || 'İsimsiz Kullanıcı'}</Text>
+                    {item.verification && (
+                        <VerificationBadge
+                            hasBlueTick={item.verification.hasBlueTick}
+                            hasGreenTick={item.verification.hasGreenTick}
+                            size={12}
+                            style={styles.verificationBadgeLiker}
+                        />
+                    )}
+                </View>
+                {item.informations?.username && (
+                    <Text style={styles.likedByUserUsername}>@{item.informations.username}</Text>
+                )}
+            </View>
+        </TouchableOpacity>
+    ), []);
+
     return (
         <View style={styles.activityCard}>
             <View style={styles.activityHeader}>
@@ -482,43 +625,76 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                             style={styles.avatarImage}
                         />
                         <View style={styles.userTextContainer}>
-                            <Text style={styles.username}>{activity.user?.name || 'İsimsiz Kullanıcı'}</Text>
+                            <View style={styles.userNameVerificationRow}>
+                                <Text style={styles.username}>{activity.user?.name || 'İsimsiz Kullanıcı'}</Text>
+
+                                <VerificationBadge
+                                    hasBlueTick={userVerification.hasBlueTick}
+                                    hasGreenTick={userVerification.hasGreenTick}
+                                    size={14}
+                                    style={styles.verificationBadge}
+                                />
+
+                                {/* Konum bilgisini kullanıcı adının yanına taşıyalım */}
+                                {activity.location && (
+                                    <View style={styles.headerLocationContainer}>
+                                        <Ionicons name="location-outline" size={12} color="#2196F3" />
+                                        <Text
+                                            style={styles.headerLocationText}
+                                            numberOfLines={1}
+                                            ellipsizeMode="tail"
+                                        >
+                                            {typeof activity.location === 'object'
+                                                ? (activity.location.name || activity.location.address || 'Konum')
+                                                : activity.location}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
                             <Text style={styles.timestamp}>
                                 {formatDistanceToNow(activity.createdAt, { addSuffix: true, locale: tr })}
                             </Text>
                         </View>
                     </TouchableOpacity>
                 </View>
+
+                <TouchableOpacity
+                    style={styles.optionsButton}
+                    onPress={handleOptionsPress}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <Ionicons name="ellipsis-horizontal" size={20} color="#000" />
+                </TouchableOpacity>
             </View>
 
             <TouchableWithoutFeedback onPress={handleImagePress}>
                 <View style={styles.imageContainer}>
-                    <FastImage
+                    <ZoomableImage
                         source={{ uri: activity.imageUrl }}
                         style={styles.activityImage}
                         resizeMode={FastImage.resizeMode.cover}
-                    />
-                    <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.3)']}
-                        style={styles.imageGradient}
-                    />
-                    {showHeartAnimation && (
-                        <Animated.View
-                            style={[
-                                styles.heartAnimation,
-                                {
-                                    left: heartPosition.x - 50,
-                                    top: heartPosition.y - 50,
-                                    opacity: fadeAnim,
-                                    transform: [
-                                        { scale: scaleAnim }
-                                    ]
-                                }
-                            ]}
-                        >
-                            <Ionicons name="heart" size={100} color="#fff" />
-                        </Animated.View>
-                    )}
+                        onDoubleTap={handleImagePress}
+                        onZoomChange={setIsImageZoomed}
+                    >
+                        {showHeartAnimation && (
+                            <Animated.View
+                                style={[
+                                    styles.heartAnimation,
+                                    {
+                                        left: heartPosition.x - 50,
+                                        top: heartPosition.y - 50,
+                                        opacity: fadeAnim,
+                                        transform: [
+                                            { scale: scaleAnim }
+                                        ]
+                                    }
+                                ]}
+                                pointerEvents="none"
+                            >
+                                <Ionicons name="heart" size={100} color="#fff" />
+                            </Animated.View>
+                        )}
+                    </ZoomableImage>
                 </View>
             </TouchableWithoutFeedback>
 
@@ -541,10 +717,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
                             <TouchableOpacity
                                 style={styles.likeCountButton}
-                                onPress={() => navigation.navigate('LikedBy', {
-                                    postId: activity.id,
-                                    likedBy: activity.likedBy || []
-                                })}
+                                onPress={() => setIsLikedByModalVisible(true)}
                             >
                                 <Text style={[
                                     styles.interactionCount,
@@ -598,10 +771,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 {activity.likedBy && activity.likedBy.length > 0 && (
                     <View style={styles.likeSummaryContainer}>
                         <TouchableOpacity
-                            onPress={() => navigation.navigate('LikedBy', {
-                                postId: activity.id,
-                                likedBy: activity.likedBy || []
-                            })}
+                            onPress={() => setIsLikedByModalVisible(true)}
                         >
                             <Text style={styles.likeSummaryTextLight}>
                                 {(() => {
@@ -640,30 +810,27 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
 
                                     return (
                                         <Text>
-                                            {isCurrentUserFirst ? (
-                                                <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
-                                            ) : (
-                                                <Text
-                                                    style={styles.likeSummaryTextBold}
-                                                    onPress={(e) => {
-                                                        e.stopPropagation(); // Üst TouchableOpacity'nin tetiklenmesini engelle
-                                                        if (activity.likedBy && activity.likedBy.length > 0) {
-                                                            const firstLikerId = activity.likedBy[0];
-                                                            fetchUserInfo(firstLikerId);
-                                                        }
-                                                    }}
-                                                >
-                                                    {firstLiker}
-                                                </Text>
-                                            )}
+                                            <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
                                             <Text style={styles.likeSummaryTextLight}> ve </Text>
-                                            <Text style={styles.likeSummaryTextBold}>{otherCount}</Text>
-                                            <Text style={styles.likeSummaryTextLight}> kişi beğendi</Text>
+                                            <Text style={styles.likeSummaryTextBold}>diğer {otherCount} kişi</Text>
+                                            <Text style={styles.likeSummaryTextLight}> beğendi</Text>
                                         </Text>
                                     );
                                 })()}
                             </Text>
                         </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Konum bilgisini içerik alanına ekleyelim */}
+                {activity.location && (
+                    <View style={styles.locationContainer}>
+                        <Ionicons name="location-outline" size={16} color="#2196F3" />
+                        <Text style={styles.locationText}>
+                            {typeof activity.location === 'object'
+                                ? (activity.location.name || activity.location.address || 'Konum')
+                                : activity.location}
+                        </Text>
                     </View>
                 )}
 
@@ -698,15 +865,6 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 postUserId={activity.userId}
                 onDelete={handleDeleteComment}
             />
-
-            {/* Options Button */}
-            <TouchableOpacity
-                style={styles.optionsButton}
-                onPress={handleOptionsPress}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-                <Ionicons name="ellipsis-horizontal" size={20} color="#000" />
-            </TouchableOpacity>
 
             {/* Context Menu Modal */}
             <Modal
@@ -764,6 +922,57 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 friend={selectedFriend}
                 navigation={navigation}
             />
+            <Modal
+                visible={isLikedByModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setIsLikedByModalVisible(false)}
+                statusBarTranslucent={true}
+                presentationStyle="overFullScreen"
+            >
+                <TouchableOpacity
+                    style={styles.likedByModalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsLikedByModalVisible(false)}
+                >
+                    <View style={styles.likedByModalContainer}>
+                        <View style={styles.likedByModalHeader}>
+                            <TouchableOpacity
+                                style={styles.likedByModalCloseButton}
+                                onPress={() => setIsLikedByModalVisible(false)}
+                            >
+                                <Ionicons name="close" size={24} color="#333" />
+                            </TouchableOpacity>
+                            <Text style={styles.likedByModalTitle}>Beğenenler</Text>
+                            <View style={styles.likedByModalHeaderRight} />
+                        </View>
+
+                        {loadingLikedBy ? (
+                            <View style={styles.likedByModalLoading}>
+                                <ActivityIndicator size="large" color="#2196F3" />
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={likedByUsers}
+                                keyExtractor={item => item.id}
+                                renderItem={renderLikedByItem}
+                                contentContainerStyle={styles.likedByModalList}
+                                showsVerticalScrollIndicator={false}
+                                initialNumToRender={10}
+                                maxToRenderPerBatch={10}
+                                windowSize={10}
+                                removeClippedSubviews={true}
+                                style={{ flex: 1 }}
+                                getItemLayout={(data, index) => ({
+                                    length: 64, // Her öğenin yüksekliği
+                                    offset: 64 * index,
+                                    index
+                                })}
+                            />
+                        )}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 };
@@ -772,20 +981,20 @@ const styles = StyleSheet.create({
     activityCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: 0,
-        shadowColor: "#000",
+        shadowColor: "transparent",
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 0,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 5,
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        elevation: 0,
     },
     activityHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         padding: 12,
+        paddingBottom: 8,
     },
     userInfoContainer: {
         flexDirection: 'row',
@@ -802,6 +1011,11 @@ const styles = StyleSheet.create({
     userTextContainer: {
         flexDirection: 'column',
     },
+    userNameVerificationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
     username: {
         fontWeight: '700',
         fontSize: 15,
@@ -814,18 +1028,32 @@ const styles = StyleSheet.create({
     },
     imageContainer: {
         position: 'relative',
-        overflow: 'hidden',
+        height: width, // Kare görüntü için
+        overflow: 'visible', // Görüntünün dışarı çıkmasına izin ver
+        zIndex: 10, // Diğer öğelerin üzerinde görünmesi için
+        backgroundColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        shadowColor: 'transparent',
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 0,
     },
     activityImage: {
         width: width,
         height: width,
+        backgroundColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
     },
     imageGradient: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        height: 100,
+        height: 0, // Yüksekliği 0 yaparak görünmez hale getirin
+        opacity: 0, // Opaklığı 0 yaparak görünmez hale getirin
     },
     contentContainer: {
         padding: 16,
@@ -869,8 +1097,26 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     descriptionContainer: {
-        marginVertical: 12,
+        marginVertical: 8,
         paddingHorizontal: 4,
+    },
+    descriptionNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    verificationBadgeSm: {
+        marginLeft: 4,
+        marginRight: 6,
+    },
+    verificationBadgeInline: {
+        marginHorizontal: 6,
+    },
+    descriptionText: {
+        fontSize: 14,
+        color: '#262626',
+        lineHeight: 20,
+        alignSelf: 'center',
     },
     tagsContainer: {
         flexDirection: 'row',
@@ -898,14 +1144,20 @@ const styles = StyleSheet.create({
     commentItem: {
         marginVertical: 2,
     },
-    commentText: {
-        fontSize: 14,
-        color: '#262626',
-        lineHeight: 18,
+    commentNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 2,
     },
     commentUsername: {
         fontWeight: '600',
         color: '#262626',
+    },
+    commentText: {
+        fontSize: 14,
+        color: '#262626',
+        lineHeight: 18,
+        alignSelf: 'center',
     },
     viewAllComments: {
         color: '#8E8E8E',
@@ -919,13 +1171,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 999,
+        pointerEvents: 'none',
     },
     optionsButton: {
         padding: 8,
-        position: 'absolute',
-        right: 8,
-        top: 8,
-        zIndex: 1,
+        marginLeft: 'auto',
     },
     modalOverlay: {
         flex: 1,
@@ -1031,6 +1281,119 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
+    likeSummaryButton: {
+        padding: 8,
+        borderRadius: 16,
+        backgroundColor: '#F5F5F5',
+    },
+    likedByModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    likedByModalContainer: {
+        backgroundColor: 'white',
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        padding: 12,
+        height: 500,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: -3,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+        elevation: 10,
+    },
+    likedByModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        marginBottom: 8,
+    },
+    likedByModalCloseButton: {
+        padding: 8,
+    },
+    likedByModalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginLeft: 12,
+    },
+    likedByModalHeaderRight: {
+        flex: 1,
+    },
+    likedByModalLoading: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    likedByUserItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+    },
+    likedByUserAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 12,
+    },
+    likedByUserInfo: {
+        flexDirection: 'column',
+    },
+    likedByUserNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    likedByUserName: {
+        fontWeight: 'bold',
+    },
+    likedByUserUsername: {
+        fontSize: 12,
+        color: '#8E8E8E',
+    },
+    verificationBadge: {
+        marginLeft: 4,
+    },
+    headerLocationContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    headerLocationText: {
+        marginLeft: 4,
+        fontSize: 12,
+        color: '#2196F3',
+        fontWeight: '500',
+        maxWidth: 80,
+    },
+    verificationBadgeComment: {
+        marginLeft: 4,
+    },
+    verificationBadgeLiker: {
+        marginLeft: 4,
+    },
+    locationContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        marginBottom: 10,
+        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    locationText: {
+        marginLeft: 8,
+        fontSize: 14,
+        color: '#2196F3',
+        fontWeight: '600',
+    },
 });
 
 export default React.memo(Activity, (prevProps, nextProps) => {
@@ -1042,6 +1405,10 @@ export default React.memo(Activity, (prevProps, nextProps) => {
         // Yorumlar ve beğeniler değiştiyse render edilmeli
         prevProps.activity.stats?.likes === nextProps.activity.stats?.likes &&
         prevProps.activity.stats?.comments === nextProps.activity.stats?.comments &&
-        prevProps.activity.comments?.length === nextProps.activity.comments?.length
+        prevProps.activity.comments?.length === nextProps.activity.comments?.length &&
+        // Arşivleme durumu değiştiyse render edilmeli
+        JSON.stringify(prevProps.activity.archivedBy) === JSON.stringify(nextProps.activity.archivedBy) &&
+        // Beğenenler listesi değiştiyse render edilmeli
+        JSON.stringify(prevProps.activity.likedBy) === JSON.stringify(nextProps.activity.likedBy)
     );
 });

@@ -66,9 +66,25 @@ export const calculateCityExplorationStats = async (userId) => {
             const cityName = path.city || 'Bilinmeyen';
             totalActivities++;
 
+            // firstDiscovery değerini normalize et
+            let normalizedFirstDiscovery;
+            if (path.firstDiscovery) {
+                if (typeof path.firstDiscovery.toDate === 'function') {
+                    normalizedFirstDiscovery = path.firstDiscovery.toDate();
+                } else if (path.firstDiscovery instanceof Date) {
+                    normalizedFirstDiscovery = path.firstDiscovery;
+                } else if (typeof path.firstDiscovery === 'string') {
+                    normalizedFirstDiscovery = new Date(path.firstDiscovery);
+                } else {
+                    normalizedFirstDiscovery = new Date();
+                }
+            } else {
+                normalizedFirstDiscovery = new Date();
+            }
+
             // En son path'i bul
-            if (path.firstDiscovery && path.firstDiscovery > mostRecentDate) {
-                mostRecentDate = path.firstDiscovery;
+            if (normalizedFirstDiscovery > mostRecentDate) {
+                mostRecentDate = normalizedFirstDiscovery;
                 mostRecentPath = path;
             }
 
@@ -77,7 +93,7 @@ export const calculateCityExplorationStats = async (userId) => {
                     exploredArea: 0,
                     totalArea: CITY_AREAS[cityName] || 0,
                     pathCount: 0,
-                    lastUpdate: path.firstDiscovery,
+                    lastUpdate: normalizedFirstDiscovery,
                     lastPathId: path.id
                 };
             }
@@ -86,8 +102,8 @@ export const calculateCityExplorationStats = async (userId) => {
             cityStats[cityName].exploredArea += pathArea;
             cityStats[cityName].pathCount += 1;
 
-            if (path.firstDiscovery && path.firstDiscovery > cityStats[cityName].lastUpdate) {
-                cityStats[cityName].lastUpdate = path.firstDiscovery;
+            if (normalizedFirstDiscovery > cityStats[cityName].lastUpdate) {
+                cityStats[cityName].lastUpdate = normalizedFirstDiscovery;
                 cityStats[cityName].lastPathId = path.id;
             }
         });

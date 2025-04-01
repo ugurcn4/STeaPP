@@ -41,10 +41,13 @@ const Stories = ({ friends, navigation }) => {
 
             if (friendIds.length === 0) {
                 setStories({});
+                setIsLoading(false);
                 return;
             }
 
-            const fetchedStories = await getStories(friendIds);
+            // Sadece ilk 10 arkadaşın hikayelerini yükle
+            const initialFriendIds = friendIds.slice(0, 10);
+            const fetchedStories = await getStories(initialFriendIds);
 
             const groupedStories = fetchedStories.reduce((acc, story) => {
                 if (!acc[story.userId]) {
@@ -55,6 +58,24 @@ const Stories = ({ friends, navigation }) => {
             }, {});
 
             setStories(groupedStories);
+
+            // Kalan arkadaşların hikayelerini arka planda yükle
+            if (friendIds.length > 10) {
+                setTimeout(async () => {
+                    const remainingFriendIds = friendIds.slice(10);
+                    const remainingStories = await getStories(remainingFriendIds);
+
+                    const updatedStories = { ...groupedStories };
+                    remainingStories.forEach(story => {
+                        if (!updatedStories[story.userId]) {
+                            updatedStories[story.userId] = [];
+                        }
+                        updatedStories[story.userId].push(story);
+                    });
+
+                    setStories(updatedStories);
+                }, 1000); // 1 saniye sonra kalan hikayeleri yükle
+            }
         } catch (error) {
             console.error('Hikayeler yüklenirken hata:', error);
             setStories({});
@@ -96,11 +117,14 @@ const Stories = ({ friends, navigation }) => {
 
     useEffect(() => {
         const loadData = async () => {
+            // Kullanıcı bilgilerini ve kendi hikayelerini önce yükle
             await Promise.all([
-                fetchStories(),
                 fetchCurrentUser(),
                 fetchMyStories()
             ]);
+
+            // Sonra arkadaş hikayelerini yükle
+            fetchStories();
         };
 
         loadData();
@@ -207,8 +231,12 @@ const Stories = ({ friends, navigation }) => {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.container}
+            contentContainerStyle={styles.scrollContent}
             removeClippedSubviews={true} // Performans iyileştirmesi
             initialNumToRender={10} // Başlangıçta render edilecek öğe sayısı
+            maxToRenderPerBatch={5} // Her batch'te render edilecek maksimum öğe sayısı
+            windowSize={5} // Render penceresi boyutu
+            updateCellsBatchingPeriod={50} // Batch güncelleme periyodu
         >
             {/* Hikaye Ekleme/Görüntüleme Butonu */}
             <TouchableOpacity
@@ -223,12 +251,13 @@ const Stories = ({ friends, navigation }) => {
                         <FastImage
                             source={{
                                 uri: getProfilePicture(currentUser),
-                                priority: FastImage.priority.high
+                                priority: FastImage.priority.high,
+                                cache: FastImage.cacheControl.immutable
                             }}
                             style={styles.storyImage}
                         />
                         <View style={styles.plusIconContainer}>
-                            <Ionicons name="add-circle" size={20} color="#2196F3" />
+                            <Ionicons name="add-circle" size={30} color="#2196F3" />
                         </View>
                     </View>
                 </View>
@@ -238,93 +267,118 @@ const Stories = ({ friends, navigation }) => {
             </TouchableOpacity>
 
             {/* Arkadaş Hikayeleri */}
-            {sortedFriends.map((friend) => {
-                return (
-                    <TouchableOpacity
-                        key={friend.id}
-                        style={styles.storyItem}
-                        onPress={() => handleStoryPress(friend.id, stories[friend.id])}
-                    >
-                        <View style={[
-                            styles.storyRing,
-                            viewedStories.has(friend.id) ? styles.viewedStoryRing : styles.activeStoryRing
-                        ]}>
-                            <FastImage
-                                source={{
-                                    uri: getProfilePicture(friend),
-                                    priority: FastImage.priority.normal
-                                }}
-                                style={styles.storyImage}
-                            />
-                        </View>
-                        <Text style={styles.storyText} numberOfLines={1}>
-                            {friend.informations?.name || friend.name || 'İsimsiz'}
-                        </Text>
-                    </TouchableOpacity>
-                );
-            })}
+            {isLoading ? (
+                // Yükleme durumunda placeholder göster
+                Array(5).fill(0).map((_, index) => (
+                    <View key={`placeholder-${index}`} style={styles.storyItem}>
+                        <View style={[styles.storyRing, styles.placeholderRing]} />
+                        <View style={styles.placeholderText} />
+                    </View>
+                ))
+            ) : (
+                sortedFriends.map((friend) => {
+                    return (
+                        <TouchableOpacity
+                            key={friend.id}
+                            style={styles.storyItem}
+                            onPress={() => handleStoryPress(friend.id, stories[friend.id])}
+                        >
+                            <View style={[
+                                styles.storyRing,
+                                viewedStories.has(friend.id) ? styles.viewedStoryRing : styles.activeStoryRing
+                            ]}>
+                                <FastImage
+                                    source={{
+                                        uri: getProfilePicture(friend),
+                                        priority: FastImage.priority.normal,
+                                        cache: FastImage.cacheControl.immutable
+                                    }}
+                                    style={styles.storyImage}
+                                />
+                            </View>
+                            <Text style={styles.storyText} numberOfLines={1} ellipsizeMode="tail">
+                                {friend.informations?.name || friend.name || 'Kullanıcı'}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })
+            )}
         </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
+        paddingVertical: 5,
+        backgroundColor: '#fff',
+    },
+    scrollContent: {
         paddingVertical: 12,
-        paddingHorizontal: 10,
+        paddingHorizontal: 15,
     },
     storyItem: {
         alignItems: 'center',
-        marginHorizontal: 9,
-    },
-    addStoryButton: {
-        position: 'relative',
-        alignItems: 'center',
+        marginRight: 22,
+        width: 100,
     },
     storyRing: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
         padding: 3,
         justifyContent: 'center',
         alignItems: 'center',
     },
     activeStoryRing: {
-        backgroundColor: '#2196F3',
-    },
-    inactiveStoryRing: {
-        backgroundColor: '#E0E0E0',
+        borderWidth: 3,
+        borderColor: '#2196F3',
     },
     viewedStoryRing: {
-        backgroundColor: '#8E8E8E',
+        borderWidth: 3,
+        borderColor: '#DBDBDB',
+    },
+    inactiveStoryRing: {
+        borderWidth: 3,
+        borderColor: '#DBDBDB',
+    },
+    storyImage: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: '#f0f0f0',
+    },
+    storyText: {
+        marginTop: 8,
+        fontSize: 14,
+        textAlign: 'center',
+        width: 100,
+    },
+    addStoryButton: {
+        position: 'relative',
     },
     plusIconContainer: {
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        width: 27,
-        height: 27,
+        backgroundColor: 'white',
+        borderRadius: 15,
+        width: 30,
+        height: 30,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#FFF',
     },
-    storyImage: {
-        width: 76,
-        height: 76,
-        borderRadius: 37,
+    placeholderRing: {
+        backgroundColor: '#f0f0f0',
         borderWidth: 3,
-        borderColor: '#FFF',
+        borderColor: '#e0e0e0',
     },
-
-    storyText: {
-        marginTop: 4,
-        fontSize: 12,
-        color: '#262626',
-        maxWidth: 76,
-        textAlign: 'center',
-    },
+    placeholderText: {
+        marginTop: 8,
+        height: 14,
+        width: 70,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 7,
+    }
 });
 
 export default Stories; 

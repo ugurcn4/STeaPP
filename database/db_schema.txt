@@ -1,0 +1,137 @@
+// Veritabanı Şeması
+
+// users Koleksiyonu
+users {
+  createdAt: timestamp,
+  friendRequests: {
+    received: array,
+    sent: array
+  },
+  friends: array, // Kullanıcı ID'lerinin listesi
+  informations: {
+    email: string,
+    interests: array,
+    name: string,
+  },
+  profilePicture: string, // Firebase Storage URL
+  settings: {
+    privacySettings: { // object
+      activityStatus: boolean,
+      dataCollection: boolean,
+      friendsList: boolean,
+      locationSharing: boolean,
+      searchable: boolean,
+    }
+    visibility: string, 
+  }
+}
+
+// chats Koleksiyonu
+chats {
+  lastMessage: {
+    mediaType: string, // "voice", "text" vb.
+  },
+  lastMessageTime: timestamp
+  participants: array, // Sohbetteki kullanıcı ID'leri
+  unreadCount: {
+    [userId]: number // Her kullanıcı için okunmamış mesaj sayısı
+  }
+}
+
+// messages Koleksiyonu
+messages {
+  chatId: string,
+  mediaType: string, // "text", "voice" vb.
+  message: string,
+  read: boolean,
+  receiverId: string,
+  senderId: string,
+  timestamp: timestamp
+}
+
+// notifications Koleksiyonu
+notifications {
+  body: string,
+  createdAt: timestamp,
+  data: {
+    chatId: string,
+    messageId: string,
+    senderId: string,
+    recipientId: string,
+    type: string,
+  },
+  recipientId: string // aloıcı kullanıcı id si
+  senderId: string // gönderen kullanıcı id si
+  status: string, // "read", "unread" vb.
+  title: string,
+  type: string,
+}
+
+// posts Koleksiyonu
+posts {
+  archiveGroups: array,
+  archivedBy: array,
+  createdAt: timestamp,
+  description: string,
+  imageUrl: string, // Firebase Storage URL
+  isPublic: boolean,
+  likedBy: array,
+  location: string,
+  stats: {
+    comments: number,
+    likes: number
+  },
+  tags: array,
+  updatedAt: timestamp,
+  userId: string
+}
+
+// stories Koleksiyonu
+stories {
+  createdAt: timestamp,
+  expiresAt: timestamp,
+  fontSize: number,
+  likes: array,
+  location: string,
+  music: string,
+  storyUrl: string, // Firebase Storage URL
+  text: string,
+  textColor: string,
+  textPosition: {
+    x: number,
+    y: number
+  },
+  userId: string,
+  viewTimes: { //map
+    [userId]: timestamp
+  },
+  viewedBy: array
+}
+
+// cities Koleksiyonu
+cities { 
+  activities: array,
+  badges: {
+    bronze: object,
+    // diğer rozet tipleri...
+  },
+  id: string,
+  imageUrl: string, // Firebase Storage URL
+  name: string,
+  region: string
+}
+
+// deletedAccounts Koleksiyonu
+deletedAccounts {
+  deletedAt: timestamp,
+  email: string,
+  reason: string,
+  timestamp: string
+}
+
+// reports Koleksiyonu
+reports {
+  messageId: string,
+  status: string, // "pending" vb.
+  timestamp: timestamp
+}

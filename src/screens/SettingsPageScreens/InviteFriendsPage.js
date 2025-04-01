@@ -1,15 +1,75 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, ScrollView, Clipboard } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Share, ScrollView, Clipboard, ActivityIndicator } from 'react-native';
 import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Toast from 'react-native-toast-message';
+import { auth, db } from '../../../firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const InviteFriendsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
     const currentTheme = theme === 'dark' ? darkTheme : lightTheme;
 
-    const [inviteCode] = useState('FRIEND2024'); // Örnek davet kodu
+    const [inviteCode, setInviteCode] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Kullanıcının davet kodunu al veya oluştur
+        fetchOrCreateInviteCode();
+    }, []);
+
+    const fetchOrCreateInviteCode = async () => {
+        try {
+            setLoading(true);
+            const currentUser = auth.currentUser;
+
+            if (!currentUser) {
+                showToast('error', 'Kullanıcı bilgisi alınamadı');
+                setLoading(false);
+                return;
+            }
+
+            const userId = currentUser.uid;
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+
+            if (userDoc.exists() && userDoc.data().inviteCode) {
+                // Kullanıcının zaten bir davet kodu var
+                setInviteCode(userDoc.data().inviteCode);
+            } else {
+                // Yeni bir davet kodu oluştur
+                const newInviteCode = generateInviteCode(userId);
+
+                // Firestore'a kaydet
+                await setDoc(userDocRef, { inviteCode: newInviteCode }, { merge: true });
+
+                setInviteCode(newInviteCode);
+            }
+        } catch (error) {
+            console.error('Davet kodu alınırken hata oluştu:', error);
+            showToast('error', 'Davet kodu alınamadı');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Kullanıcı ID'sinden davet kodu oluştur
+    const generateInviteCode = (userId) => {
+        // Kullanıcı ID'sinin ilk 6 karakterini al
+        const idPart = userId.substring(0, 6);
+
+        // Rastgele 4 karakter oluştur
+        const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        // Zaman damgası ekle (son 4 hane)
+        const timestampPart = Date.now().toString().slice(-4);
+
+        // Parçaları birleştir ve formatla
+        return `${randomPart}${timestampPart}`.toUpperCase();
+    };
+
+    const shareMessage = `Hey! STeaPP uygulamasını keşfettim. Şu davet koduyla katıl: ${inviteCode}\n\nİndir: https://steapp.com/download`;
 
     const shareOptions = [
         {
@@ -48,8 +108,6 @@ const InviteFriendsPage = ({ navigation }) => {
             action: () => shareViaEmail()
         }
     ];
-
-    const shareMessage = `Hey! Harika bir uygulama keşfettim. Şu davet koduyla katıl: ${inviteCode}\n\nİndir: https://yourapp.com/download`;
 
     const shareToWhatsApp = async () => {
         try {
@@ -137,13 +195,17 @@ const InviteFriendsPage = ({ navigation }) => {
                 <Text style={[styles.inviteCodeTitle, { color: currentTheme.text }]}>
                     Davet Kodun
                 </Text>
-                <TouchableOpacity
-                    style={styles.codeContainer}
-                    onPress={copyInviteCode}
-                >
-                    <Text style={styles.inviteCode}>{inviteCode}</Text>
-                    <Ionicons name="copy-outline" size={20} color="#4CAF50" />
-                </TouchableOpacity>
+                {loading ? (
+                    <ActivityIndicator size="large" color="#4CAF50" />
+                ) : (
+                    <TouchableOpacity
+                        style={styles.codeContainer}
+                        onPress={copyInviteCode}
+                    >
+                        <Text style={styles.inviteCode}>{inviteCode}</Text>
+                        <Ionicons name="copy-outline" size={20} color="#4CAF50" />
+                    </TouchableOpacity>
+                )}
                 <Text style={styles.tapToCopy}>
                     Kopyalamak için dokun
                 </Text>

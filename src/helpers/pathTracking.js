@@ -27,21 +27,22 @@ export const TRACKING_CONSTANTS = {
 
 // Mevcut TRACKING_CONSTANTS'ı koruyoruz ve GPS_ACCURACY'yi ekliyoruz
 export const GPS_ACCURACY = {
-    OPTIMAL: 8,           // 10 metreden 8 metreye düşürdük
-    ACCEPTABLE: 15,       // Bu değer aynı kalsın
-    MAX_ACCEPTABLE: 25,   // Bu değer aynı kalsın
-    CALIBRATION_TIME: 2000, // 5000ms'den 2000ms'ye düşürdük (2 saniye)
-    STABILITY_THRESHOLD: 2, // Bu değer aynı kalsın
-    SAMPLE_SIZE: 5,       // Bu değer aynı kalsın
-    MIN_SATELLITES: 4     // Bu değer aynı kalsın
+    OPTIMAL: 10,           // Optimal doğruluk eşiği
+    ACCEPTABLE: 20,        // Kabul edilebilir doğruluk eşiği
+    MAX_ACCEPTABLE: 40,    // Maksimum kabul edilebilir doğruluk
+    CALIBRATION_TIME: 3000, // 3 saniye kalibrasyon süresi (daha hızlı)
+    STABILITY_THRESHOLD: 5, // Daha esnek stabilite eşiği
+    SAMPLE_SIZE: 3,        // Daha az örnek sayısı (daha hızlı kalibrasyon)
+    MIN_SATELLITES: 4      // Minimum uydu sayısı
 };
 
-// Hareket sabitleri ekleyelim
+// Hareket sabitlerini güncelleyelim - daha hassas algılama için
 export const MOVEMENT_CONSTANTS = {
-    STATIONARY_SPEED: 0.2,      // m/s (0.72 km/h) - durağan kabul edilecek hız
-    MIN_MOVEMENT_DISTANCE: 5,    // metre - minimum hareket mesafesi
-    STATIONARY_CHECK_COUNT: 3,   // kaç ardışık ölçümde durağan olduğunu kontrol etmek için
-    MOVEMENT_CHECK_INTERVAL: 3000 // ms - hareket kontrolü aralığı
+    STATIONARY_SPEED: 0.3,      // m/s (1.08 km/h) - daha düşük eşik (durağan algılama için)
+    MIN_MOVEMENT_DISTANCE: 5,    // metre - daha düşük mesafe eşiği
+    STATIONARY_CHECK_COUNT: 3,   // Daha fazla örnek (daha güvenilir)
+    MOVEMENT_CHECK_INTERVAL: 1000, // ms - daha sık hareket kontrolü
+    STATIONARY_TIME_THRESHOLD: 3000 // ms - durağan kabul edilmek için gereken minimum süre
 };
 
 /**
@@ -221,20 +222,19 @@ export const calculateAccuracyStdDev = (accuracyValues) => {
     return Math.sqrt(variance);
 };
 
-// GPS kararlılığını kontrol etme
+// GPS kararlılığını kontrol etme - daha esnek hale getirelim
 export const isGPSStable = (accuracyValues) => {
-    if (accuracyValues.length < GPS_ACCURACY.SAMPLE_SIZE) return false;
+    if (accuracyValues.length < 2) return false; // En az 2 örnek yeterli
 
-    // Son ölçümlerin standart sapması
-    const stdDev = calculateAccuracyStdDev(accuracyValues);
+    // Son 3 ölçümün (veya mevcut tüm ölçümlerin) ortalaması
+    const recentValues = accuracyValues.slice(-3);
+    const avgAccuracy = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
 
-    // Ortalama accuracy değeri
-    const avgAccuracy = accuracyValues.reduce((sum, val) => sum + val, 0) / accuracyValues.length;
+    // Son değer
+    const lastAccuracy = accuracyValues[accuracyValues.length - 1];
 
-    return (
-        stdDev < GPS_ACCURACY.STABILITY_THRESHOLD &&
-        avgAccuracy <= GPS_ACCURACY.ACCEPTABLE
-    );
+    // Ya ortalama iyi ya da son değer iyi ise stabil kabul et
+    return avgAccuracy <= GPS_ACCURACY.ACCEPTABLE || lastAccuracy <= GPS_ACCURACY.OPTIMAL;
 };
 
 // GPS kalitesini değerlendirme
@@ -266,22 +266,33 @@ export const isGPSUsable = (accuracy, accuracyHistory) => {
     return isGPSStable(accuracyHistory);
 };
 
-// Durağan durumu kontrol eden fonksiyon
+// Durağan durumu kontrol eden fonksiyonu tamamen yeniden yazalım
 export const isStationary = (speedMs, lastLocations) => {
-    // Hız kontrolü
-    if (speedMs > MOVEMENT_CONSTANTS.STATIONARY_SPEED) {
+    // 1. Hız kontrolü - çok düşük hız durağan kabul edilir
+    const isLowSpeed = speedMs <= MOVEMENT_CONSTANTS.STATIONARY_SPEED;
+
+    // Eğer hız yüksekse kesinlikle hareket halinde
+    if (!isLowSpeed) {
         return false;
     }
 
-    // Son konumlar yoksa veya yetersizse durağan kabul etme
+    // 2. Son konumlar kontrolü
     if (!lastLocations || lastLocations.length < MOVEMENT_CONSTANTS.STATIONARY_CHECK_COUNT) {
-        return false;
+        // Yeterli veri yoksa, hız düşükse durağan kabul et
+        return isLowSpeed;
     }
 
-    // Son konumlar arasındaki mesafeyi kontrol et
+    // 3. Zaman kontrolü - son konumlar arasında yeterli zaman geçmiş mi?
     const lastLocation = lastLocations[lastLocations.length - 1];
     const firstLocation = lastLocations[0];
+    const timeElapsed = new Date(lastLocation.timestamp) - new Date(firstLocation.timestamp);
 
+    // Yeterli zaman geçmemişse, hız düşükse durağan kabul et
+    if (timeElapsed < MOVEMENT_CONSTANTS.STATIONARY_TIME_THRESHOLD) {
+        return isLowSpeed;
+    }
+
+    // 4. Mesafe kontrolü - son konumlar arasındaki toplam mesafe
     const totalDistance = haversine(
         firstLocation.latitude,
         firstLocation.longitude,
@@ -289,6 +300,6 @@ export const isStationary = (speedMs, lastLocations) => {
         lastLocation.longitude
     );
 
-    // Toplam mesafe minimum hareket mesafesinden küçükse durağan kabul et
-    return totalDistance < MOVEMENT_CONSTANTS.MIN_MOVEMENT_DISTANCE;
+    // Hem hız düşük hem de mesafe az ise durağan
+    return isLowSpeed && totalDistance < MOVEMENT_CONSTANTS.MIN_MOVEMENT_DISTANCE;
 }; 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, ActivityIndicator, Easing, Platform, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, ActivityIndicator, Easing, Platform, RefreshControl, Alert } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import ProfileModal from '../modals/ProfileModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -7,6 +7,7 @@ import { collection, query, onSnapshot, orderBy, doc, getDoc, where, updateDoc, 
 import { db } from '../../firebaseConfig';
 import ProgressBar from 'react-native-progress/Bar';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import WeatherCard from './HomePageCards/WeatherCard';
 import { haversine } from '../helpers/locationUtils';
@@ -105,6 +106,9 @@ const HomePage = ({ navigation }) => {
                         db = getFirebaseDb();
                     }
                     fetchUserData(user);
+
+                    // Uygulama açıldığında hemen konum ve bildirim izinlerini talep et
+                    requestPermissions();
                 } catch (error) {
                     console.error('Firebase başlatma hatası:', error);
                     setIsLoading(false);
@@ -116,6 +120,36 @@ const HomePage = ({ navigation }) => {
 
         return () => unsubscribe();
     }, []);
+
+    // İzinleri talep etme fonksiyonu
+    const requestPermissions = async () => {
+        try {
+            // Konum izni iste
+            const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+            if (locationStatus !== 'granted') {
+                Alert.alert(
+                    "Konum İzni Gerekli",
+                    "Harita özellikleri ve konum tabanlı hizmetler için konum izni gereklidir.",
+                    [{ text: "Tamam" }]
+                );
+            }
+
+            // Bildirim izni iste
+            const { status: notificationStatus } = await Notifications.getPermissionsAsync();
+            if (notificationStatus !== 'granted') {
+                const { status: newStatus } = await Notifications.requestPermissionsAsync();
+                if (newStatus !== 'granted') {
+                    Alert.alert(
+                        "Bildirim İzni",
+                        "Etkinlik bildirimleri ve yeni mesajlar için bildirim izni gereklidir.",
+                        [{ text: "Tamam" }]
+                    );
+                }
+            }
+        } catch (error) {
+            console.error('İzin isteme hatası:', error);
+        }
+    };
 
     useEffect(() => {
         fetchWeather();
@@ -251,9 +285,10 @@ const HomePage = ({ navigation }) => {
 
     const fetchWeather = async () => {
         try {
-            // Konum izni isteyin
-            let { status } = await Location.requestForegroundPermissionsAsync();
+            // Konum izninin verilip verilmediğini kontrol et
+            const { status } = await Location.getForegroundPermissionsAsync();
             if (status !== 'granted') {
+                // İzin yoksa hava durumu verisi çekilmez
                 return;
             }
 
@@ -288,6 +323,7 @@ const HomePage = ({ navigation }) => {
                 });
             }
         } catch (error) {
+            console.error('Hava durumu verileri alınırken hata:', error);
         }
     };
 
@@ -310,7 +346,28 @@ const HomePage = ({ navigation }) => {
 
                 snapshot.docs.forEach(doc => {
                     const path = doc.data();
-                    const discoveryTime = path.firstDiscovery?.toDate();
+                    let discoveryTime;
+
+                    // firstDiscovery'nin türünü kontrol et ve uygun şekilde işle
+                    if (path.firstDiscovery) {
+                        if (typeof path.firstDiscovery.toDate === 'function') {
+                            // Firestore Timestamp nesnesi
+                            discoveryTime = path.firstDiscovery.toDate();
+                        } else if (path.firstDiscovery instanceof Date) {
+                            // Zaten Date nesnesi
+                            discoveryTime = path.firstDiscovery;
+                        } else if (typeof path.firstDiscovery === 'string') {
+                            // ISO string
+                            discoveryTime = new Date(path.firstDiscovery);
+                        } else {
+                            // Diğer durumlar için güvenli bir varsayılan
+                            discoveryTime = new Date();
+                        }
+                    } else {
+                        // firstDiscovery yoksa şimdiki zamanı kullan
+                        discoveryTime = new Date();
+                    }
+
                     const points = path.points || [];
 
                     if (points.length >= 2) {

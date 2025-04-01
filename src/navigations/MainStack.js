@@ -8,6 +8,7 @@ import PrivacyPage from '../screens/SettingsPageScreens/PrivacyPage';
 import HelpSupportPage from '../screens/SettingsPageScreens/HelpSupportPage';
 import AboutPage from '../screens/SettingsPageScreens/AboutPage';
 import InviteFriendsPage from '../screens/SettingsPageScreens/InviteFriendsPage';
+import MaviTikSorgulamaPage from '../screens/SettingsPageScreens/MaviTikSorgulamaPage';
 import NearbyRestaurants from '../screens/HomePageCards/NearbyRestaurants';
 import NearbyHotels from '../screens/HomePageCards/NearbyHotels';
 import NearbyAttractions from '../screens/HomePageCards/NearbyAttractions';
@@ -22,7 +23,6 @@ import ImageViewer from '../screens/ImageViewer';
 import CityExplorer from '../screens/CityExplorer';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import DirectMessagesScreen from '../screens/DirectMessagesScreen';
-import QRCodeScreen from '../screens/QRCodeScreen';
 import StoryEditor from '../screens/StoryEditor';
 import UpdatesPage from '../screens/SettingsPageScreens/UpdatesPage';
 import { OnboardingScreen } from '../screens';
@@ -32,6 +32,8 @@ import ImageEditor from '../screens/ImageEditor';
 import LikedPostsScreen from '../screens/LikedPostsScreen';
 import LikedByScreen from '../screens/LikedByScreen';
 import MapPage from '../screens/MapPage';
+import ProfileModal from '../screens/ProfileModal';
+import FriendProfileModal from '../modals/friendProfileModal';
 
 const Stack = createNativeStackNavigator();
 
@@ -122,6 +124,10 @@ const MainStack = () => {
                 component={InviteFriendsPage}
             />
             <Stack.Screen
+                name="MaviTikSorgulama"
+                component={MaviTikSorgulamaPage}
+            />
+            <Stack.Screen
                 name="Fotoğraflar"
                 component={PhotosPage}
             />
@@ -190,15 +196,6 @@ const MainStack = () => {
                 }}
             />
             <Stack.Screen
-                name="QRCode"
-                component={QRCodeScreen}
-                options={{
-                    presentation: 'card',
-                    animationEnabled: true,
-                    cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
-                }}
-            />
-            <Stack.Screen
                 name="CityExplorer"
                 component={CityExplorer}
                 options={{ headerShown: false }}
@@ -254,6 +251,29 @@ const MainStack = () => {
                     presentation: 'transparentModal',
                     cardStyle: { backgroundColor: 'transparent' },
                     cardOverlayEnabled: true
+                }}
+            />
+            <Stack.Screen
+                name="ProfileModal"
+                component={ProfileModal}
+                options={{
+                    headerShown: false,
+                    presentation: 'modal',
+                    cardStyle: { backgroundColor: 'white' },
+                    cardOverlayEnabled: true,
+                    animation: 'slide_from_bottom',
+                    detachPreviousScreen: false
+                }}
+            />
+            <Stack.Screen
+                name="FriendProfileModal"
+                component={FriendProfileModal}
+                options={{
+                    headerShown: false,
+                    presentation: 'modal',
+                    cardStyle: { backgroundColor: 'white' },
+                    cardOverlayEnabled: true,
+                    animation: 'slide_from_bottom'
                 }}
             />
         </Stack.Navigator>

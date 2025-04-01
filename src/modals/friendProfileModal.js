@@ -5,6 +5,7 @@ import {
     Text,
     Image,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     StyleSheet,
     ScrollView,
     Platform,
@@ -14,7 +15,8 @@ import {
     SafeAreaView,
     ActionSheetIOS,
     Share,
-    Clipboard
+    Clipboard,
+    TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUserUid, sendFriendRequest, acceptFriendRequest, removeFriend } from '../services/friendFunctions';
@@ -24,6 +26,9 @@ import Activity from '../components/Activity';
 import { toggleLikePost, addComment, deleteComment } from '../services/postService';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, updateDoc, arrayUnion, arrayRemove, addDoc } from 'firebase/firestore';
 import PostDetailModal from './PostDetailModal';
+import Toast from 'react-native-toast-message';
+import VerificationBadge from '../components/VerificationBadge';
+import { checkUserVerification } from '../utils/verificationUtils';
 
 const { width } = Dimensions.get('window');
 const POST_SIZE = width / 3 - 2;
@@ -90,6 +95,17 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
     const [isBlocked, setIsBlocked] = useState(false);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
+    const [profileImageModalVisible, setProfileImageModalVisible] = useState(false);
+    const [friendsListModalVisible, setFriendsListModalVisible] = useState(false);
+    const [friendsList, setFriendsList] = useState([]);
+    const [loadingFriends, setLoadingFriends] = useState(false);
+    const [canViewFriends, setCanViewFriends] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredFriendsList, setFilteredFriendsList] = useState([]);
+    const [verificationStatus, setVerificationStatus] = useState({
+        hasBlueTick: false,
+        hasGreenTick: false
+    });
 
     useEffect(() => {
         if (friend && visible) {
@@ -102,20 +118,51 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 checkNotificationStatus(uid);
             });
             checkProfileVisibility();
+            checkFriendsListPermission();
+            checkVerificationStatus();
         }
-    }, [friend, visible]);
+    }, [friend?.id, visible]);
 
     useEffect(() => {
         if (friend && visible && activeTab === 'likes' && friendshipStatus === 'friend') {
             fetchLikedPosts();
         }
-    }, [friend, visible, activeTab, friendshipStatus]);
+    }, [friend?.id, visible, activeTab, friendshipStatus]);
 
     useEffect(() => {
         if (!visible) {
             setSelectedPost(null);
+            setProfileImageModalVisible(false);
         }
+
+        // Bileşen değiştirildiğinde ya da kaldırıldığında temizleme işlemi
+        return () => {
+            setSelectedPost(null);
+            setLoading(false);
+            setLoadingPosts(false);
+            setLoadingLikedPosts(false);
+            setActionSheetVisible(false);
+            setProfileImageModalVisible(false);
+        };
     }, [visible]);
+
+    useEffect(() => {
+        // Arama sorgusu değiştiğinde arkadaş listesini filtrele
+        if (friendsList.length > 0) {
+            if (searchQuery.trim() === '') {
+                setFilteredFriendsList(friendsList);
+            } else {
+                const lowerCaseQuery = searchQuery.toLowerCase().trim();
+                const filtered = friendsList.filter(friend =>
+                    (friend.name && friend.name.toLowerCase().includes(lowerCaseQuery)) ||
+                    (friend.username && friend.username.toLowerCase().includes(lowerCaseQuery))
+                );
+                setFilteredFriendsList(filtered);
+            }
+        } else {
+            setFilteredFriendsList([]);
+        }
+    }, [searchQuery, friendsList]);
 
     const checkProfileVisibility = async () => {
         if (!friend?.id) return;
@@ -344,14 +391,18 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                     text: 'Profili Düzenle',
                     style: styles.editButton,
                     textStyle: styles.editButtonText,
-                    onPress: handleEditProfile,
+                    onPress: () => {
+                        handleEditProfile();
+                    },
                     disabled: false
                 },
                 secondary: {
                     text: 'Profili Paylaş',
                     style: styles.shareButton,
                     textStyle: styles.shareButtonText,
-                    onPress: handleShareProfile,
+                    onPress: () => {
+                        handleShareProfile();
+                    },
                     disabled: false
                 }
             };
@@ -371,7 +422,22 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         text: 'Mesaj',
                         style: styles.messageButton,
                         textStyle: styles.messageButtonText,
-                        onPress: handleMessagePress,
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                navigation.navigate('DirectMessages', {
+                                    screen: 'Chat',
+                                    params: {
+                                        friend: {
+                                            id: friend.id,
+                                            name: friend.name || friend.informations?.name || 'İsimsiz Kullanıcı',
+                                            profilePicture: friend.profilePicture,
+                                            informations: friend.informations
+                                        }
+                                    }
+                                });
+                            }, 300);
+                        },
                         disabled: false
                     }
                 };
@@ -388,7 +454,22 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         text: 'Mesaj',
                         style: styles.messageButton,
                         textStyle: styles.messageButtonText,
-                        onPress: handleMessagePress,
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                navigation.navigate('DirectMessages', {
+                                    screen: 'Chat',
+                                    params: {
+                                        friend: {
+                                            id: friend.id,
+                                            name: friend.name || friend.informations?.name || 'İsimsiz Kullanıcı',
+                                            profilePicture: friend.profilePicture,
+                                            informations: friend.informations
+                                        }
+                                    }
+                                });
+                            }, 300);
+                        },
                         disabled: false
                     }
                 };
@@ -405,7 +486,22 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         text: 'Mesaj',
                         style: styles.messageButton,
                         textStyle: styles.messageButtonText,
-                        onPress: handleMessagePress,
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                navigation.navigate('DirectMessages', {
+                                    screen: 'Chat',
+                                    params: {
+                                        friend: {
+                                            id: friend.id,
+                                            name: friend.name || friend.informations?.name || 'İsimsiz Kullanıcı',
+                                            profilePicture: friend.profilePicture,
+                                            informations: friend.informations
+                                        }
+                                    }
+                                });
+                            }, 300);
+                        },
                         disabled: false
                     }
                 };
@@ -422,7 +518,22 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         text: 'Mesaj',
                         style: styles.messageButton,
                         textStyle: styles.messageButtonText,
-                        onPress: handleMessagePress,
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                navigation.navigate('DirectMessages', {
+                                    screen: 'Chat',
+                                    params: {
+                                        friend: {
+                                            id: friend.id,
+                                            name: friend.name || friend.informations?.name || 'İsimsiz Kullanıcı',
+                                            profilePicture: friend.profilePicture,
+                                            informations: friend.informations
+                                        }
+                                    }
+                                });
+                            }, 300);
+                        },
                         disabled: false
                     }
                 };
@@ -530,19 +641,26 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
     };
 
     const handleMessagePress = () => {
+
+        // Önce modalı kapatalım
         onClose();
 
-        navigation.navigate('DirectMessages', {
-            screen: 'Chat',
-            params: {
-                friend: {
-                    id: friend.id,
-                    name: informations?.name || friend.name,
-                    profilePicture: friend.profilePicture,
-                    informations: friend.informations
-                }
-            }
-        });
+        // Kısa bir gecikme ile navigasyonu gerçekleştirelim
+        setTimeout(() => {
+            // DirectMessages navigasyonuna yönlendir
+            navigation.navigate('DirectMessages', {
+                screen: 'Chat',
+                params: {
+                    friend: {
+                        id: friend.id,
+                        name: friend.name || friend.informations?.name || 'İsimsiz Kullanıcı',
+                        profilePicture: friend.profilePicture,
+                        informations: friend.informations
+                    }
+                },
+                initial: false
+            });
+        }, 300);
     };
 
     const checkBlockStatus = async (uid) => {
@@ -665,7 +783,7 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 break;
 
             case 'privacy':
-                navigation.navigate('PrivacySettings');
+                navigation.navigate('Gizlilik');
                 onClose();
                 break;
 
@@ -676,13 +794,34 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
 
     const handleShareProfile = async () => {
         try {
-            const result = await Share.share({
-                message: `${friend.name || 'Kullanıcı'} profilini görüntüle!`,
-                url: `app://profile/${friend.id}`,
-                title: `${friend.name || 'Kullanıcı'} Profili`
-            });
+            // Paylaşılacak mesaj
+            const shareMessage = `${friend.name || 'Kullanıcı'} profilini STeaPP uygulamasında görüntüle!`;
+
+            // Paylaşım URL'si
+            const shareUrl = `https://steapp.com/profile/${friend.id}`;
+
+            // Paylaşım başlığı
+            const shareTitle = `${friend.name || 'Kullanıcı'} Profili`;
+
+            // Share API'sini kullanarak paylaşım diyaloğunu aç
+            const result = await Share.share(
+                {
+                    message: shareMessage,
+                    url: shareUrl,
+                    title: shareTitle,
+                },
+                {
+                    // iOS için ek seçenekler
+                    dialogTitle: 'Profili Paylaş',
+                    subject: shareTitle,
+                    // Android için ek seçenekler
+                    tintColor: '#25D220'
+                }
+            );
+
         } catch (error) {
             console.error('Profil paylaşma hatası:', error);
+            Alert.alert('Hata', 'Profil paylaşılırken bir sorun oluştu.');
         }
     };
 
@@ -833,20 +972,38 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
     };
 
     const handleEditProfile = () => {
-        onClose();
-        navigation.navigate('ProfileModal', { modalVisible: true });
+        try {
+            // Ana modalı kapatmayı garantilemek için doğrudan setFriendProfileVisible ve onClose kullanıyoruz
+            onClose();
+
+            // ProfileModal'a yönlendirme yapmak yerine, ana ProfileModal'ı açmak için
+            // bir timeout kullanıyoruz
+            setTimeout(() => {
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'MainTabs' }],
+                });
+
+                // Kısa bir gecikme ile ProfileModal'ı açıyoruz
+                setTimeout(() => {
+                    navigation.navigate('ProfileModal');
+                }, 100);
+            }, 300);
+        } catch (error) {
+            console.error('Navigation error:', error);
+        }
     };
 
     const getProfileImageSource = (user) => {
-        if (user.profilePicture) {
+        if (user?.profilePicture) {
             return {
                 uri: user.profilePicture,
-                priority: FastImage.priority.normal,
+                priority: FastImage.priority.high,
                 cache: FastImage.cacheControl.immutable
             };
         } else {
             // Kullanıcının adının ilk iki harfini al
-            const initials = (user.informations?.name || user.name || "")
+            const initials = (user?.informations?.name || user?.name || "")
                 .split(' ')
                 .map(n => n[0])
                 .join('')
@@ -856,7 +1013,7 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
             // UI Avatars API'sini kullanarak isim baş harfleri ile avatar oluştur
             return {
                 uri: `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff&size=256&bold=true`,
-                priority: FastImage.priority.normal,
+                priority: FastImage.priority.high,
                 cache: FastImage.cacheControl.web
             };
         }
@@ -873,11 +1030,12 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 <FastImage
                     source={{
                         uri: item.imageUrl,
-                        priority: FastImage.priority.normal,
+                        priority: FastImage.priority.high,
                         cache: FastImage.cacheControl.immutable
                     }}
                     style={styles.postImage}
                     resizeMode={FastImage.resizeMode.cover}
+                    cacheKey={item.id}
                 />
             </TouchableOpacity>
         );
@@ -897,13 +1055,336 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 onLikePress={handleLikePress}
                 onCommentPress={handleCommentSubmit}
                 onPostUpdate={(updatedPost) => {
-                    if (updatedPost.id !== selectedPost.id) {
+                    if (selectedPost && updatedPost.id === selectedPost.id) {
+                        // Sadece seçili gönderi güncellendiğinde state'i güncelle
                         setSelectedPost(updatedPost);
                     }
                 }}
                 navigation={navigation}
             />
         );
+    };
+
+    const handleProfileImagePress = () => {
+        setProfileImageModalVisible(true);
+    };
+
+    const handleProfileImageLongPress = () => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['İptal', 'Resmi Paylaş', 'Resmi Kaydet'],
+                    cancelButtonIndex: 0,
+                    userInterfaceStyle: 'light'
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) {
+                        handleShareProfileImage();
+                    } else if (buttonIndex === 2) {
+                        Alert.alert('Bilgi', 'Bu özellik şu anda geliştirme aşamasındadır.');
+                    }
+                }
+            );
+        } else {
+            setActionSheetVisible(true);
+        }
+    };
+
+    const handleShareProfileImage = async () => {
+        try {
+            // Paylaşılacak mesaj
+            const shareMessage = `${friend.name || 'Kullanıcı'} profil fotoğrafı`;
+
+            // Paylaşım URL'si
+            const profilePictureUrl = friend.profilePicture ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent((friend?.informations?.name || friend?.name || "").substring(0, 2))}&background=random&color=fff&size=256&bold=true`;
+
+            // Share API'sini kullanarak paylaşım diyaloğunu aç
+            const result = await Share.share(
+                {
+                    message: shareMessage,
+                    url: profilePictureUrl,
+                    title: `${friend.name || 'Kullanıcı'} Profil Fotoğrafı`,
+                },
+                {
+                    // iOS için ek seçenekler
+                    dialogTitle: 'Profil Fotoğrafını Paylaş',
+                    subject: `${friend.name || 'Kullanıcı'} Profil Fotoğrafı`,
+                    // Android için ek seçenekler
+                    tintColor: '#25D220'
+                }
+            );
+
+        } catch (error) {
+            console.error('Profil fotoğrafı paylaşma hatası:', error);
+            Alert.alert('Hata', 'Profil fotoğrafı paylaşılırken bir sorun oluştu.');
+        }
+    };
+
+    const renderProfileImageModal = () => {
+        return (
+            <Modal
+                visible={profileImageModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setProfileImageModalVisible(false)}
+                statusBarTranslucent={true}
+            >
+                <View style={styles.profileImageModalContainer}>
+                    <TouchableOpacity
+                        style={styles.profileImageModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setProfileImageModalVisible(false)}
+                    >
+                        <View style={styles.profileImageModalContent}>
+                            <TouchableOpacity
+                                activeOpacity={0.9}
+                                onLongPress={handleProfileImageLongPress}
+                                delayLongPress={500}
+                            >
+                                <FastImage
+                                    source={getProfileImageSource(friend)}
+                                    style={styles.profileImageModalImage}
+                                    resizeMode={FastImage.resizeMode.contain}
+                                />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.profileImageModalCloseButton}
+                                onPress={() => setProfileImageModalVisible(false)}
+                            >
+                                <Ionicons name="close-circle" size={36} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+            </Modal>
+        );
+    };
+
+    const checkFriendsListPermission = async () => {
+        if (!friend?.id) return;
+
+        try {
+            const friendDoc = await getDoc(doc(db, 'users', friend.id));
+            const friendData = friendDoc.data() || {};
+            const friendsListSetting = friendData.settings?.privacySettings?.friendsList;
+
+            // Kullanıcı kendi profilini her zaman görebilir
+            const currentUserId = await getCurrentUserUid();
+
+            // Arkadaş listesi ayarı true ise veya kendi profili ise görüntülenebilir
+            setCanViewFriends(friendsListSetting === true || friend.id === currentUserId);
+        } catch (error) {
+            console.error('Arkadaş listesi izni kontrol hatası:', error);
+            setCanViewFriends(false);
+        }
+    };
+
+    const fetchFriendsList = async () => {
+        if (!friend?.id || !canViewFriends) return;
+
+        setLoadingFriends(true);
+        try {
+            const friendDoc = await getDoc(doc(db, 'users', friend.id));
+            const friendData = friendDoc.data() || {};
+            const friendIds = friendData.friends || [];
+
+            if (friendIds.length === 0) {
+                setFriendsList([]);
+                setLoadingFriends(false);
+                return;
+            }
+
+            // Her bir arkadaş için kullanıcı bilgilerini al
+            const friendsData = await Promise.all(
+                friendIds.map(async (friendId) => {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', friendId));
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            return {
+                                id: friendId,
+                                name: userData.informations?.name || 'İsimsiz Kullanıcı',
+                                username: userData.informations?.username || '',
+                                profilePicture: userData.profilePicture || '',
+                                informations: userData.informations || {}
+                            };
+                        }
+                        return null;
+                    } catch (error) {
+                        console.error(`Kullanıcı bilgisi alınamadı: ${friendId}`, error);
+                        return null;
+                    }
+                })
+            );
+
+            // null değerleri filtrele
+            const validFriends = friendsData.filter(friend => friend !== null);
+            setFriendsList(validFriends);
+            setFilteredFriendsList(validFriends);
+        } catch (error) {
+            console.error('Arkadaş listesi alınırken hata:', error);
+        } finally {
+            setLoadingFriends(false);
+        }
+    };
+
+    const handleFriendsCountPress = () => {
+        if (!canViewFriends) {
+            // Arkadaş listesi gizliyse uyarı göster
+            Toast.show({
+                type: 'info',
+                text1: 'Bilgi',
+                text2: 'Bu kullanıcı arkadaş listesinin görüntülenmesini engelliyor.',
+                position: 'top',
+                visibilityTime: 4000,
+            });
+            return;
+        }
+
+        // Arkadaş listesini aç
+        fetchFriendsList();
+        setFriendsListModalVisible(true);
+    };
+
+    const renderFriendsListModal = () => {
+        return (
+            <Modal
+                visible={friendsListModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setFriendsListModalVisible(false)}
+                statusBarTranslucent={true}
+            >
+                <TouchableOpacity
+                    style={styles.friendsModalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setFriendsListModalVisible(false)}
+                >
+                    <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.friendsModalCard}>
+                            {/* Header */}
+                            <View style={styles.friendsModalCardHeader}>
+                                <View style={styles.friendsModalCardHeaderLeft}>
+                                    <Ionicons name="people" size={20} color="#25D220" />
+                                    <Text style={styles.friendsModalCardTitle}>Arkadaş Listesi</Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => setFriendsListModalVisible(false)}
+                                    style={styles.friendsModalCardClose}
+                                >
+                                    <Ionicons name="close" size={20} color="#888" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Divider */}
+                            <View style={styles.friendsModalDivider} />
+
+                            {/* Subtitle */}
+                            <Text style={styles.friendsModalCardSubtitle}>
+                                {friend?.name || friend?.informations?.name || 'Kullanıcı'} adlı kişinin {friendsList.length || 0} arkadaşı
+                            </Text>
+
+                            {/* Search Bar */}
+                            <View style={styles.friendsModalSearchContainer}>
+                                <Ionicons name="search-outline" size={16} color="#999" style={{ marginRight: 8 }} />
+                                <TextInput
+                                    style={styles.friendsModalSearchInput}
+                                    placeholder="Ara"
+                                    placeholderTextColor="#999"
+                                    value={searchQuery}
+                                    onChangeText={setSearchQuery}
+                                />
+                                {searchQuery.length > 0 && (
+                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                        <Ionicons name="close-circle" size={16} color="#999" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {/* Friends List */}
+                            {loadingFriends ? (
+                                <View style={styles.friendsModalLoadingContainer}>
+                                    <Ionicons name="sync-outline" size={24} color="#25D220" />
+                                    <Text style={styles.friendsModalLoadingText}>Yükleniyor...</Text>
+                                </View>
+                            ) : filteredFriendsList.length > 0 ? (
+                                <FlatList
+                                    data={filteredFriendsList}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item }) => (
+                                        <View style={styles.friendsModalListItem}>
+                                            {/* Avatar */}
+                                            <View style={styles.friendsModalListItemAvatarContainer}>
+                                                {item.profilePicture ? (
+                                                    <FastImage
+                                                        source={{
+                                                            uri: item.profilePicture,
+                                                            priority: FastImage.priority.normal,
+                                                            cache: FastImage.cacheControl.immutable
+                                                        }}
+                                                        style={styles.friendsModalListItemAvatar}
+                                                    />
+                                                ) : (
+                                                    <View style={styles.friendsModalListItemAvatarPlaceholder}>
+                                                        <Text style={styles.friendsModalListItemInitial}>
+                                                            {(item.name || '').charAt(0).toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            {/* User info */}
+                                            <View style={styles.friendsModalListItemInfo}>
+                                                <Text style={styles.friendsModalListItemName} numberOfLines={1} ellipsizeMode="tail">
+                                                    {item.name}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    )}
+                                    showsVerticalScrollIndicator={false}
+                                    initialNumToRender={10}
+                                    contentContainerStyle={{ paddingBottom: 10 }}
+                                />
+                            ) : searchQuery.length > 0 ? (
+                                <View style={styles.friendsModalEmptyContainer}>
+                                    <Ionicons name="search-outline" size={40} color="#DDDDDD" />
+                                    <Text style={styles.friendsModalEmptyText}>
+                                        "{searchQuery}" için sonuç bulunamadı
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View style={styles.friendsModalEmptyContainer}>
+                                    <Ionicons name="people-outline" size={40} color="#DDDDDD" />
+                                    <Text style={styles.friendsModalEmptyText}>
+                                        Henüz arkadaş eklenmemiş
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </TouchableWithoutFeedback>
+                </TouchableOpacity>
+            </Modal>
+        );
+    };
+
+    const checkVerificationStatus = async () => {
+        if (!friend?.id) return;
+
+        try {
+            // verificationUtils.js içindeki checkUserVerification fonksiyonunu kullan
+            const verificationResult = await checkUserVerification(friend.id);
+
+            setVerificationStatus({
+                hasBlueTick: verificationResult.hasBlueTick,
+                hasGreenTick: verificationResult.hasGreenTick
+            });
+        } catch (error) {
+            console.error('Doğrulama durumu kontrol hatası:', error);
+            setVerificationStatus({
+                hasBlueTick: false,
+                hasGreenTick: false
+            });
+        }
     };
 
     return (
@@ -919,7 +1400,16 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                     <TouchableOpacity style={styles.backButton} onPress={onClose}>
                         <Ionicons name="arrow-back" size={24} color="#333" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>{informations?.username || friend.name}</Text>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={styles.headerTitle}>{informations?.username || friend.name}</Text>
+                        <VerificationBadge
+                            hasBlueTick={verificationStatus.hasBlueTick}
+                            hasGreenTick={verificationStatus.hasGreenTick}
+                            size={18}
+                            style={styles.verificationBadge}
+                            showTooltip={false}
+                        />
+                    </View>
                     <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
                         <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
                     </TouchableOpacity>
@@ -929,18 +1419,26 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                     <View style={styles.privateProfileContainer}>
                         <View style={styles.profileTopSection}>
                             <View style={styles.profileImageContainer}>
-                                <FastImage
-                                    source={getProfileImageSource(friend)}
-                                    style={styles.profileImage}
-                                    resizeMode={FastImage.resizeMode.cover}
-                                />
+                                <TouchableOpacity
+                                    onPress={handleProfileImagePress}
+                                    activeOpacity={0.8}
+                                >
+                                    <FastImage
+                                        source={getProfileImageSource(friend)}
+                                        style={styles.profileImage}
+                                        resizeMode={FastImage.resizeMode.cover}
+                                    />
+                                </TouchableOpacity>
                             </View>
 
                             <View style={styles.statsContainer}>
-                                <View style={styles.statCard}>
+                                <TouchableOpacity
+                                    style={styles.statCard}
+                                    onPress={handleFriendsCountPress}
+                                >
                                     <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
                                     <Text style={styles.statLabel}>Arkadaş</Text>
-                                </View>
+                                </TouchableOpacity>
                                 <View style={styles.statCard}>
                                     <Text style={styles.statNumber}>-</Text>
                                     <Text style={styles.statLabel}>Paylaşım</Text>
@@ -949,13 +1447,24 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         </View>
 
                         <View style={styles.profileInfo}>
-                            <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                            <View style={styles.nameContainer}>
+                                <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                <VerificationBadge
+                                    hasBlueTick={verificationStatus.hasBlueTick}
+                                    hasGreenTick={verificationStatus.hasGreenTick}
+                                    size={18}
+                                    style={styles.nameVerificationBadge}
+                                    showTooltip={false}
+                                />
+                            </View>
                         </View>
 
                         <View style={styles.actionButtonsRow}>
                             <TouchableOpacity
                                 style={buttonConfig.primary.style}
-                                onPress={buttonConfig.primary.onPress}
+                                onPress={() => {
+                                    buttonConfig.primary.onPress();
+                                }}
                                 disabled={buttonConfig.primary.disabled || loading}
                             >
                                 <Text style={buttonConfig.primary.textStyle}>
@@ -991,18 +1500,26 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                         <View style={styles.profileHeader}>
                             <View style={styles.profileTopSection}>
                                 <View style={styles.profileImageContainer}>
-                                    <FastImage
-                                        source={getProfileImageSource(friend)}
-                                        style={styles.profileImage}
-                                        resizeMode={FastImage.resizeMode.cover}
-                                    />
+                                    <TouchableOpacity
+                                        onPress={handleProfileImagePress}
+                                        activeOpacity={0.8}
+                                    >
+                                        <FastImage
+                                            source={getProfileImageSource(friend)}
+                                            style={styles.profileImage}
+                                            resizeMode={FastImage.resizeMode.cover}
+                                        />
+                                    </TouchableOpacity>
                                 </View>
 
                                 <View style={styles.statsContainer}>
-                                    <View style={styles.statCard}>
+                                    <TouchableOpacity
+                                        style={styles.statCard}
+                                        onPress={handleFriendsCountPress}
+                                    >
                                         <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
                                         <Text style={styles.statLabel}>Arkadaş</Text>
-                                    </View>
+                                    </TouchableOpacity>
                                     <View style={styles.statCard}>
                                         <Text style={styles.statNumber}>{posts.length}</Text>
                                         <Text style={styles.statLabel}>Paylaşım</Text>
@@ -1011,7 +1528,16 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                             </View>
 
                             <View style={styles.profileInfo}>
-                                <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                <View style={styles.nameContainer}>
+                                    <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                    <VerificationBadge
+                                        hasBlueTick={verificationStatus.hasBlueTick}
+                                        hasGreenTick={verificationStatus.hasGreenTick}
+                                        size={18}
+                                        style={styles.nameVerificationBadge}
+                                        showTooltip={false}
+                                    />
+                                </View>
                                 {friend.bio && friend.bio !== "undefined" && (
                                     <Text style={styles.bioText}>{friend.bio}</Text>
                                 )}
@@ -1020,7 +1546,9 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                             <View style={styles.actionButtonsRow}>
                                 <TouchableOpacity
                                     style={buttonConfig.primary.style}
-                                    onPress={buttonConfig.primary.onPress}
+                                    onPress={() => {
+                                        buttonConfig.primary.onPress();
+                                    }}
                                     disabled={buttonConfig.primary.disabled || loading}
                                 >
                                     <Text style={buttonConfig.primary.textStyle}>
@@ -1092,6 +1620,10 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                                         numColumns={3}
                                         scrollEnabled={false}
                                         contentContainerStyle={styles.postsGrid}
+                                        removeClippedSubviews={false}
+                                        maxToRenderPerBatch={9}
+                                        initialNumToRender={9}
+                                        windowSize={10}
                                     />
                                 ) : (
                                     <View style={styles.emptyContainer}>
@@ -1113,6 +1645,10 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                                             numColumns={3}
                                             scrollEnabled={false}
                                             contentContainerStyle={styles.postsGrid}
+                                            removeClippedSubviews={false}
+                                            maxToRenderPerBatch={9}
+                                            initialNumToRender={9}
+                                            windowSize={10}
                                         />
                                     ) : (
                                         <View style={styles.emptyContainer}>
@@ -1146,6 +1682,9 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
             )}
 
             {selectedPost && renderDetailModal()}
+            {renderProfileImageModal()}
+            {renderFriendsListModal()}
+            <Toast />
         </Modal>
     );
 };
@@ -1165,11 +1704,15 @@ const styles = StyleSheet.create({
     backButton: {
         padding: 8,
     },
+    headerTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
         color: '#333',
-        flex: 1,
         marginLeft: 8,
     },
     menuButton: {
@@ -1188,6 +1731,12 @@ const styles = StyleSheet.create({
     },
     profileImageContainer: {
         marginRight: 20,
+        shadowColor: '#25D220',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+        borderRadius: 50,
     },
     profileImage: {
         width: 100,
@@ -1215,6 +1764,10 @@ const styles = StyleSheet.create({
     },
     profileInfo: {
         marginBottom: 16,
+    },
+    nameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     name: {
         fontSize: 16,
@@ -1484,6 +2037,193 @@ const styles = StyleSheet.create({
     shareButtonText: {
         color: '#333',
         fontWeight: '600',
+    },
+    profileImageModalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1000,
+    },
+    profileImageModalOverlay: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    profileImageModalContent: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+    },
+    profileImageModalImage: {
+        width: Dimensions.get('window').width * 0.9,
+        height: Dimensions.get('window').width * 0.9,
+        borderRadius: 20,
+    },
+    profileImageModalCloseButton: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        padding: 10,
+        zIndex: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 20,
+    },
+    friendsModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    friendsModalCard: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        width: '85%',
+        maxHeight: '70%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        elevation: 5,
+        overflow: 'hidden',
+    },
+    friendsModalCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+    },
+    friendsModalCardHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    friendsModalCardTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+        marginLeft: 8,
+    },
+    friendsModalCardClose: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    friendsModalDivider: {
+        height: 1,
+        backgroundColor: '#EFEFEF',
+        marginHorizontal: 0,
+    },
+    friendsModalCardSubtitle: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 12,
+        marginHorizontal: 16,
+        marginBottom: 16,
+    },
+    friendsModalSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        marginHorizontal: 16,
+        marginBottom: 16,
+    },
+    friendsModalSearchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#333',
+        padding: 0,
+        height: 20,
+    },
+    friendsModalLoadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+    },
+    friendsModalLoadingText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+        marginTop: 10,
+    },
+    friendsModalListItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+        backgroundColor: 'transparent',
+    },
+    friendsModalListItemAvatarContainer: {
+        position: 'relative',
+        marginRight: 12,
+    },
+    friendsModalListItemAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(37, 210, 32, 0.2)',
+    },
+    friendsModalListItemAvatarPlaceholder: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F0F0F0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(37, 210, 32, 0.2)',
+    },
+    friendsModalListItemInitial: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#757575',
+    },
+    friendsModalListItemInfo: {
+        flex: 1,
+    },
+    friendsModalListItemName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 2,
+    },
+    friendsModalEmptyContainer: {
+        padding: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    friendsModalEmptyText: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginTop: 12,
+    },
+    verificationBadge: {
+        marginLeft: 4,
+        alignSelf: 'center',
+        transform: [{ translateY: 0 }]
+    },
+    nameVerificationBadge: {
+        marginLeft: 8,
+        transform: [{ translateY: -1 }]
     },
 });
 

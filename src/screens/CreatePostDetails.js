@@ -14,7 +14,8 @@ import {
     Keyboard,
     TouchableWithoutFeedback,
     Modal,
-    ActivityIndicator
+    ActivityIndicator,
+    StatusBar
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import LocationPicker from '../components/LocationPicker';
@@ -29,6 +30,7 @@ import * as MediaLibrary from 'expo-media-library';
 const { width } = Dimensions.get('window');
 const IMAGE_HEIGHT = width / 2;
 const MAX_INPUT_HEIGHT = 150; // Maksimum açıklama alanı yüksekliği
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 const CreatePostDetails = ({ route, navigation }) => {
     const { image } = route.params;
@@ -193,16 +195,10 @@ const CreatePostDetails = ({ route, navigation }) => {
         setLocation({
             name: selectedLocation.name,
             address: selectedLocation.address,
-            coords: {
-                latitude: selectedLocation.latitude,
-                longitude: selectedLocation.longitude
-            }
+            latitude: selectedLocation.latitude,
+            longitude: selectedLocation.longitude
         });
         setShowLocationPicker(false);
-    };
-
-    const handleEditImage = () => {
-        navigation.navigate('ImageEditor', { imageUri: image });
     };
 
     useEffect(() => {
@@ -220,242 +216,299 @@ const CreatePostDetails = ({ route, navigation }) => {
     }, []);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
-            >
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()}>
-                        <Ionicons name="arrow-back" size={24} color="#000" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Yeni Gönderi</Text>
-                    <TouchableOpacity
-                        onPress={handleShare}
-                        style={[styles.shareButton, !image && styles.shareButtonDisabled]}
-                        disabled={!image || isLoading}
-                    >
-                        {isLoading ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                            <Text style={styles.shareButtonText}>Paylaş</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
+        <>
+            <StatusBar barStyle="dark-content" backgroundColor="#fff" translucent={true} />
+            <View style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: STATUSBAR_HEIGHT,
+                backgroundColor: '#fff',
+                zIndex: 9999
+            }} />
+            <SafeAreaView style={[styles.container, { paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0 }]}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.container}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
+                >
+                    {/* Header */}
+                    <View style={[styles.header, { marginTop: Platform.OS === 'android' ? 0 : 0 }]}>
+                        <TouchableOpacity onPress={() => navigation.goBack()}>
+                            <Ionicons name="arrow-back" size={24} color="#000" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Yeni Gönderi</Text>
+                        <TouchableOpacity
+                            onPress={handleShare}
+                            style={[styles.shareButton, !image && styles.shareButtonDisabled]}
+                            disabled={!image || isLoading}
+                        >
+                            {isLoading ? (
+                                <ActivityIndicator color="#fff" size="small" />
+                            ) : (
+                                <Text style={styles.shareButtonText}>Paylaş</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <ScrollView
-                        bounces={false}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Görsel Önizleme */}
-                        <View style={styles.imageContainer}>
-                            <Image
-                                source={{ uri: image }}
-                                style={styles.image}
-                                resizeMode="cover"
-                            />
-                            <LinearGradient
-                                colors={['rgba(0,0,0,0.4)', 'transparent', 'transparent', 'rgba(0,0,0,0.4)']}
-                                style={styles.imageOverlay}
-                            >
-                                <View style={styles.imageHeader}>
-                                    <TouchableOpacity
-                                        style={styles.imageButton}
-                                        onPress={handleEditImage}
-                                    >
-                                        <MaterialIcons name="edit" size={22} color="#fff" />
-                                        <Text style={styles.imageButtonText}>Düzenle</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.imageFooter}>
-                                    <View style={styles.imageInfo}>
-                                        <MaterialIcons name="photo-camera" size={16} color="#fff" />
-                                        <Text style={styles.imageInfoText}>Orijinal</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        style={styles.imageButton}
-                                        onPress={() => navigation.goBack()}
-                                    >
-                                        <MaterialIcons name="photo-library" size={22} color="#fff" />
-                                        <Text style={styles.imageButtonText}>Değiştir</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </LinearGradient>
-                        </View>
-
-                        {/* İçerik Alanı */}
-                        <View style={styles.contentContainer}>
-                            {/* Açıklama */}
-                            <View style={styles.inputContainer}>
-                                <TextInput
-                                    style={[
-                                        styles.input,
-                                        {
-                                            minHeight: 60,
-                                            maxHeight: MAX_INPUT_HEIGHT
-                                        }
-                                    ]}
-                                    placeholder="Bir açıklama ekle..."
-                                    value={description}
-                                    onChangeText={setDescription}
-                                    multiline
-                                    maxLength={2200}
-                                    placeholderTextColor="#666"
-                                    onContentSizeChange={handleContentSizeChange}
-                                    scrollEnabled={true}
-                                />
-                                <Text style={styles.charCount}>
-                                    {description.length}/2200
-                                </Text>
-                            </View>
-
-                            {/* Etiketler */}
-                            <View style={styles.tagsContainer}>
-                                <View style={styles.tagInput}>
-                                    <Text style={styles.hashTag}>#</Text>
-                                    <TextInput
-                                        style={styles.tagInputField}
-                                        placeholder="Etiket ekle"
-                                        value={currentTag}
-                                        onChangeText={text => setCurrentTag(text.replace(/\s+/g, ''))}
-                                        onSubmitEditing={handleAddTag}
-                                        returnKeyType="done"
-                                        maxLength={30}
-                                        placeholderTextColor="#666"
-                                        autoCapitalize="none"
-                                    />
-                                </View>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    style={styles.tagsScroll}
-                                    keyboardShouldPersistTaps="handled"
-                                >
-                                    {tags.map((tag, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={styles.tag}
-                                            onPress={() => handleRemoveTag(tag)}
-                                        >
-                                            <Text style={styles.tagText}>#{tag}</Text>
-                                            <Ionicons name="close-circle" size={16} color="#666" />
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* Konum */}
-                            <TouchableOpacity
-                                style={styles.optionButton}
-                                onPress={() => setShowLocationPicker(true)}
-                            >
-                                <MaterialIcons name="location-on" size={24} color="#666" />
-                                <Text style={styles.optionText}>
-                                    {location ? location.name : 'Konum ekle'}
-                                </Text>
-                                <MaterialIcons name="chevron-right" size={24} color="#666" />
-                            </TouchableOpacity>
-
-                            {/* Konum seçici modal */}
-                            <Modal
-                                visible={showLocationPicker}
-                                animationType="slide"
-                                transparent={true}
-                                onRequestClose={() => setShowLocationPicker(false)}
-                            >
-                                <TouchableOpacity
-                                    style={styles.modalOverlay}
-                                    activeOpacity={1}
-                                    onPress={() => setShowLocationPicker(false)}
-                                >
-                                    <TouchableOpacity
-                                        style={styles.modalContent}
-                                        activeOpacity={1}
-                                        onPress={e => e.stopPropagation()}
-                                    >
-                                        <LocationPicker
-                                            onSelect={handleLocationSelect}
-                                            onClose={() => setShowLocationPicker(false)}
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <ScrollView
+                            bounces={false}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            {/* Görsel Önizleme */}
+                            <View style={styles.postPreviewContainer}>
+                                {/* Post Header */}
+                                <View style={styles.postHeader}>
+                                    <View style={styles.userInfoContainer}>
+                                        <Image
+                                            source={{
+                                                uri: userData?.profilePicture || 'https://ui-avatars.com/api/?name=Kullanıcı&background=random'
+                                            }}
+                                            style={styles.userAvatar}
                                         />
-                                    </TouchableOpacity>
-                                </TouchableOpacity>
-                            </Modal>
+                                        <View style={styles.userTextContainer}>
+                                            <Text style={styles.userName}>{userData?.informations?.name || 'Kullanıcı Adı'}</Text>
+                                        </View>
+                                    </View>
+                                </View>
 
-                            {/* Gizlilik Ayarı */}
-                            <View style={styles.privacyContainer}>
-                                <Text style={styles.privacyTitle}>Kimler görebilir?</Text>
+                                {/* Post Image */}
+                                <View style={styles.imageContainer}>
+                                    <Image
+                                        source={{ uri: image }}
+                                        style={styles.image}
+                                        resizeMode="cover"
+                                    />
+                                    <LinearGradient
+                                        colors={['rgba(0,0,0,0.4)', 'transparent', 'transparent', 'rgba(0,0,0,0.4)']}
+                                        style={styles.imageOverlay}
+                                    >
+                                        <View style={styles.imageFooter}>
+                                            <View style={styles.imageInfo}>
+                                                <MaterialIcons name="photo-camera" size={16} color="#fff" />
+                                                <Text style={styles.imageInfoText}>Orijinal</Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={styles.imageButton}
+                                                onPress={() => navigation.goBack()}
+                                            >
+                                                <MaterialIcons name="photo-library" size={22} color="#fff" />
+                                                <Text style={styles.imageButtonText}>Değiştir</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </LinearGradient>
+                                </View>
+
+                                {/* Post Footer Preview */}
+                                <View style={styles.postFooterPreview}>
+                                    <View style={styles.postActions}>
+                                        <View style={styles.actionButton}>
+                                            <MaterialIcons name="favorite-border" size={24} color="#666" />
+                                            <Text style={styles.actionText}>0</Text>
+                                        </View>
+                                        <View style={styles.actionButton}>
+                                            <MaterialIcons name="chat-bubble-outline" size={24} color="#666" />
+                                            <Text style={styles.actionText}>0</Text>
+                                        </View>
+                                        <View style={styles.actionButton}>
+                                            <MaterialIcons name="share" size={24} color="#666" />
+                                        </View>
+                                    </View>
+                                    <Text style={styles.postPreviewDescription}>
+                                        {description ? description : 'Açıklama buraya gelecek...'}
+                                    </Text>
+                                    {location && (
+                                        <View style={styles.locationPreview}>
+                                            <MaterialIcons name="location-on" size={16} color="#2196F3" />
+                                            <Text style={styles.locationText}>{location.name}</Text>
+                                        </View>
+                                    )}
+                                    {tags.length > 0 && (
+                                        <View style={styles.tagsPreview}>
+                                            {tags.map((tag, index) => (
+                                                <Text key={index} style={styles.tagPreview}>#{tag}</Text>
+                                            ))}
+                                        </View>
+                                    )}
+                                    <Text style={styles.timePreview}>Şimdi</Text>
+                                </View>
+                            </View>
+
+                            {/* İçerik Alanı */}
+                            <View style={styles.contentContainer}>
+                                <Text style={styles.sectionTitle}>Gönderi Detayları</Text>
+
+                                {/* Açıklama */}
+                                <View style={styles.inputContainer}>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            {
+                                                minHeight: 60,
+                                                maxHeight: MAX_INPUT_HEIGHT
+                                            }
+                                        ]}
+                                        placeholder="Bir açıklama ekle..."
+                                        value={description}
+                                        onChangeText={setDescription}
+                                        multiline
+                                        maxLength={2200}
+                                        placeholderTextColor="#666"
+                                        onContentSizeChange={handleContentSizeChange}
+                                        scrollEnabled={true}
+                                    />
+                                    <Text style={styles.charCount}>
+                                        {description.length}/2200
+                                    </Text>
+                                </View>
+
+                                {/* Etiketler */}
+                                <View style={styles.tagsContainer}>
+                                    <View style={styles.tagInput}>
+                                        <Text style={styles.hashTag}>#</Text>
+                                        <TextInput
+                                            style={styles.tagInputField}
+                                            placeholder="Etiket ekle"
+                                            value={currentTag}
+                                            onChangeText={text => setCurrentTag(text.replace(/\s+/g, ''))}
+                                            onSubmitEditing={handleAddTag}
+                                            returnKeyType="done"
+                                            maxLength={30}
+                                            placeholderTextColor="#666"
+                                            autoCapitalize="none"
+                                        />
+                                    </View>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        style={styles.tagsScroll}
+                                        keyboardShouldPersistTaps="handled"
+                                    >
+                                        {tags.map((tag, index) => (
+                                            <TouchableOpacity
+                                                key={index}
+                                                style={styles.tag}
+                                                onPress={() => handleRemoveTag(tag)}
+                                            >
+                                                <Text style={styles.tagText}>#{tag}</Text>
+                                                <Ionicons name="close-circle" size={16} color="#666" />
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+
+                                {/* Konum */}
                                 <TouchableOpacity
-                                    style={[
-                                        styles.privacyOption,
-                                        isPublic && styles.privacyOptionSelected
-                                    ]}
-                                    onPress={() => setIsPublic(true)}
+                                    style={styles.optionButton}
+                                    onPress={() => setShowLocationPicker(true)}
                                 >
-                                    <View style={styles.privacyIconContainer}>
+                                    <MaterialIcons name="location-on" size={24} color="#666" />
+                                    <Text style={styles.optionText}>
+                                        {location ? location.name : 'Konum ekle'}
+                                    </Text>
+                                    <MaterialIcons name="chevron-right" size={24} color="#666" />
+                                </TouchableOpacity>
+
+                                {/* Konum seçici modal */}
+                                <Modal
+                                    visible={showLocationPicker}
+                                    animationType="slide"
+                                    transparent={true}
+                                    onRequestClose={() => setShowLocationPicker(false)}
+                                >
+                                    <TouchableOpacity
+                                        style={styles.modalOverlay}
+                                        activeOpacity={1}
+                                        onPress={() => setShowLocationPicker(false)}
+                                    >
+                                        <TouchableOpacity
+                                            style={styles.modalContent}
+                                            activeOpacity={1}
+                                            onPress={e => e.stopPropagation()}
+                                        >
+                                            <LocationPicker
+                                                onSelect={handleLocationSelect}
+                                                onClose={() => setShowLocationPicker(false)}
+                                            />
+                                        </TouchableOpacity>
+                                    </TouchableOpacity>
+                                </Modal>
+
+                                {/* Gizlilik Ayarı */}
+                                <View style={styles.privacyContainer}>
+                                    <Text style={styles.privacyTitle}>Kimler görebilir?</Text>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.privacyOption,
+                                            isPublic && styles.privacyOptionSelected
+                                        ]}
+                                        onPress={() => setIsPublic(true)}
+                                    >
+                                        <View style={styles.privacyIconContainer}>
+                                            <MaterialIcons
+                                                name="public"
+                                                size={24}
+                                                color={isPublic ? "#2196F3" : "#666"}
+                                            />
+                                        </View>
+                                        <View style={styles.privacyTextContainer}>
+                                            <Text style={[
+                                                styles.privacyOptionTitle,
+                                                isPublic && styles.privacyOptionTitleSelected
+                                            ]}>
+                                                Herkese Açık
+                                            </Text>
+                                            <Text style={styles.privacyOptionDescription}>
+                                                Tüm kullanıcılar bu gönderiyi görebilir
+                                            </Text>
+                                        </View>
                                         <MaterialIcons
-                                            name="public"
+                                            name={isPublic ? "radio-button-checked" : "radio-button-unchecked"}
                                             size={24}
                                             color={isPublic ? "#2196F3" : "#666"}
                                         />
-                                    </View>
-                                    <View style={styles.privacyTextContainer}>
-                                        <Text style={[
-                                            styles.privacyOptionTitle,
-                                            isPublic && styles.privacyOptionTitleSelected
-                                        ]}>
-                                            Herkese Açık
-                                        </Text>
-                                        <Text style={styles.privacyOptionDescription}>
-                                            Tüm kullanıcılar bu gönderiyi görebilir
-                                        </Text>
-                                    </View>
-                                    <MaterialIcons
-                                        name={isPublic ? "radio-button-checked" : "radio-button-unchecked"}
-                                        size={24}
-                                        color={isPublic ? "#2196F3" : "#666"}
-                                    />
-                                </TouchableOpacity>
+                                    </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={[
-                                        styles.privacyOption,
-                                        !isPublic && styles.privacyOptionSelected
-                                    ]}
-                                    onPress={() => setIsPublic(false)}
-                                >
-                                    <View style={styles.privacyIconContainer}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.privacyOption,
+                                            !isPublic && styles.privacyOptionSelected
+                                        ]}
+                                        onPress={() => setIsPublic(false)}
+                                    >
+                                        <View style={styles.privacyIconContainer}>
+                                            <MaterialIcons
+                                                name="people"
+                                                size={24}
+                                                color={!isPublic ? "#2196F3" : "#666"}
+                                            />
+                                        </View>
+                                        <View style={styles.privacyTextContainer}>
+                                            <Text style={[
+                                                styles.privacyOptionTitle,
+                                                !isPublic && styles.privacyOptionTitleSelected
+                                            ]}>
+                                                Sadece Arkadaşlar
+                                            </Text>
+                                            <Text style={styles.privacyOptionDescription}>
+                                                Yalnızca arkadaş listenizde olanlar görebilir
+                                            </Text>
+                                        </View>
                                         <MaterialIcons
-                                            name="people"
+                                            name={!isPublic ? "radio-button-checked" : "radio-button-unchecked"}
                                             size={24}
                                             color={!isPublic ? "#2196F3" : "#666"}
                                         />
-                                    </View>
-                                    <View style={styles.privacyTextContainer}>
-                                        <Text style={[
-                                            styles.privacyOptionTitle,
-                                            !isPublic && styles.privacyOptionTitleSelected
-                                        ]}>
-                                            Sadece Arkadaşlar
-                                        </Text>
-                                        <Text style={styles.privacyOptionDescription}>
-                                            Yalnızca arkadaş listenizde olanlar görebilir
-                                        </Text>
-                                    </View>
-                                    <MaterialIcons
-                                        name={!isPublic ? "radio-button-checked" : "radio-button-unchecked"}
-                                        size={24}
-                                        color={!isPublic ? "#2196F3" : "#666"}
-                                    />
-                                </TouchableOpacity>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                        </View>
-                    </ScrollView>
-                </TouchableWithoutFeedback>
-            </KeyboardAvoidingView>
-        </SafeAreaView>
+                        </ScrollView>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        </>
     );
 };
 
@@ -490,9 +543,48 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 15,
     },
+    postPreviewContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+        marginHorizontal: 8,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+    },
+    postHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+    },
+    userInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    userAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 8,
+    },
+    userTextContainer: {
+        flexDirection: 'column',
+    },
+    userName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
+    },
     imageContainer: {
-        width: width,
-        height: IMAGE_HEIGHT,
+        width: '100%',
+        height: width,
         backgroundColor: '#f5f5f5',
         position: 'relative',
     },
@@ -509,14 +601,23 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
     },
-    imageHeader: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-    },
     imageFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    imageInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    imageInfoText: {
+        color: '#fff',
+        marginLeft: 6,
+        fontSize: 12,
     },
     imageButton: {
         flexDirection: 'row',
@@ -532,21 +633,77 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
     },
-    imageInfo: {
+    postFooterPreview: {
+        padding: 12,
+    },
+    postActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+        marginBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+        paddingBottom: 12,
     },
-    imageInfoText: {
-        color: '#fff',
-        marginLeft: 6,
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    actionText: {
+        fontSize: 14,
+        color: '#666',
+        marginLeft: 4,
+    },
+    postPreviewDescription: {
+        fontSize: 15,
+        color: '#333',
+        marginBottom: 8,
+    },
+    locationPreview: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    locationText: {
+        fontSize: 14,
+        color: '#2196F3',
+        marginLeft: 4,
+    },
+    tagsPreview: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    tagPreview: {
+        fontSize: 14,
+        color: '#2196F3',
+        marginRight: 8,
+    },
+    timePreview: {
         fontSize: 12,
+        color: '#999',
+        marginTop: 8,
     },
     contentContainer: {
         padding: 16,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        marginHorizontal: 8,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 16,
     },
     inputContainer: {
         marginBottom: 8,

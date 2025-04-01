@@ -27,7 +27,8 @@ const LocationPicker = ({ onSelect, onClose }) => {
         setIsLoading(true);
         try {
             let results = [];
-            const GOOGLE_PLACES_API_KEY = 'AIzaSyBPIoyzn8DG0lPvGD6M7yINMHLv9RYLe64';
+            // Google Cloud Console'dan alınan API anahtarı
+            const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
             // Önce konum izni kontrolü yap
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -40,10 +41,15 @@ const LocationPicker = ({ onSelect, onClose }) => {
                     location.coords.longitude
                 );
 
+                // Konum bilgisi boş ise varsayılan değer kullan
+                const locationName = placeInfo && (placeInfo.district || placeInfo.city)
+                    ? `${placeInfo.district || ''}, ${placeInfo.city || ''}`.trim()
+                    : 'Konumunuz';
+
                 results.push({
                     id: 'current-location',
-                    name: 'Mevcut Konum',
-                    address: `${placeInfo.district}, ${placeInfo.city}`,
+                    name: locationName,
+                    address: placeInfo ? `${placeInfo.district || ''}, ${placeInfo.city || ''}`.trim() : 'Mevcut konum',
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude
                 });
@@ -55,7 +61,7 @@ const LocationPicker = ({ onSelect, onClose }) => {
             const response = await fetch(textSearchUrl);
             const data = await response.json();
 
-            if (data.results) {
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
                 const placeResults = data.results.slice(0, 15).map((place, index) => {
                     return {
                         id: `search-${index}`,
@@ -71,6 +77,31 @@ const LocationPicker = ({ onSelect, onClose }) => {
                 });
 
                 results = [...results, ...placeResults];
+            } else {
+                // API yanıtı başarısız olduğunda alternatif arama yöntemi kullan
+                try {
+                    // Geocoding API ile arama yap
+                    const geocodingUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_PLACES_API_KEY}&language=tr&region=tr`;
+                    const geocodingResponse = await fetch(geocodingUrl);
+                    const geocodingData = await geocodingResponse.json();
+
+                    if (geocodingData.status === 'OK' && geocodingData.results && geocodingData.results.length > 0) {
+                        const geocodingResults = geocodingData.results.slice(0, 15).map((place, index) => {
+                            return {
+                                id: `geocoding-${index}`,
+                                name: place.formatted_address.split(',')[0],
+                                address: place.formatted_address,
+                                latitude: place.geometry.location.lat,
+                                longitude: place.geometry.location.lng,
+                                types: place.types
+                            };
+                        });
+
+                        results = [...results, ...geocodingResults];
+                    }
+                } catch (geocodingError) {
+                    console.error('Geocoding API hatası:', geocodingError);
+                }
             }
 
             setSearchResults(results);
@@ -110,43 +141,49 @@ const LocationPicker = ({ onSelect, onClose }) => {
         }
     };
 
-    const renderLocationItem = ({ item }) => (
-        <TouchableOpacity
-            style={styles.locationItem}
-            onPress={() => handleSelect(item)}
-        >
-            <View style={styles.locationIcon}>
-                <Ionicons
-                    name={getIconForPlaceType(item.types)}
-                    size={24}
-                    color="#2196F3"
-                />
-            </View>
-            <View style={styles.locationInfo}>
-                <Text style={styles.locationName} numberOfLines={1}>
-                    {item.name}
-                </Text>
-                <View style={styles.locationDetails}>
-                    <Text style={styles.locationAddress} numberOfLines={1}>
-                        {item.address}
+    const renderLocationItem = ({ item }) => {
+        // Değerleri önceden hazırla
+        const ratingText = item.rating ? `${item.rating}` : '';
+        const ratingsCountText = item.userRatingsTotal ? ` (${item.userRatingsTotal})` : '';
+
+        return (
+            <TouchableOpacity
+                style={styles.locationItem}
+                onPress={() => handleSelect(item)}
+            >
+                <View style={styles.locationIcon}>
+                    <Ionicons
+                        name={getIconForPlaceType(item.types)}
+                        size={24}
+                        color="#2196F3"
+                    />
+                </View>
+                <View style={styles.locationInfo}>
+                    <Text style={styles.locationName} numberOfLines={1}>
+                        {item.name}
                     </Text>
-                    {item.distance && (
-                        <Text style={styles.locationDistance}>
-                            • {item.distance}
+                    <View style={styles.locationDetails}>
+                        <Text style={styles.locationAddress} numberOfLines={1}>
+                            {item.address}
                         </Text>
+                        {item.distance && (
+                            <Text style={styles.locationDistance}>
+                                {`• ${item.distance}`}
+                            </Text>
+                        )}
+                    </View>
+                    {item.rating && (
+                        <View style={styles.ratingContainer}>
+                            <Ionicons name="star" size={14} color="#FFC107" />
+                            <Text style={styles.ratingText}>
+                                {ratingText}{ratingsCountText}
+                            </Text>
+                        </View>
                     )}
                 </View>
-                {item.rating && (
-                    <View style={styles.ratingContainer}>
-                        <Ionicons name="star" size={14} color="#FFC107" />
-                        <Text style={styles.ratingText}>
-                            {item.rating} ({item.userRatingsTotal})
-                        </Text>
-                    </View>
-                )}
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -172,13 +209,23 @@ const LocationPicker = ({ onSelect, onClose }) => {
             {isLoading ? (
                 <ActivityIndicator style={styles.loader} color="#25D220" />
             ) : (
-                <FlatList
-                    data={searchResults}
-                    renderItem={renderLocationItem}
-                    keyExtractor={(item) => item.id}
-                    style={styles.list}
-                    ItemSeparatorComponent={() => <View style={styles.separator} />}
-                />
+                <>
+                    {searchQuery.length >= 2 && searchResults.length === 0 ? (
+                        <View style={styles.noResultsContainer}>
+                            <Ionicons name="search-outline" size={48} color="#ccc" />
+                            <Text style={styles.noResultsText}>Sonuç bulunamadı</Text>
+                            <Text style={styles.noResultsSubText}>Farklı bir arama terimi deneyin</Text>
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={searchResults}
+                            renderItem={renderLocationItem}
+                            keyExtractor={(item) => item.id}
+                            style={styles.list}
+                            ItemSeparatorComponent={() => <View style={styles.separator} />}
+                        />
+                    )}
+                </>
             )}
         </View>
     );
@@ -253,8 +300,9 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         flex: 1,
-        height: 40,
-        color: '#000',
+        height: 48,
+        fontSize: 16,
+        color: '#333',
     },
     loader: {
         marginTop: 20,
@@ -317,7 +365,24 @@ const styles = StyleSheet.create({
         color: '#999',
         fontSize: 12,
         marginLeft: 4,
-    }
+    },
+    noResultsContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    noResultsText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#666',
+        marginTop: 16,
+    },
+    noResultsSubText: {
+        fontSize: 14,
+        color: '#999',
+        marginTop: 8,
+    },
 });
 
 export default LocationPicker; 

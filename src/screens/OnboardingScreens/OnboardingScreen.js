@@ -10,70 +10,82 @@ import {
     Animated,
     Easing,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
+// Onboarding'in tamamlandığını kontrol etmek için kullanacağımız anahtar
+const ONBOARDING_COMPLETED_KEY = 'onboarding_completed';
+
 const slides = [
     {
-        id: '1',
-        title: 'Konum Takibi',
-        description: 'Arkadaşlarının konumunu takip et ve kendi konumunu paylaş.',
-        image: require('../../../assets/images/onboarding/ana-sayfa.png')
-    },
-    {
         id: '2',
-        title: 'Etkinlikler',
-        description: 'Çevrende gerçekleşen etkinlikleri keşfet ve katıl.',
-        image: require('../../../assets/images/onboarding/akis.png')
+        image: require('../../../assets/images/onboarding/2.png')
     },
     {
         id: '3',
-        title: 'Sosyal Ağ',
-        description: 'Arkadaşlarınla iletişimde kal ve anılarını paylaş.',
-        image: require('../../../assets/images/onboarding/arkadaslar.png')
+        image: require('../../../assets/images/onboarding/3.png')
     },
     {
         id: '4',
-        title: 'Güvenle İletişim',
-        description: 'Arkadaşlarınla iletişimde kal ve dilediğin gibi mesajlaş.',
-        image: require('../../../assets/images/onboarding/sohbet-ekranı.png')
+        image: require('../../../assets/images/onboarding/4.png')
     },
     {
         id: '5',
-        title: 'Şehir Kaşifi',
-        description: 'Şehirleri keşfedin, ilerlemenizi görün, şehirlerin kralı olun.',
-        image: require('../../../assets/images/onboarding/sehirler.png')
+        image: require('../../../assets/images/onboarding/5.png')
+    },
+    {
+        id: '6',
+        image: require('../../../assets/images/onboarding/6.png')
+    },
+    {
+        id: '7',
+        image: require('../../../assets/images/onboarding/7.png')
+    },
+    {
+        id: '8',
+        image: require('../../../assets/images/onboarding/8.png')
+    },
+    {
+        id: '9',
+        image: require('../../../assets/images/onboarding/9.png')
+    },
+    {
+        id: '10',
+        image: require('../../../assets/images/onboarding/10.png')
     }
 ];
 
 const OnboardingScreen = ({ navigation, route }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const flatListRef = useRef(null);
-    const scrollX = useRef(new Animated.Value(0)).current;
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const translateY = useRef(new Animated.Value(50)).current;
-    const scaleAnim = useRef(new Animated.Value(1)).current;
-
-    // Nokta animasyonu için yeni bir Animated.Value ekleyelim
-    const dotPosition = Animated.divide(scrollX, width);
-
     // Settings'den gelip gelmediğini kontrol edelim
     const isFromSettings = route.params?.fromSettings;
 
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const flatListRef = useRef(null);
+    const scrollX = useRef(new Animated.Value(0)).current;
+    const fadeAnim = useRef(new Animated.Value(isFromSettings ? 1 : 0)).current;
+    const translateY = useRef(new Animated.Value(isFromSettings ? 0 : 50)).current;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
     useEffect(() => {
-        // Başlangıç animasyonu
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 1000,
-                useNativeDriver: true,
-            }),
-            Animated.timing(translateY, {
-                toValue: 0,
-                duration: 1000,
-                useNativeDriver: true,
-            }),
-        ]).start();
+        // Eğer ayarlardan geliyorsa, animasyonu atlayalım ya da çok daha hızlı yapalım
+        if (isFromSettings) {
+            // Animasyon zaten başlangıç değerlerinde olacak
+        } else {
+            // Normal başlangıç animasyonu
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 800, // Daha hızlı animasyon
+                    useNativeDriver: true,
+                }),
+                Animated.timing(translateY, {
+                    toValue: 0,
+                    duration: 800, // Daha hızlı animasyon
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
 
         // Next butonu için sürekli animasyon
         Animated.loop(
@@ -94,76 +106,64 @@ const OnboardingScreen = ({ navigation, route }) => {
         ).start();
     }, []);
 
+    // Görselleri önceden yükle
+    useEffect(() => {
+        // İlk görsel için scroll'u sıfırla
+        if (flatListRef.current) {
+            flatListRef.current.scrollToOffset({ offset: 0, animated: false });
+            setCurrentIndex(0);
+        }
+    }, []);
+
     const renderItem = ({ item, index }) => {
         const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
 
         const scale = scrollX.interpolate({
             inputRange,
-            outputRange: [0.8, 1, 0.8],
+            outputRange: [0.9, 1, 0.9],
         });
 
         const opacity = scrollX.interpolate({
             inputRange,
-            outputRange: [0.4, 1, 0.4],
+            outputRange: [0.6, 1, 0.6],
         });
 
         return (
             <View style={styles.slide}>
-                <Animated.View
-                    style={[
-                        {
-                            transform: [{ scale }],
-                            opacity,
-                        },
-                    ]}
-                >
-                    <Image
-                        source={item.image}
-                        style={styles.image}
-                        resizeMode="contain"
-                    />
-                    <View style={styles.titleContainer}>
-                        <Text style={styles.title}>{item.title}</Text>
-                        <View style={styles.titleLine} />
-                    </View>
-                    <Text style={styles.description}>{item.description}</Text>
-                </Animated.View>
+                {/* Arka plan görseli */}
+                <Image
+                    source={item.image}
+                    style={styles.fullScreenImage}
+                    resizeMode="cover"
+                />
             </View>
         );
     };
 
+    // İlerleme çubuğu için sabit stillendirilmiş noktaları gösterelim (animasyonsuz)
     const renderDots = () => {
         return (
-            <View style={styles.dotContainer}>
-                {/* Arka plan noktaları */}
+            <View style={styles.dotsWrapper}>
                 {slides.map((_, index) => (
                     <View
                         key={index}
                         style={[
                             styles.dot,
-                            {
-                                backgroundColor: '#D3D3D3'
-                            }
+                            index === currentIndex ? styles.activeDot : styles.inactiveDot
                         ]}
                     />
                 ))}
-
-                {/* Animasyonlu aktif nokta */}
-                <Animated.View
-                    style={[
-                        styles.activeDot,
-                        {
-                            transform: [{
-                                translateX: Animated.multiply(
-                                    dotPosition,
-                                    9 // (dot width + marginHorizontal * 2) = 6 + (3 * 2)
-                                )
-                            }]
-                        }
-                    ]}
-                />
             </View>
         );
+    };
+
+    // Onboarding tamamlandığını kaydetme fonksiyonu
+    const markOnboardingAsCompleted = async () => {
+        try {
+            await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
+        } catch (error) {
+            console.error('Onboarding durumu kaydedilirken hata oluştu:', error);
+        }
     };
 
     const handleNext = () => {
@@ -184,7 +184,10 @@ const OnboardingScreen = ({ navigation, route }) => {
                     duration: 500,
                     useNativeDriver: true,
                 }),
-            ]).start(() => {
+            ]).start(async () => {
+                // Onboarding'i tamamlandı olarak işaretle
+                await markOnboardingAsCompleted();
+
                 // Settings'den geldiyse geri dönelim, değilse login'e gidelim
                 if (isFromSettings) {
                     navigation.goBack();
@@ -207,7 +210,10 @@ const OnboardingScreen = ({ navigation, route }) => {
                 duration: 300,
                 useNativeDriver: true,
             }),
-        ]).start(() => {
+        ]).start(async () => {
+            // Onboarding'i tamamlandı olarak işaretle
+            await markOnboardingAsCompleted();
+
             // Settings'den geldiyse geri dönelim, değilse login'e gidelim
             if (isFromSettings) {
                 navigation.goBack();
@@ -228,10 +234,6 @@ const OnboardingScreen = ({ navigation, route }) => {
             ]}
         >
             <View style={styles.header}>
-                <Image
-                    source={require('../../../assets/images/logo.png')}
-                    style={styles.logo}
-                />
                 <TouchableOpacity
                     onPress={handleSkip}
                     style={styles.skipButton}
@@ -247,6 +249,10 @@ const OnboardingScreen = ({ navigation, route }) => {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                initialScrollIndex={0} // İlk sayfadan başla
+                initialNumToRender={2} // İlk 2 sayfayı hemen renderla
+                maxToRenderPerBatch={3} // Daha fazla öğeyi aynı anda renderla
+                windowSize={5} // Daha büyük bir pencere boyutu
                 onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
                     { useNativeDriver: true }
@@ -281,108 +287,86 @@ const OnboardingScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FF',
+        backgroundColor: '#000',
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end', // Sadece atla butonu olduğu için sağa yaslı
         alignItems: 'center',
         paddingHorizontal: 24,
         paddingTop: 60,
         paddingBottom: 20,
-    },
-    logo: {
-        width: 80,
-        height: 32,
-        resizeMode: 'contain',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
     },
     skipButton: {
-        padding: 8,
+        padding: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        borderRadius: 20,
+        paddingHorizontal: 20,
     },
     skipText: {
-        color: '#000',
+        color: '#FFF',
         fontSize: 16,
         fontWeight: '700',
     },
     slide: {
         width,
-        alignItems: 'center',
-        padding: 20,
-        paddingTop: 0,
+        height,
+        position: 'relative',
     },
-    image: {
-        width: width * 1.7,
-        height: height * 0.60,
+    fullScreenImage: {
+        width,
+        height,
         position: 'absolute',
-        top: -30,
-        left: -width * 0.45,
-        resizeMode: 'contain',
+        top: 0,
+        left: 0,
     },
-    titleContainer: {
-        marginBottom: 10,
-        marginTop: height * 0.6,
-        paddingHorizontal: 20,
-        width: '100%',
-        alignItems: 'flex-start',
-    },
-    title: {
-        fontSize: 42,
-        fontWeight: '700',
-        color: '#000',
-        letterSpacing: -1,
-    },
-    titleLine: {
-        height: 4,
-        width: 40,
-        backgroundColor: '#000',
-        marginTop: 8,
-        borderRadius: 2,
-    },
-    description: {
-        fontSize: 16,
-        color: '#666',
-        lineHeight: 24,
-        opacity: 0.8,
-        marginTop: 10,
+    overlay: {
+        display: 'none', // Gölge katmanını gizliyoruz
     },
     footer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 40,
-        paddingBottom: 40,
+        paddingHorizontal: 30,
+        paddingBottom: 50,
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
     },
-    dotContainer: {
+    dotsWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        position: 'relative',
     },
     dot: {
-        height: 6,
-        width: 6,
-        borderRadius: 3,
+        height: 8,
+        width: 8,
+        borderRadius: 4,
         marginHorizontal: 3,
-        backgroundColor: '#D3D3D3',
     },
     activeDot: {
-        height: 6,
-        width: 20,
-        borderRadius: 3,
-        backgroundColor: '#000',
-        position: 'absolute',
-        left: 0,
-        marginHorizontal: 3,
+        backgroundColor: '#FFF',
+        width: 24, // Aktif nokta daha uzun
+    },
+    inactiveDot: {
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
     },
     nextButton: {
         width: 54,
         height: 54,
         borderRadius: 27,
-        backgroundColor: '#000',
+        backgroundColor: '#FFF',
         justifyContent: 'center',
         alignItems: 'center',
     },
     nextButtonText: {
-        color: '#FFF',
+        color: '#000',
         fontSize: 14,
         fontWeight: '600',
     }
