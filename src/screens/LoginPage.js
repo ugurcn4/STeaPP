@@ -10,15 +10,23 @@ import {
     StatusBar,
     SafeAreaView,
     ActivityIndicator,
-    ScrollView
+    ScrollView,
+    Image
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { login, socialLogin } from '../redux/userSlice';
 import Toast from 'react-native-toast-message';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { getAuth, OAuthProvider, signInWithCredential } from 'firebase/auth';
+import { getAuth, OAuthProvider, signInWithCredential, FacebookAuthProvider } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Facebook from 'expo-auth-session/providers/facebook';
+import { ResponseType } from 'expo-auth-session';
+import { useGoogleAuth, handleGoogleLogin } from '../services/googleAuthService';
+
+// WebBrowser'ın auth session'ını kurulumu
+WebBrowser.maybeCompleteAuthSession();
 
 const LoginPage = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -27,6 +35,17 @@ const LoginPage = ({ navigation }) => {
     const [showPassword, setShowPassword] = useState(false);
     const loginStatus = useSelector((state) => state.user.status);
     const dispatch = useDispatch();
+
+    // Google kimlik doğrulama hook'u
+    const googleAuth = useGoogleAuth();
+    const googlePromptAsync = googleAuth.promptAsync;
+
+    // Facebook kimlik doğrulama hook'u
+    const [fbRequest, fbResponse, fbPromptAsync] = Facebook.useAuthRequest({
+        clientId: '3564202470553580',
+        responseType: ResponseType.Token,
+        redirectUri: 'https://auth.expo.io/@ugurrucr/steapp'
+    });
 
     useEffect(() => {
         setLoading(loginStatus === 'loading');
@@ -38,6 +57,60 @@ const LoginPage = ({ navigation }) => {
         });
     }, [navigation]);
 
+    // Google yanıtını işleme 
+    useEffect(() => {
+        if (googleAuth.response?.type === 'success') {
+            try {
+                // Code flow için 'authentication.accessToken' yerine 'code' kullanılır
+                const authData = googleAuth.response;
+                if (authData?.authentication?.accessToken) {
+                    // Token akışı için
+                    handleGoogleLogin(authData.authentication.accessToken, dispatch);
+                } else if (authData?.authentication?.idToken) {
+                    // ID token varsa
+                    handleGoogleLogin(authData.authentication.idToken, dispatch);
+                } else if (authData.code) {
+                    // Normalde code'u sunucuya gönderip token almanız gerekir
+                    // Burada demo amaçlı doğrudan token gibi kullanıyoruz
+                    handleGoogleLogin(authData.code, dispatch);
+                } else {
+                    console.error('Google yanıtında token bilgisi bulunamadı');
+                    Toast.show({
+                        type: 'error',
+                        text1: 'Giriş Hatası',
+                        text2: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
+                        position: 'top',
+                    });
+                }
+            } catch (error) {
+                console.error('Google yanıt işleme hatası:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: 'Giriş Hatası',
+                    text2: 'Google ile giriş yapılırken hata oluştu',
+                    position: 'top',
+                });
+            }
+        } else if (googleAuth.response?.type === 'error') {
+            console.error('Google giriş hatası:', googleAuth.response.error);
+            Toast.show({
+                type: 'error',
+                text1: 'Giriş Hatası',
+                text2: 'Google ile giriş yapılamadı',
+                position: 'top',
+            });
+        }
+    }, [googleAuth.response, dispatch]);
+
+    // Facebook yanıtını işleme
+    useEffect(() => {
+        if (fbResponse?.type === 'success') {
+            const { authentication } = fbResponse;
+            handleFacebookSignIn(authentication.accessToken);
+        }
+    }, [fbResponse]);
+
+    // Email/şifre ile giriş
     const handleLogin = async () => {
         if (!email || !password) {
             Toast.show({
@@ -65,8 +138,78 @@ const LoginPage = ({ navigation }) => {
         }
     };
 
+    // Facebook ile giriş
+    const handleFacebookSignIn = async (token) => {
+        try {
+            const auth = getAuth();
+            const credential = FacebookAuthProvider.credential(token);
+            const userCredential = await signInWithCredential(auth, credential);
+            const firebaseToken = await userCredential.user.getIdToken();
+
+            const userDataToStore = {
+                token: firebaseToken,
+                user: {
+                    uid: userCredential.user.uid,
+                    email: userCredential.user.email,
+                    emailVerified: userCredential.user.emailVerified,
+                    username: userCredential.user.displayName || userCredential.user.email?.split('@')[0]
+                }
+            };
+
+            await AsyncStorage.setItem('userToken', firebaseToken);
+            await AsyncStorage.setItem('userData', JSON.stringify(userDataToStore));
+            await dispatch(socialLogin(userDataToStore)).unwrap();
+
+            Toast.show({
+                type: 'success',
+                text1: 'Başarılı',
+                text2: 'Facebook hesabınız ile giriş yapıldı',
+                position: 'top',
+            });
+        } catch (error) {
+            console.error('Facebook giriş hatası:', error);
+            Toast.show({
+                type: 'error',
+                text1: 'Giriş Başarısız',
+                text2: 'Facebook ile giriş yapılırken bir hata oluştu',
+                position: 'top',
+            });
+        }
+    };
+
+    // Sosyal giriş işleyicisi
     const handleSocialLogin = async (provider) => {
-        if (provider === 'Apple') {
+        if (provider === 'Google') {
+            try {
+
+                // iOS için özel parametreler
+                const promptParams = Platform.OS === 'ios'
+                    ? { showInRecents: true }
+                    : { showInRecents: true, useProxy: true };
+
+
+                // Google giriş işlemini başlat
+                const result = await googlePromptAsync(promptParams);
+
+            } catch (error) {
+                console.error('Google giriş başlatma hatası:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: 'Giriş Hatası',
+                    text2: 'Google girişi başlatılamadı',
+                    position: 'top',
+                });
+            }
+        } else if (provider === 'Facebook') {
+            // Facebook ile giriş için yakında bilgisi gösterilecek
+            Toast.show({
+                type: 'info',
+                text1: 'Bilgi',
+                text2: 'Facebook ile giriş yakında kullanılacaktır',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+        } else if (provider === 'Apple') {
             try {
                 const credential = await AppleAuthentication.signInAsync({
                     requestedScopes: [
@@ -211,15 +354,21 @@ const LoginPage = ({ navigation }) => {
                                 <TouchableOpacity
                                     style={[styles.socialButton, { backgroundColor: '#4267B2' }]}
                                     onPress={() => handleSocialLogin('Facebook')}
+                                    disabled={false}
                                 >
-                                    <Ionicons name="logo-facebook" size={22} color="#FFF" />
+                                    <Ionicons name="logo-facebook" size={26} color="#FFF" />
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.socialButton, { backgroundColor: '#DB4437' }]}
+                                    style={[styles.socialButton, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DADCE0' }]}
                                     onPress={() => handleSocialLogin('Google')}
+                                    disabled={!googleAuth.request}
                                 >
-                                    <Ionicons name="logo-google" size={22} color="#FFF" />
+                                    <Image
+                                        source={require('../../assets/images/google-logo.png')}
+                                        style={{ width: 40, height: 40 }}
+                                        resizeMode="contain"
+                                    />
                                 </TouchableOpacity>
 
                                 {Platform.OS === 'ios' && (
@@ -227,7 +376,7 @@ const LoginPage = ({ navigation }) => {
                                         style={[styles.socialButton, { backgroundColor: '#000000' }]}
                                         onPress={() => handleSocialLogin('Apple')}
                                     >
-                                        <Ionicons name="logo-apple" size={22} color="#FFF" />
+                                        <Ionicons name="logo-apple" size={26} color="#FFF" />
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -359,7 +508,7 @@ const styles = StyleSheet.create({
     },
     signInButton: {
         height: 56,
-        backgroundColor: '#FF6B6B',
+        backgroundColor: '#34A853',
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -367,16 +516,17 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 8,
     },
     signInButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 1,
     },
     registerContainer: {
         flexDirection: 'row',
@@ -450,22 +600,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginVertical: 24,
-        gap: 20,
+        gap: 24,
     },
     socialButton: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 3,
         },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-        elevation: 4,
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 6,
     },
 });
 

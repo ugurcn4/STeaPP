@@ -336,9 +336,12 @@ TaskManager.defineTask(BACKGROUND_DRAWING_TASK, async ({ data, error }) => {
         if (tempPoints.length >= 10) { // 5'ten 10'a çıkardık
 
             try {
-                // Kesikli çizim sorununu çözmek için, son 2 noktayı bir sonraki gruba aktaracağız
-                const pointsToSave = tempPoints.slice(0, -2); // Son iki nokta hariç tümünü kaydet
-                const pointsToKeep = tempPoints.slice(-2); // Son iki noktayı sakla
+                // Kesikli çizim sorununu çözmek için, son 3 noktayı bir sonraki gruba aktaracağız
+                const pointsToSave = tempPoints.slice(0); // Tüm noktaları kopyala
+                const pointsToKeep = tempPoints.slice(-3); // Son üç noktayı sakla
+
+                // Benzersiz bir oturum ID'si al veya oluştur
+                const sessionId = await AsyncStorage.getItem('backgroundDrawingSessionId') || new Date().toISOString();
 
                 const pathRef = collection(db, `users/${userId}/paths`);
                 await addDoc(pathRef, {
@@ -349,10 +352,15 @@ TaskManager.defineTask(BACKGROUND_DRAWING_TASK, async ({ data, error }) => {
                     city: 'Arka Planda Çizildi',
                     district: 'Bilinmeyen',
                     createdInBackground: true,
-                    backgroundDrawingSession: await AsyncStorage.getItem('backgroundDrawingSessionId') || new Date().toISOString()
+                    backgroundDrawingSession: sessionId, // Her çizim oturumu için aynı ID kullan
+                    partIndex: parseInt(await AsyncStorage.getItem('backgroundPathPartIndex') || '0') // Parça indeksi
                 });
 
-                // Geçici noktaları güncelle - sadece son iki noktayı tut
+                // Parça indeksini artır
+                const currentIndex = parseInt(await AsyncStorage.getItem('backgroundPathPartIndex') || '0');
+                await AsyncStorage.setItem('backgroundPathPartIndex', (currentIndex + 1).toString());
+
+                // Geçici noktaları güncelle - sadece son üç noktayı tut
                 await AsyncStorage.setItem('tempBackgroundPoints', JSON.stringify(pointsToKeep));
 
                 // Başarılı kayıt bilgisini sakla

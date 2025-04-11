@@ -241,6 +241,21 @@ export const toggleLikePost = async (postId, userId) => {
         const likedBy = postData.likedBy || [];
         const isLiked = likedBy.includes(userId);
 
+        // Beğeni ekleniyorsa veya kaldırılıyorsa
+        if (!isLiked) {
+            // Beğeni ekleniyor - bildirim için like kaydı oluştur
+            const likesRef = collection(db, 'likes');
+            await addDoc(likesRef, {
+                postId,
+                userId,  // beğeniyi yapan kişi
+                ownerId: postData.userId, // gönderi sahibi
+                createdAt: new Date()
+            });
+        } else {
+            // Beğeni kaldırılıyor - bildirim kaydını silmeye gerek yok
+            // İsteğe bağlı olarak burada ilgili beğeni belgesini bulup silebilirsiniz
+        }
+
         await updateDoc(postRef, {
             'stats.likes': isLiked ? currentLikes - 1 : currentLikes + 1,
             likedBy: isLiked ? arrayRemove(userId) : arrayUnion(userId)
@@ -307,8 +322,22 @@ export const addComment = async (postId, userId, comment, replyToId = null) => {
             }
         });
 
+        // Kullanıcı kendi gönderisine yorum yapmıyorsa bildirim için comments koleksiyonuna kayıt ekleyelim
+        if (userId !== postData.userId) {
+            const commentsRef = collection(db, 'comments');
+            await addDoc(commentsRef, {
+                postId,
+                userId,  // yorumu yapan kişi
+                ownerId: postData.userId, // gönderi sahibi
+                text: comment.trim(),
+                replyToId: replyToId,
+                createdAt: new Date()
+            });
+        }
+
+        // Yanıt olarak mı yoksa ana yorum olarak mı ekleniyor kontrol edelim
         if (replyToId) {
-            // Yanıt ekleme
+            // Bir yoruma yanıt veriliyor
             const updatedComments = currentComments.map(c => {
                 if (c.id === replyToId) {
                     return {
@@ -321,13 +350,13 @@ export const addComment = async (postId, userId, comment, replyToId = null) => {
 
             await updateDoc(postRef, {
                 comments: updatedComments,
-                'stats.comments': currentStats.comments + 1
+                'stats.comments': (currentStats.comments || 0) + 1
             });
         } else {
-            // Yeni yorum ekleme
+            // Ana yorum ekleniyor
             await updateDoc(postRef, {
-                comments: arrayUnion(newComment),
-                'stats.comments': currentStats.comments + 1
+                comments: [...currentComments, newComment],
+                'stats.comments': (currentStats.comments || 0) + 1
             });
         }
 

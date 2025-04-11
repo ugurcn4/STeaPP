@@ -457,32 +457,32 @@ const HomePage = ({ navigation }) => {
         <View style={styles.quickAccessContainer}>
             <TouchableOpacity
                 style={styles.quickAccessCard}
-                onPress={() => navigation.navigate('Harita')}
+                onPress={() => navigation.navigate('NearbyToilets')}
             >
-                <View style={[styles.quickAccessIcon, { backgroundColor: '#E3F2FD' }]}>
-                    <MaterialIcons name="map" size={24} color="#2196F3" />
+                <View style={[styles.quickAccessIcon, { backgroundColor: '#E1F5FE' }]}>
+                    <MaterialIcons name="wc" size={24} color="#0288D1" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Haritayı Aç</Text>
+                <Text style={styles.quickAccessTitle}>Tuvaletler</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
                 style={styles.quickAccessCard}
-                onPress={() => navigation.navigate('Arkadaşlar')}
+                onPress={() => navigation.navigate('GasStations')}
             >
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#E8F5E9' }]}>
-                    <MaterialIcons name="group" size={24} color="#4CAF50" />
+                    <MaterialIcons name="local-gas-station" size={24} color="#4CAF50" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Arkadaşlar</Text>
+                <Text style={styles.quickAccessTitle}>Yakıt İstasyonları</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
                 style={styles.quickAccessCard}
-                onPress={() => navigation.navigate('Fotoğraflar')}
+                onPress={() => navigation.navigate('Pharmacies')}
             >
-                <View style={[styles.quickAccessIcon, { backgroundColor: '#FFF3E0' }]}>
-                    <MaterialIcons name="photo-library" size={24} color="#FF9800" />
+                <View style={[styles.quickAccessIcon, { backgroundColor: '#FBE9E7' }]}>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#D84315' }}>E</Text>
                 </View>
-                <Text style={styles.quickAccessTitle}>Fotoğraflar</Text>
+                <Text style={styles.quickAccessTitle}>Eczaneler</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

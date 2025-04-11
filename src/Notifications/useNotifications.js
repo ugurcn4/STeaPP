@@ -56,10 +56,45 @@ export const useNotifications = (navigation) => {
     const loadNotificationSettings = async () => {
         try {
             dispatch(setLoading(true));
-            const savedSettings = await AsyncStorage.getItem(NOTIFICATION_SETTINGS_KEY);
 
-            if (savedSettings) {
-                dispatch(setNotificationSettings(JSON.parse(savedSettings)));
+            // Önce AsyncStorage'dan yükle (çevrimdışı çalışma için)
+            const savedSettings = await AsyncStorage.getItem(NOTIFICATION_SETTINGS_KEY);
+            let settingsData = savedSettings ? JSON.parse(savedSettings) : null;
+
+            // Eğer kullanıcı girişi yapılmışsa Firestore'dan da kontrol et (en güncel veri)
+            if (user?.id) {
+                try {
+                    const { doc, getDoc, getFirestore } = await import('firebase/firestore');
+                    const db = getFirestore();
+                    const userRef = doc(db, 'users', user.id);
+                    const userDoc = await getDoc(userRef);
+
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        // Firestore'da kayıtlı bildirim ayarları varsa onları kullan
+                        if (userData.notificationSettings) {
+                            settingsData = userData.notificationSettings;
+                            // Güncel ayarları AsyncStorage'a da kaydet
+                            await AsyncStorage.setItem(
+                                NOTIFICATION_SETTINGS_KEY,
+                                JSON.stringify(settingsData)
+                            );
+                        }
+                        // Eğer Firestore'da ayarlar yoksa ama lokalde varsa, Firestore'a kaydet
+                        else if (settingsData) {
+                            await updateDoc(userRef, {
+                                notificationSettings: settingsData
+                            });
+                        }
+                    }
+                } catch (firebaseError) {
+                    console.error('Firestore bildirim ayarları yükleme hatası:', firebaseError);
+                }
+            }
+
+            // Bulunan ayarları Redux store'a kaydet
+            if (settingsData) {
+                dispatch(setNotificationSettings(settingsData));
             }
         } catch (error) {
             dispatch(setError('Bildirim ayarları yüklenemedi'));
@@ -123,11 +158,31 @@ export const useNotifications = (navigation) => {
                 }
             }
 
+            // Redux ile yerel ayarları güncelle
             dispatch(updateNotificationSetting({ key, value }));
-            await saveNotificationSettings({
+
+            // AsyncStorage'a kaydet
+            const updatedSettings = {
                 ...settings,
                 [key]: value
-            });
+            };
+            await saveNotificationSettings(updatedSettings);
+
+            // Firestore'da kullanıcı dokümanını güncelle (eğer giriş yapmış kullanıcı varsa)
+            if (user?.id) {
+                try {
+                    const { doc, updateDoc, getFirestore } = await import('firebase/firestore');
+                    const db = getFirestore();
+                    const userRef = doc(db, 'users', user.id);
+
+                    // Bildirim ayarlarını Firestore'a kaydet
+                    await updateDoc(userRef, {
+                        notificationSettings: updatedSettings
+                    });
+                } catch (firebaseError) {
+                    console.error('Firestore bildirim ayarları kaydetme hatası:', firebaseError);
+                }
+            }
         } catch (error) {
             console.error('Bildirim ayarı değiştirme hatası:', error);
             dispatch(setError('Bildirim ayarı değiştirilemedi'));

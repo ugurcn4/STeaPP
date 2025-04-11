@@ -145,6 +145,28 @@ export const setupNotificationListeners = (navigation) => {
                     break;
                 case 'activity':
                     break;
+                case 'like':
+                    // Beğeni bildirimi için yerel bildirim göster
+                    Notifications.scheduleNotificationAsync({
+                        content: {
+                            title: "Yeni Beğeni",
+                            body: notification.request.content.body,
+                            data: data,
+                        },
+                        trigger: null,
+                    });
+                    break;
+                case 'comment':
+                    // Yorum bildirimi için yerel bildirim göster
+                    Notifications.scheduleNotificationAsync({
+                        content: {
+                            title: "Yeni Yorum",
+                            body: notification.request.content.body,
+                            data: data,
+                        },
+                        trigger: null,
+                    });
+                    break;
                 default:
             }
         }
@@ -170,6 +192,13 @@ export const setupNotificationListeners = (navigation) => {
                 case 'activity':
                     navigation?.navigate('ActivityDetails', {
                         activityId: data.activityId
+                    });
+                    break;
+                case 'like':
+                case 'comment':
+                    // Beğeni ve yorum bildirimleri için ilgili gönderi detayına yönlendir
+                    navigation?.navigate('PostDetails', {
+                        postId: data.postId
                     });
                     break;
                 default:

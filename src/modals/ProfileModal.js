@@ -14,6 +14,7 @@ import FastImage from 'react-native-fast-image';
 import FriendProfileModal from './friendProfileModal';
 import VerificationBadge from '../components/VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
+import { sendVerificationSMS, verifyPhoneNumber, isPhoneNumberVerified } from '../utils/phoneVerificationUtils';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -154,17 +155,31 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
 
         try {
             if (user) {
-                const userDoc = doc(db, 'users', user.uid);
-                await setDoc(userDoc, { phoneNumber: userInfo.phoneNumber }, { merge: true });
 
+                // Telefon numarasının doğrulanmış olup olmadığını kontrol et
+                const isVerified = await isPhoneNumberVerified(userInfo.phoneNumber);
+
+                if (!isVerified) {
+                    showToast('error', 'Hata', 'Bu telefon numarası doğrulanmamış. Lütfen önce doğrulama işlemini tamamlayın.');
+                    return;
+                }
+
+                // Doğrulanmış telefon numarasını kullanıcı belgesine kaydet
+                const userDoc = doc(db, 'users', user.uid);
+                await setDoc(userDoc, { phoneNumber: userInfo.phoneNumber, isPhoneVerified: true }, { merge: true });
+
+                // Kullanıcı verilerini güncelle
                 setUserData((prevData) => ({
                     ...prevData,
                     phoneNumber: userInfo.phoneNumber,
+                    isPhoneVerified: true
                 }));
+
                 setPhoneModalVisible(false);
                 showToast('success', 'Başarılı', 'Telefon numarası güncellendi.');
             }
         } catch (error) {
+            console.error("Telefon numarası ekleme hatası:", error);
             showToast('error', 'Hata', 'Telefon numarası güncellenirken bir hata oluştu.');
         }
     };
@@ -325,33 +340,37 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     }, [isTimerActive, timer]);
 
     const handleSendVerificationCode = async () => {
-        if (!userInfo.phoneNumber || !userInfo.phoneNumber.match(/^\d{10,}$/)) {
-            showToast('error', 'Hata', 'Geçerli bir telefon numarası girin.');
+        if (!userInfo.phoneNumber || userInfo.phoneNumber.length !== 10 || !userInfo.phoneNumber.startsWith('5')) {
+            showToast('error', 'Hata', 'Lütfen 5 ile başlayan 10 haneli geçerli bir telefon numarası girin.');
             return;
         }
 
         try {
             const response = await sendVerificationSMS(userInfo.phoneNumber);
+
             if (response.success) {
                 setVerificationStep('verify');
                 setIsTimerActive(true);
+                setTimer(60);
                 showToast('success', 'Başarılı', 'Doğrulama kodu gönderildi');
             } else {
-                showToast('error', 'Hata', response.message);
+                showToast('error', 'Hata', response.message || 'Doğrulama kodu gönderilemedi');
             }
         } catch (error) {
-            showToast('error', 'Hata', 'Doğrulama kodu gönderilemedi');
+            console.error("Doğrulama kodu gönderme hatası:", error);
+            showToast('error', 'Hata', 'Doğrulama kodu gönderilemedi, lütfen daha sonra tekrar deneyin.');
         }
     };
 
     const handleVerifyCode = async () => {
         if (!verificationCode || verificationCode.length !== 6) {
-            showToast('error', 'Hata', '6 haneli doğrulama kodunu girin');
+            showToast('error', 'Hata', 'Lütfen 6 haneli doğrulama kodunu girin');
             return;
         }
 
         try {
             const response = await verifyPhoneNumber(userInfo.phoneNumber, verificationCode);
+
             if (response.success) {
                 await handleAddPhoneNumber();
                 setVerificationStep('input');
@@ -359,10 +378,11 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 setPhoneModalVisible(false);
                 showToast('success', 'Başarılı', 'Telefon numarası doğrulandı ve eklendi');
             } else {
-                showToast('error', 'Hata', 'Doğrulama kodu hatalı');
+                showToast('error', 'Hata', response.message || 'Doğrulama kodu hatalı');
             }
         } catch (error) {
-            showToast('error', 'Hata', 'Doğrulama işlemi başarısız');
+            console.error("Doğrulama hatası:", error);
+            showToast('error', 'Hata', 'Doğrulama işlemi başarısız oldu, lütfen daha sonra tekrar deneyin.');
         }
     };
 
@@ -490,9 +510,17 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             <MaterialCommunityIcons name="phone-outline" size={24} color="#4CAF50" />
                             <View style={styles.infoContent}>
                                 <Text style={styles.infoLabel}>Telefon</Text>
-                                <Text style={styles.infoValue}>
-                                    {userInfo?.phoneNumber || 'Telefon numarası ekle'}
-                                </Text>
+                                <View style={styles.phoneInfoContainer}>
+                                    <Text style={styles.infoValue}>
+                                        {userInfo?.phoneNumber || 'Telefon numarası ekle'}
+                                    </Text>
+                                    {userInfo?.phoneNumber && userData?.isPhoneVerified && (
+                                        <View style={styles.verifiedBadge}>
+                                            <MaterialCommunityIcons name="check-circle" size={16} color="#4CAF50" />
+                                            <Text style={styles.verifiedText}>Doğrulanmış</Text>
+                                        </View>
+                                    )}
+                                </View>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
                         </TouchableOpacity>
@@ -562,16 +590,33 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
 
                         {verificationStep === 'input' ? (
                             <>
-                                <View style={styles.inputContainer}>
-                                    <MaterialCommunityIcons name="phone" size={24} color="#4CAF50" />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={userInfo.phoneNumber}
-                                        onChangeText={(text) => setUserInfo(prev => ({ ...prev, phoneNumber: text }))}
-                                        placeholder="Telefon numaranızı girin"
-                                        keyboardType="phone-pad"
-                                        placeholderTextColor="#999"
-                                    />
+                                <View style={styles.phoneInputContainer}>
+                                    <View style={styles.countryCodeContainer}>
+                                        <Text style={styles.countryCodeText}>+90</Text>
+                                    </View>
+                                    <View style={styles.phoneNumberInputContainer}>
+                                        <MaterialCommunityIcons name="phone" size={22} color="#4CAF50" />
+                                        <TextInput
+                                            style={styles.input}
+                                            value={userInfo.phoneNumber}
+                                            onChangeText={(text) => {
+                                                // Sadece sayısal değer içerdiğinden emin olalım
+                                                const numericValue = text.replace(/[^0-9]/g, '');
+                                                setUserInfo(prev => ({ ...prev, phoneNumber: numericValue }));
+                                            }}
+                                            placeholder="5XX XXX XX XX"
+                                            keyboardType="phone-pad"
+                                            placeholderTextColor="#999"
+                                            maxLength={10}
+                                        />
+                                    </View>
+                                </View>
+                                <Text style={styles.phoneInstructions}>
+                                    Lütfen 10 haneli telefon numaranızı başında 0 olmadan girin.
+                                </Text>
+
+                                <View style={styles.phoneExample}>
+                                    <Text style={styles.phoneExampleText}>Örnek: 5XX XXX XX XX</Text>
                                 </View>
 
                                 <TouchableOpacity
@@ -590,30 +635,48 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             <>
                                 <View style={styles.verificationContainer}>
                                     <Text style={styles.verificationText}>
-                                        {userInfo.phoneNumber} numarasına gönderilen 6 haneli doğrulama kodunu girin
+                                        <Text style={styles.boldText}>+90 {userInfo.phoneNumber}</Text> numarasına gönderilen 6 haneli doğrulama kodunu girin
                                     </Text>
-                                    <View style={styles.inputContainer}>
-                                        <MaterialCommunityIcons name="lock-outline" size={24} color="#4CAF50" />
+
+                                    <View style={styles.verificationCodeContainer}>
                                         <TextInput
-                                            style={styles.input}
+                                            style={styles.verificationCodeInput}
                                             value={verificationCode}
-                                            onChangeText={setVerificationCode}
-                                            placeholder="Doğrulama kodu"
+                                            onChangeText={(text) => {
+                                                // Sadece sayısal değer içerdiğinden emin olalım
+                                                const numericValue = text.replace(/[^0-9]/g, '');
+                                                setVerificationCode(numericValue);
+                                            }}
+                                            placeholder="- - - - - -"
                                             keyboardType="number-pad"
                                             maxLength={6}
                                             placeholderTextColor="#999"
+                                            textAlign="center"
                                         />
                                     </View>
-                                    {isTimerActive && (
-                                        <Text style={styles.timerText}>
-                                            Kalan süre: {timer} saniye
+
+                                    <View style={styles.verificationTip}>
+                                        <MaterialCommunityIcons name="information-outline" size={16} color="#666" />
+                                        <Text style={styles.verificationTipText}>
+                                            Size SMS ile gönderilen 6 haneli kodu girin
                                         </Text>
+                                    </View>
+
+                                    {isTimerActive && (
+                                        <View style={styles.timerContainer}>
+                                            <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
+                                            <Text style={styles.timerText}>
+                                                Kalan süre: {timer} saniye
+                                            </Text>
+                                        </View>
                                     )}
+
                                     {!isTimerActive && (
                                         <TouchableOpacity
                                             style={styles.resendButton}
                                             onPress={handleSendVerificationCode}
                                         >
+                                            <MaterialCommunityIcons name="refresh" size={16} color="#4CAF50" />
                                             <Text style={styles.resendButtonText}>Kodu Tekrar Gönder</Text>
                                         </TouchableOpacity>
                                     )}
@@ -985,6 +1048,7 @@ const styles = StyleSheet.create({
     saveButton: {
         overflow: 'hidden',
         borderRadius: 12,
+        marginTop: 10,
     },
     saveButtonGradient: {
         padding: 15,
@@ -1002,24 +1066,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     largeImage: {
-        width: 300, // Resmin genişliği
-        height: 300, // Resmin yüksekliği
-        borderRadius: 10, // İstenirse köşeleri yuvarlatabilirsiniz
+        width: 300,
+        height: 300,
+        borderRadius: 10,
     },
     closeButtonImage: {
         position: 'absolute',
-        right: -15, // Sağdan mesafe
-        top: -20, // Üstten mesafe
-        backgroundColor: '#FF4C4C', // Kırmızı arka plan
-        padding: 12, // Butonun iç paddingi
-        borderRadius: 100, // Yuvarlatılmış köşeler
+        right: -15,
+        top: -20,
+        backgroundColor: '#FF4C4C',
+        padding: 12,
+        borderRadius: 100,
         alignItems: 'center',
         justifyContent: 'center',
     },
     closeButtonTextImage: {
-        color: 'white', // Kırmızı butonda beyaz renk
+        color: 'white',
         fontWeight: 'bold',
-        fontSize: 20, // Daha büyük bir "X" ikonu
+        fontSize: 20,
     },
     uploadingContainer: {
         marginTop: 20,
@@ -1043,28 +1107,35 @@ const styles = StyleSheet.create({
         borderRadius: 5,
     },
     verificationContainer: {
-        marginBottom: 20,
+        marginBottom: 16,
     },
     verificationText: {
         fontSize: 14,
         color: '#666',
         textAlign: 'center',
         marginBottom: 16,
+        lineHeight: 20,
     },
     timerText: {
         fontSize: 14,
         color: '#666',
-        textAlign: 'center',
-        marginTop: 8,
+        marginLeft: 8,
+        fontWeight: '500',
     },
     resendButton: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 8,
+        justifyContent: 'center',
+        marginTop: 16,
+        padding: 12,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 8,
     },
     resendButtonText: {
         color: '#4CAF50',
         fontSize: 14,
         fontWeight: '600',
+        marginLeft: 6,
     },
     characterCount: {
         fontSize: 12,
@@ -1115,6 +1186,117 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         alignSelf: 'center',
         transform: [{ translateY: -1 }]
+    },
+    phoneInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    verifiedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+        padding: 4,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 4,
+    },
+    verifiedText: {
+        fontSize: 12,
+        color: '#666',
+        marginLeft: 4,
+    },
+    phoneInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        marginBottom: 16,
+        overflow: 'hidden',
+    },
+    countryCodeContainer: {
+        paddingHorizontal: 12,
+        paddingVertical: 14,
+        backgroundColor: '#4CAF50',
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+    },
+    countryCodeText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    phoneNumberInputContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8f9fa',
+        paddingHorizontal: 12,
+        paddingVertical: 14,
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+    },
+    phoneInstructions: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    phoneExample: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f0f0f0',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+    },
+    phoneExampleText: {
+        fontSize: 14,
+        color: '#666',
+    },
+    verificationCodeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 16,
+        marginVertical: 16,
+    },
+    verificationCodeInput: {
+        flex: 1,
+        fontSize: 24,
+        letterSpacing: 8,
+        color: '#2c3e50',
+        textAlign: 'center',
+        fontWeight: '600',
+    },
+    timerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
+        marginBottom: 8,
+        padding: 12,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 8,
+    },
+    verificationTip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+        padding: 10,
+        backgroundColor: '#FFF9C4',
+        borderRadius: 8,
+    },
+    verificationTipText: {
+        fontSize: 13,
+        color: '#666',
+        marginLeft: 6,
+    },
+    boldText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#2c3e50',
     },
 });
 

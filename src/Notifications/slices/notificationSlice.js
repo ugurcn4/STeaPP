@@ -6,6 +6,8 @@ const initialState = {
         newFriends: true,
         messages: true,
         activityUpdates: true,
+        likeNotifications: true,
+        commentNotifications: true,
         emailNotifications: false,
     },
     loading: false,
@@ -24,6 +26,8 @@ const notificationSlice = createSlice({
                 state.settings.newFriends = false;
                 state.settings.messages = false;
                 state.settings.activityUpdates = false;
+                state.settings.likeNotifications = false;
+                state.settings.commentNotifications = false;
                 state.settings.emailNotifications = false;
             }
         },

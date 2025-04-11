@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -20,6 +20,8 @@ const PrivacyPage = ({ navigation }) => {
     const [password, setPassword] = useState('');
     const [deleteReason, setDeleteReason] = useState('');
     const [loading, setLoading] = useState(false);
+    const [secureTextEntry, setSecureTextEntry] = useState(true);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
 
     useEffect(() => {
         if (!user?.uid) {
@@ -47,6 +49,22 @@ const PrivacyPage = ({ navigation }) => {
         };
 
         fetchSettings();
+
+        // Klavye olaylarını dinle
+        const keyboardDidShowListener = Keyboard.addListener(
+            'keyboardDidShow',
+            () => setKeyboardVisible(true)
+        );
+        const keyboardDidHideListener = Keyboard.addListener(
+            'keyboardDidHide',
+            () => setKeyboardVisible(false)
+        );
+
+        return () => {
+            // Abonelikleri temizle
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
     }, [user]);
 
     const getSettingMessage = (setting, value) => {
@@ -441,100 +459,131 @@ const PrivacyPage = ({ navigation }) => {
                     onRequestClose={() => setDeleteModalVisible(false)}
                     statusBarTranslucent={true}
                 >
-                    <TouchableOpacity
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={styles.modalContainer}
-                        activeOpacity={1}
-                        onPress={() => setDeleteModalVisible(false)}
                     >
                         <TouchableOpacity
+                            style={styles.modalContainer}
                             activeOpacity={1}
-                            onPress={(e) => e.stopPropagation()}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                setDeleteModalVisible(false);
+                            }}
                         >
-                            <View style={[
-                                styles.modalContent,
-                                {
-                                    backgroundColor: '#FFFFFF'
-                                }
-                            ]}>
-                                <View style={styles.modalHeader}>
-                                    <Ionicons name="warning-outline" size={40} color="#FF3B30" />
-                                    <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
-                                        Hesabınızı Silmek İstediğinize Emin misiniz?
-                                    </Text>
-                                    <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
-                                        Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinecektir.
-                                    </Text>
-                                </View>
+                            <View
+                                style={[
+                                    styles.modalView,
+                                    {
+                                        backgroundColor: '#FFFFFF',
+                                        marginTop: keyboardVisible ? 30 : 'auto'
+                                    }
+                                ]}
+                            >
+                                <TouchableOpacity
+                                    activeOpacity={1}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    <View style={[
+                                        styles.modalContent,
+                                        {
+                                            backgroundColor: '#FFFFFF'
+                                        }
+                                    ]}>
+                                        <View style={styles.modalHeader}>
+                                            <Ionicons name="warning-outline" size={40} color="#FF3B30" />
+                                            <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
+                                                Hesabınızı Silmek İstediğinize Emin misiniz?
+                                            </Text>
+                                            <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
+                                                Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinecektir.
+                                            </Text>
+                                        </View>
 
-                                <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                                    Silme Nedeni
-                                </Text>
-                                <ScrollView style={styles.reasonsContainer}>
-                                    {deleteReasons.map((reason, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={[
-                                                styles.reasonButton,
-                                                { backgroundColor: currentTheme.cardBackground },
-                                                deleteReason === reason && styles.selectedReason
-                                            ]}
-                                            onPress={() => setDeleteReason(reason)}
-                                        >
-                                            <View style={styles.reasonContent}>
-                                                <View style={styles.radioButton}>
-                                                    <View style={deleteReason === reason ? styles.radioButtonSelected : null} />
-                                                </View>
-                                                <Text style={[
-                                                    styles.reasonText,
-                                                    { color: currentTheme.text }
-                                                ]}>
-                                                    {reason}
-                                                </Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-
-                                <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                                    Hesap Şifreniz
-                                </Text>
-                                <TextInput
-                                    style={[styles.passwordInput, {
-                                        backgroundColor: currentTheme.cardBackground,
-                                        borderColor: currentTheme.border,
-                                        color: currentTheme.text
-                                    }]}
-                                    placeholder="Şifrenizi girin"
-                                    placeholderTextColor={currentTheme.textSecondary}
-                                    secureTextEntry
-                                    value={password}
-                                    onChangeText={setPassword}
-                                />
-
-                                <View style={styles.modalButtons}>
-                                    <TouchableOpacity
-                                        style={[styles.modalButton, styles.cancelButton]}
-                                        onPress={() => setDeleteModalVisible(false)}
-                                    >
-                                        <Text style={styles.cancelButtonText}>Vazgeç</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.modalButton,
-                                            styles.confirmButton,
-                                            !password || !deleteReason && styles.disabledButton
-                                        ]}
-                                        onPress={handleDeleteAccount}
-                                        disabled={loading || !password || !deleteReason}
-                                    >
-                                        <Text style={styles.confirmButtonText}>
-                                            {loading ? 'Siliniyor...' : 'Hesabı Sil'}
+                                        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                                            Silme Nedeni
                                         </Text>
-                                    </TouchableOpacity>
-                                </View>
+                                        <ScrollView style={styles.reasonsContainer}>
+                                            {deleteReasons.map((reason, index) => (
+                                                <TouchableOpacity
+                                                    key={index}
+                                                    style={[
+                                                        styles.reasonButton,
+                                                        { backgroundColor: currentTheme.cardBackground },
+                                                        deleteReason === reason && styles.selectedReason
+                                                    ]}
+                                                    onPress={() => setDeleteReason(reason)}
+                                                >
+                                                    <View style={styles.reasonContent}>
+                                                        <View style={styles.radioButton}>
+                                                            <View style={deleteReason === reason ? styles.radioButtonSelected : null} />
+                                                        </View>
+                                                        <Text style={[
+                                                            styles.reasonText,
+                                                            { color: currentTheme.text }
+                                                        ]}>
+                                                            {reason}
+                                                        </Text>
+                                                    </View>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+
+                                        <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                                            Hesap Şifreniz
+                                        </Text>
+                                        <View style={styles.passwordContainer}>
+                                            <TextInput
+                                                style={[styles.passwordInput, {
+                                                    backgroundColor: currentTheme.cardBackground,
+                                                    borderColor: currentTheme.border,
+                                                    color: currentTheme.text,
+                                                    flex: 1
+                                                }]}
+                                                placeholder="Şifrenizi girin"
+                                                placeholderTextColor={currentTheme.textSecondary}
+                                                secureTextEntry={secureTextEntry}
+                                                value={password}
+                                                onChangeText={setPassword}
+                                            />
+                                            <TouchableOpacity
+                                                style={styles.eyeIcon}
+                                                onPress={() => setSecureTextEntry(!secureTextEntry)}
+                                            >
+                                                <Ionicons
+                                                    name={secureTextEntry ? "eye-outline" : "eye-off-outline"}
+                                                    size={24}
+                                                    color={currentTheme.text}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.modalButtons}>
+                                            <TouchableOpacity
+                                                style={[styles.modalButton, styles.cancelButton]}
+                                                onPress={() => setDeleteModalVisible(false)}
+                                            >
+                                                <Text style={styles.cancelButtonText}>Vazgeç</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.modalButton,
+                                                    styles.confirmButton,
+                                                    !password || !deleteReason && styles.disabledButton
+                                                ]}
+                                                onPress={handleDeleteAccount}
+                                                disabled={loading || !password || !deleteReason}
+                                            >
+                                                <Text style={styles.confirmButtonText}>
+                                                    {loading ? 'Siliniyor...' : 'Hesabı Sil'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
                             </View>
                         </TouchableOpacity>
-                    </TouchableOpacity>
+                    </KeyboardAvoidingView>
                 </Modal>
 
                 <Text style={[styles.note, { color: currentTheme.text }]}>
@@ -636,13 +685,19 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         backgroundColor: 'rgba(0,0,0,0.8)',
     },
+    modalView: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+    },
     modalContent: {
         width: '100%',
         backgroundColor: '#FFFFFF',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
-        maxHeight: '90%',
+        paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     },
     modalHeader: {
         alignItems: 'center',
@@ -705,14 +760,24 @@ const styles = StyleSheet.create({
         fontSize: 15,
         flex: 1,
     },
+    passwordContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
     passwordInput: {
         borderWidth: 1,
         borderRadius: 12,
         padding: 16,
-        marginBottom: 24,
         fontSize: 16,
         backgroundColor: '#FFFFFF',
         borderColor: 'rgba(0,0,0,0.1)',
+    },
+    eyeIcon: {
+        position: 'absolute',
+        right: 16,
+        height: '100%',
+        justifyContent: 'center',
     },
     modalButtons: {
         flexDirection: 'row',

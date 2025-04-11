@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform, Image, FlatList, Dimensions } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../redux/userSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -27,6 +27,8 @@ const SettingsPage = ({ navigation }) => {
     const dispatch = useDispatch();
     const theme = useSelector((state) => state.theme.theme);
     const [searchQuery, setSearchQuery] = useState('');
+    const scrollRef = useRef(null);
+    const [currentCardIndex, setCurrentCardIndex] = useState(0);
 
     const sections = [
         {
@@ -36,6 +38,12 @@ const SettingsPage = ({ navigation }) => {
             iconColor: '#1E90FF',
             isNew: true,
             badge: "Yeni Özellik"
+        },
+        {
+            title: "Dil Seçenekleri",
+            iconName: "language-outline",
+            screen: "DilSecenekleri",
+            iconColor: '#8A2BE2'
         },
         {
             title: "Bildirimler",
@@ -91,6 +99,78 @@ const SettingsPage = ({ navigation }) => {
         section.title.toLowerCase().trim().includes(searchQuery.toLowerCase().trim())
     );
 
+    // Davet kartları
+    const inviteCards = [
+        {
+            id: 1,
+            title: "Arkadaşını Davet Et",
+            description: "Arkadaşlarını davet et ve birlikte STeaPP deneyimini keşfedin!",
+            iconName: "people-circle-outline",
+            color: "#FF69B4",
+            screen: "Arkadaşlarımı Davet Et",
+            buttonText: "Davet Et"
+        },
+        {
+            id: 2,
+            title: "100 Puan Kazan",
+            description: "Her başarılı davet için 100 puan! Puanlarını ödüllerle değiştir.",
+            iconName: "trophy-outline",
+            color: "#4CAF50",
+            screen: "Arkadaşlarımı Davet Et",
+            buttonText: "Puan Kazan"
+        },
+        {
+            id: 3,
+            title: "Premium Fırsatı",
+            description: "5 arkadaşını davet et, 1 ay ücretsiz premium üyelik kazan!",
+            iconName: "diamond-outline",
+            color: "#FFD700",
+            screen: "Arkadaşlarımı Davet Et",
+            buttonText: "Premium Kazan"
+        }
+    ];
+
+    // Otomatik kart kaydırma için effect
+    useEffect(() => {
+        let cardTimer;
+
+        // İlk render'dan sonra timer'ı başlat
+        const startAutoScroll = () => {
+            cardTimer = setInterval(() => {
+                if (scrollRef.current && inviteCards.length > 1) {
+                    const nextIndex = (currentCardIndex + 1) % inviteCards.length;
+
+                    try {
+                        scrollRef.current.scrollToIndex({
+                            index: nextIndex,
+                            animated: true,
+                            viewOffset: 0,
+                            viewPosition: 0
+                        });
+                        setCurrentCardIndex(nextIndex);
+                    } catch (error) {
+                        // Hata durumunda scrollToOffset kullan
+                        const offset = nextIndex * (Dimensions.get('window').width - 40);
+                        scrollRef.current.scrollToOffset({
+                            offset,
+                            animated: true
+                        });
+                        setCurrentCardIndex(nextIndex);
+                    }
+                }
+            }, 5000); // 5 saniyede bir kaydır
+        };
+
+        // Timer'ı başlat
+        startAutoScroll();
+
+        // Component unmount olduğunda timer'ı temizle
+        return () => {
+            if (cardTimer) {
+                clearInterval(cardTimer);
+            }
+        };
+    }, [currentCardIndex, inviteCards.length]);
 
     const currentTheme = theme === 'dark' ? darkTheme : lightTheme;
 
@@ -151,6 +231,95 @@ const SettingsPage = ({ navigation }) => {
         </ShadowWrapper>
     );
 
+    const renderInviteCardsCarousel = () => {
+        const cardWidth = Dimensions.get('window').width - 40; // 20px padding on each side
+
+        return (
+            <View style={styles.carouselSection}>
+                <View style={styles.sectionTitleContainer}>
+                    <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                        Özel Kampanyalar
+                    </Text>
+                    <TouchableOpacity
+                        onPress={() => handleNavigation('Arkadaşlarımı Davet Et')}
+                        style={styles.seeAllButton}
+                    >
+                        <Text style={styles.seeAllText}>Tümünü Gör</Text>
+                    </TouchableOpacity>
+                </View>
+                <FlatList
+                    ref={scrollRef}
+                    data={inviteCards}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    pagingEnabled
+                    decelerationRate="fast"
+                    snapToInterval={cardWidth}
+                    snapToAlignment="start"
+                    initialScrollIndex={0}
+                    onMomentumScrollEnd={(event) => {
+                        const contentOffset = event.nativeEvent.contentOffset.x;
+                        const viewSize = cardWidth;
+                        const newIndex = Math.round(contentOffset / viewSize);
+                        if (newIndex !== currentCardIndex) {
+                            setCurrentCardIndex(newIndex);
+                        }
+                    }}
+                    getItemLayout={(data, index) => ({
+                        length: cardWidth,
+                        offset: cardWidth * index,
+                        index,
+                    })}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={({ item }) => (
+                        <ShadowWrapper style={[
+                            styles.inviteCard,
+                            {
+                                backgroundColor: currentTheme.cardBackground,
+                                width: cardWidth - 20,
+                                marginHorizontal: 10
+                            }
+                        ]}>
+                            <View style={styles.inviteCardContent}>
+                                <View style={[styles.inviteIconContainer, { backgroundColor: `${item.color}20` }]}>
+                                    <Ionicons name={item.iconName} size={32} color={item.color} />
+                                </View>
+                                <View style={styles.inviteTextContainer}>
+                                    <Text style={[styles.inviteTitle, { color: currentTheme.text }]}>
+                                        {item.title}
+                                    </Text>
+                                    <Text style={[styles.inviteDescription, { color: currentTheme.textSecondary }]}>
+                                        {item.description}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.inviteCardFooter}>
+                                <TouchableOpacity
+                                    style={[styles.inviteButton, { backgroundColor: item.color }]}
+                                    onPress={() => handleNavigation(item.screen)}
+                                >
+                                    <Text style={styles.inviteButtonText}>{item.buttonText}</Text>
+                                    <Ionicons name="arrow-forward" size={14} color="#fff" style={{ marginLeft: 5 }} />
+                                </TouchableOpacity>
+                            </View>
+                        </ShadowWrapper>
+                    )}
+                />
+                <View style={styles.carouselIndicators}>
+                    {inviteCards.map((_, index) => (
+                        <View
+                            key={index}
+                            style={[
+                                styles.carouselDot,
+                                currentCardIndex === index ? styles.carouselDotActive : null
+                            ]}
+                        />
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
     const renderLogoutButton = () => (
         <TouchableOpacity
             style={[
@@ -180,9 +349,15 @@ const SettingsPage = ({ navigation }) => {
                 <View style={[styles.searchContainer, { backgroundColor: currentTheme.cardBackground }]}>
                     <Ionicons name="search" size={20} color={currentTheme.text} style={styles.searchIcon} />
                     <TextInput
-                        style={[styles.searchInput, { color: currentTheme.text }]}
-                        placeholder="Ayarlarda ara..."
-                        placeholderTextColor={currentTheme.textSecondary}
+                        style={[
+                            styles.searchInput,
+                            { color: currentTheme.text },
+                            Platform.OS === 'ios' ? { fontStyle: 'normal' } : null
+                        ]}
+                        placeholder="Hızlı ayar arama..."
+                        placeholderTextColor={Platform.OS === 'ios'
+                            ? `${currentTheme.textSecondary}99`
+                            : currentTheme.textSecondary}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
@@ -193,55 +368,8 @@ const SettingsPage = ({ navigation }) => {
                 {/* Mavi Tik Banner */}
                 {renderVerificationBanner()}
 
-                {/* Tema Seçimi Kartı */}
-                {/*
-                <ShadowWrapper style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
-                    <Text style={[styles.cardTitle, { color: currentTheme.text }]}>Tema</Text>
-                    <View style={styles.themeOptions}>
-                        <TouchableOpacity
-                            style={[
-                                styles.themeOption,
-                                theme === 'light' && styles.selectedThemeOption
-                            ]}
-                            onPress={() => handleThemeChange('light')}
-                        >
-                            <Ionicons name="sunny" size={24} color={theme === 'light' ? '#fff' : '#FDB813'} />
-                            <Text style={[
-                                styles.themeText,
-                                theme === 'light' && styles.selectedThemeText
-                            ]}>Açık</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.themeOption,
-                                theme === 'dark' && styles.selectedThemeOption
-                            ]}
-                            onPress={() => handleThemeChange('dark')}
-                        >
-                            <Ionicons name="moon" size={24} color={theme === 'dark' ? '#fff' : '#1A237E'} />
-                            <Text style={[
-                                styles.themeText,
-                                theme === 'dark' && styles.selectedThemeText
-                            ]}>Koyu</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.themeOption,
-                                theme === 'system' && styles.selectedThemeOption
-                            ]}
-                            onPress={() => handleThemeChange('system')}
-                        >
-                            <Ionicons name="settings" size={24} color={theme === 'system' ? '#fff' : '#757575'} />
-                            <Text style={[
-                                styles.themeText,
-                                theme === 'system' && styles.selectedThemeText
-                            ]}>Sistem</Text>
-                        </TouchableOpacity>
-                    </View>
-                </ShadowWrapper>
-                */}
+                {/* Davet Kartları Carousel */}
+                {renderInviteCardsCarousel()}
 
                 {/* Ayarlar Kartları */}
                 {filteredSections.length > 0 ? (
@@ -319,6 +447,10 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         fontSize: 16,
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+        fontWeight: '500',
+        letterSpacing: 0.5,
+        paddingVertical: 8,
     },
     content: {
         padding: 20,
@@ -460,5 +592,108 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 10,
         fontWeight: 'bold',
+    },
+    carouselSection: {
+        marginBottom: 25,
+    },
+    sectionTitleContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+        paddingHorizontal: 5,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    seeAllButton: {
+        padding: 5,
+    },
+    seeAllText: {
+        color: '#4CAF50',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    carouselContainer: {
+        marginBottom: 10,
+    },
+    inviteCard: {
+        borderRadius: 20,
+        padding: 15,
+        margin: 0,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(0,105,255,0.1)',
+        elevation: 5,
+    },
+    inviteCardContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    inviteIconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    inviteTextContainer: {
+        flex: 1,
+    },
+    inviteTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 6,
+    },
+    inviteDescription: {
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    inviteCardFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    inviteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        borderRadius: 15,
+    },
+    inviteButtonText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    carouselIndicators: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: 10,
+    },
+    carouselDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ccc',
+        marginHorizontal: 3,
+    },
+    carouselDotActive: {
+        backgroundColor: '#4CAF50',
+        width: 12,
+        height: 8,
+    },
+    searchPlaceholder: {
+        fontFamily: 'System',
+        fontWeight: '500',
+        fontSize: 16,
+        fontStyle: 'italic',
+        letterSpacing: 0.3,
+        opacity: 0.7,
     },
 });

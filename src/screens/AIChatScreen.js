@@ -48,7 +48,7 @@ const SUGGESTED_PROMPTS = [
     }
 ];
 
-const AIChatScreen = () => {
+const AIChatScreen = ({ navigation }) => {
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -298,7 +298,15 @@ const AIChatScreen = () => {
                 colors={['#6C3EE8', '#4527A0']}
                 style={styles.header}
             >
-                <Text style={styles.headerTitle}>STeaPPY Asistan</Text>
+                <View style={styles.headerLeftSection}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>STeaPPY Asistan</Text>
+                </View>
                 <TouchableOpacity
                     style={styles.menuButton}
                     onPress={clearChat}
@@ -384,6 +392,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center'
+    },
+    headerLeftSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    backButton: {
+        padding: 8,
+        marginLeft: -8,
+        marginRight: 8,
     },
     headerTitle: {
         color: '#FFF',

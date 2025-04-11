@@ -34,6 +34,10 @@ import LikedByScreen from '../screens/LikedByScreen';
 import MapPage from '../screens/MapPage';
 import ProfileModal from '../screens/ProfileModal';
 import FriendProfileModal from '../modals/friendProfileModal';
+import DilSecenekleriPage from '../screens/SettingsPageScreens/DilSecenekleriPage';
+import NearbyToilets from '../screens/HomePageCards/NearbyToilets';
+import GasStations from '../screens/HomePageCards/GasStations';
+import Pharmacies from '../screens/HomePageCards/Pharmacies';
 
 const Stack = createNativeStackNavigator();
 
@@ -275,6 +279,26 @@ const MainStack = () => {
                     cardOverlayEnabled: true,
                     animation: 'slide_from_bottom'
                 }}
+            />
+            <Stack.Screen
+                name="DilSecenekleri"
+                component={DilSecenekleriPage}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="NearbyToilets"
+                component={NearbyToilets}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="GasStations"
+                component={GasStations}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="Pharmacies"
+                component={Pharmacies}
+                options={{ headerShown: false }}
             />
         </Stack.Navigator>
     );

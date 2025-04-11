@@ -12,12 +12,12 @@ import {
     query,
     getDocs,
     where,
-    doc as firestoreDoc
+    doc,
+    deleteDoc
 } from 'firebase/firestore';
 import { onAuthStateChanged, getAuth } from 'firebase/auth';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { fetchFriends } from './FriendsPage';
 import { haversine } from '../helpers/locationUtils';
 import {
@@ -185,6 +185,15 @@ const MapPage = ({ navigation, route }) => {
         }
     }, [showDurationModal]);
 
+    // Uygulama başladığında çizim indekslerini sıfırla
+    useEffect(() => {
+        const resetDrawingIndices = async () => {
+            await AsyncStorage.setItem('foregroundPathPartIndex', '0');
+        };
+
+        resetDrawingIndices();
+    }, []);
+
     // Modal açıldığında veya kapandığında handler
     const onHandlerStateChange = (event) => {
         // Bu fonksiyonu boş bırakalım, tüm işlemleri onGestureEvent içinde yapacağız
@@ -239,15 +248,15 @@ const MapPage = ({ navigation, route }) => {
                                 latitudeDelta: 0.005,
                                 longitudeDelta: 0.005,
                             }, 1000);
-                        }
 
-                        // Konum değiştiğinde region state'ini de güncelle
-                        setRegion({
-                            latitude: newLocation.coords.latitude,
-                            longitude: newLocation.coords.longitude,
-                            latitudeDelta: 0.005,
-                            longitudeDelta: 0.005,
-                        });
+                            // Konum değiştiğinde region state'ini sadece followsUserLocation true ise güncelle
+                            setRegion({
+                                latitude: newLocation.coords.latitude,
+                                longitude: newLocation.coords.longitude,
+                                latitudeDelta: 0.005,
+                                longitudeDelta: 0.005,
+                            });
+                        }
 
                         // GPS kalibrasyonu ve diğer işlemler followsUserLocation'dan bağımsız
                         updateLocationData(newLocation, currentUserId);
@@ -379,7 +388,7 @@ const MapPage = ({ navigation, route }) => {
                         const shareData = doc.data();
 
                         // Paylaşan kullanıcının bilgilerini al
-                        const senderDoc = await getDoc(firestoreDoc(db, 'users', shareData.fromUserId));
+                        const senderDoc = await getDoc(doc(db, 'users', shareData.fromUserId));
                         const senderData = senderDoc.data();
 
                         // Anlık konum paylaşımları için konum bilgisini doğrudan Firestore'dan al
@@ -602,8 +611,8 @@ const MapPage = ({ navigation, route }) => {
                     newPoint.longitude
                 );
 
-                // Eğer mesafe 100 metreden fazlaysa yeni bir path başlat
-                if (distance > 100) {
+                // Mesafe çok fazlaysa (100m yerine 200m) ve hareketsiz duruma geçmişse yeni bir path başlat
+                if (distance > 200 && !isMoving) {
                     return [newPoint]; // Yeni bir dizi başlat
                 }
             }
@@ -620,9 +629,11 @@ const MapPage = ({ navigation, route }) => {
                     newPoint.longitude
                 );
 
-                if (distance > 100) {
+                // Mesafe çok fazlaysa (100m yerine 200m) ve hareketsiz duruma geçmişse yeni bir path başlat
+                if (distance > 200 && !isMoving) {
                     if (prev.points.length >= 2) {
-                        savePath(prev.points, currentUserId);
+                        // Son iki noktayı dahil ederek kaydet
+                        savePath([...prev.points], currentUserId);
                     }
                     return {
                         points: [newPoint],
@@ -641,20 +652,22 @@ const MapPage = ({ navigation, route }) => {
 
             const timeSinceStart = new Date() - prev.startTime;
 
-            if (timeSinceStart > 5 * 60 * 1000 || updatedPoints.length >= 20) {
+            // Daha uzun bir süre ve daha fazla nokta için kayıt yapalım
+            if (timeSinceStart > 10 * 60 * 1000 || updatedPoints.length >= 50) {
+                // Tüm noktaları kaydet
                 savePath(updatedPoints, currentUserId);
                 return {
-                    points: [newPoint],
+                    points: [newPoint], // Yeni yol için sadece son noktayı tut
                     startTime: new Date()
                 };
             }
 
             return {
-                ...prev,
-                points: updatedPoints
+                points: updatedPoints,
+                startTime: prev.startTime
             };
         });
-    }, [savePath, pathCoordinates, gpsQuality, accuracyHistory]);
+    }, [accuracyHistory, gpsQuality, savePath, isMoving]);
 
     const toggle3DMode = () => {
         setIs3DMode(!is3DMode);
@@ -689,6 +702,68 @@ const MapPage = ({ navigation, route }) => {
     const closePathDetails = () => {
         setShowPathDetails(false);
         setSelectedPath(null);
+    };
+
+    // Yol mesafesini hesaplama yardımcı fonksiyonu
+    const calculatePathDistance = (points) => {
+        if (!points || points.length < 2) return 0;
+
+        let totalDistance = 0;
+        for (let i = 0; i < points.length - 1; i++) {
+            const startPoint = points[i];
+            const endPoint = points[i + 1];
+
+            const distance = haversine(
+                startPoint.latitude,
+                startPoint.longitude,
+                endPoint.latitude,
+                endPoint.longitude
+            );
+
+            totalDistance += distance;
+        }
+
+        return totalDistance;
+    };
+
+    // Yol silme fonksiyonu
+    const deletePath = async (pathId) => {
+        if (!userId || !pathId) {
+            Alert.alert('Hata', 'Kullanıcı veya yol bilgisi eksik');
+            return;
+        }
+
+        // Kullanıcıya silme işlemini onaylatma
+        Alert.alert(
+            'Yolu Sil',
+            'Bu yolu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
+            [
+                {
+                    text: 'İptal',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Sil',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Firestore'dan yolu sil
+                            const pathRef = doc(db, `users/${userId}/paths/${pathId}`);
+                            await deleteDoc(pathRef);
+
+                            // Başarılı mesajı göster
+                            Alert.alert('Başarılı', 'Yol başarıyla silindi.');
+
+                            // Yol detaylarını kapat
+                            closePathDetails();
+                        } catch (error) {
+                            console.error('Yol silinirken hata:', error);
+                            Alert.alert('Hata', 'Yol silinirken bir hata oluştu: ' + error.message);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const handleMarkerPress = (share) => {
@@ -956,7 +1031,7 @@ const MapPage = ({ navigation, route }) => {
             }
 
             // Paylaşımı ve paylaşan kullanıcı bilgilerini al
-            const shareDoc = await getDoc(firestoreDoc(db, `users/${userId}/receivedShares/${shareId}`));
+            const shareDoc = await getDoc(doc(db, `users/${userId}/receivedShares/${shareId}`));
 
             if (!shareDoc.exists()) {
                 console.error('Paylaşım belgesi bulunamadı');
@@ -974,7 +1049,7 @@ const MapPage = ({ navigation, route }) => {
             }
 
             // 1. Paylaşımı alan kullanıcının receivedShares koleksiyonunu güncelle
-            await updateDoc(firestoreDoc(db, `users/${userId}/receivedShares/${shareId}`), {
+            await updateDoc(doc(db, `users/${userId}/receivedShares/${shareId}`), {
                 status: 'ended',
                 endTime: serverTimestamp()
             });
@@ -1076,7 +1151,7 @@ const MapPage = ({ navigation, route }) => {
             };
 
             // Kullanıcı bilgilerini al
-            const userDoc = await getDoc(firestoreDoc(db, 'users', userId));
+            const userDoc = await getDoc(doc(db, 'users', userId));
             if (!userDoc.exists()) {
                 console.error('Kullanıcı belgesi bulunamadı');
                 Alert.alert('Hata', 'Kullanıcı bilgileri alınamadı');
@@ -1655,6 +1730,115 @@ const MapPage = ({ navigation, route }) => {
                 selectedLineStyle={selectedLineStyle}
                 onSelectLineStyle={handleSelectLineStyle}
             />
+
+            {/* Yol Detayları Modalı */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={showPathDetails}
+                onRequestClose={closePathDetails}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={closePathDetails}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalContent}>
+                            {/* Modal Handle */}
+                            <View style={styles.modalHandle} />
+
+                            {/* Yol Bilgileri */}
+                            <View style={styles.pathInfoContainer}>
+                                <View style={styles.pathIconContainer}>
+                                    <View style={styles.pathIcon}>
+                                        <Ionicons name="map" size={32} color="#2196F3" />
+                                    </View>
+                                </View>
+                                <View style={styles.pathInfo}>
+                                    <Text style={styles.pathTitle}>
+                                        {selectedPath?.city || 'Bilinmeyen Konum'}
+                                    </Text>
+                                    <Text style={styles.pathSubtitle}>
+                                        {selectedPath?.district || 'Bilinmeyen Bölge'}
+                                    </Text>
+                                    <View style={styles.pathDetailRow}>
+                                        <Ionicons name="calendar-outline" size={16} color="#666666" />
+                                        <Text style={styles.pathDetailText}>
+                                            {selectedPath?.firstDiscovery ?
+                                                new Date(selectedPath.firstDiscovery.seconds * 1000).toLocaleDateString('tr-TR') :
+                                                'Bilinmeyen Tarih'}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Yol Detayları */}
+                            <View style={styles.pathDetailsContainer}>
+                                <View style={styles.pathDetailItem}>
+                                    <Ionicons name="pin-outline" size={20} color="#666666" />
+                                    <View style={styles.pathDetailContent}>
+                                        <Text style={styles.pathDetailLabel}>Nokta Sayısı</Text>
+                                        <Text style={styles.pathDetailValue}>
+                                            {selectedPath?.points?.length || 0} nokta
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.pathDetailItem}>
+                                    <Ionicons name="trending-up-outline" size={20} color="#666666" />
+                                    <View style={styles.pathDetailContent}>
+                                        <Text style={styles.pathDetailLabel}>Toplam Mesafe</Text>
+                                        <Text style={styles.pathDetailValue}>
+                                            {selectedPath?.points && selectedPath.points.length > 1 ?
+                                                (calculatePathDistance(selectedPath.points) / 1000).toFixed(2) + ' km' :
+                                                'Hesaplanamadı'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.pathDetailItem}>
+                                    <Ionicons name="repeat-outline" size={20} color="#666666" />
+                                    <View style={styles.pathDetailContent}>
+                                        <Text style={styles.pathDetailLabel}>Ziyaret Sayısı</Text>
+                                        <Text style={styles.pathDetailValue}>
+                                            {selectedPath?.visitCount || 1}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Aksiyon Butonları */}
+                            <View style={styles.actionButtons}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
+                                    onPress={() => {
+                                        // Yolu merkeze al
+                                        if (selectedPath?.points && selectedPath.points.length > 0 && mapRef.current) {
+                                            const midPoint = Math.floor(selectedPath.points.length / 2);
+                                            mapRef.current.animateToRegion({
+                                                latitude: selectedPath.points[midPoint].latitude,
+                                                longitude: selectedPath.points[midPoint].longitude,
+                                                latitudeDelta: 0.01,
+                                                longitudeDelta: 0.01,
+                                            }, 1000);
+                                            closePathDetails();
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.actionButtonText}>Haritada Göster</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                                    onPress={() => selectedPath?.id && deletePath(selectedPath.id)}
+                                >
+                                    <Text style={styles.actionButtonText}>Yolu Sil</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Pressable>
+            </Modal>
         </View>
     );
 };
@@ -2089,6 +2273,113 @@ const styles = StyleSheet.create({
         shadowRadius: 3.84,
         elevation: 5,
         zIndex: 1000,
+    },
+    pathInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    pathIconContainer: {
+        marginRight: 16,
+    },
+    pathIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#2196F3',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    pathInfo: {
+        flex: 1,
+    },
+    pathTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1A1A1A',
+        marginBottom: 4,
+    },
+    pathSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginBottom: 8,
+    },
+    pathDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pathDetailText: {
+        fontSize: 12,
+        color: '#666666',
+        marginLeft: 4,
+    },
+    pathDetailsContainer: {
+        backgroundColor: '#F9F9F9',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+    },
+    pathDetailItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    pathDetailContent: {
+        marginLeft: 12,
+    },
+    pathDetailLabel: {
+        fontSize: 12,
+        color: '#666666',
+        marginBottom: 2,
+    },
+    pathDetailValue: {
+        fontSize: 14,
+        color: '#1A1A1A',
+        fontWeight: '500',
+    },
+    leftActionButtonsContainer: { // Yeni kapsayıcı stili
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 120 : 100,
+        left: 16,
+        zIndex: 1000,
+        alignItems: 'center', // İçindeki butonları ortalamak için
+    },
+    actionButtonWrapper: { // Her buton ve etiketi için sarmalayıcı
+        marginBottom: 14, // Butonlar arası boşluk
+        alignItems: 'center', // Etiketin butonla hizalanması için
+    },
+    mapActionButton: { // Eski backgroundDrawingButton ve emojiButton'un genel hali
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    backgroundDrawingActiveButton: { // Aktif çizim butonu için özel stil
+        backgroundColor: '#4CAF50',
+    },
+    backgroundDrawingLabel: {
+        position: 'absolute',
+        top: -20, // Butonun hemen üstüne
+        // left: 0, // Hizalamayı actionButtonWrapper ve alignItems hallediyor
+        // width: 56, // Genişliği otomatik olabilir
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        // alignItems: 'center', // Gerek kalmadı
+        zIndex: 1001, // Butonun üzerinde kalması için
+    },
+    backgroundDrawingLabelText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });
 

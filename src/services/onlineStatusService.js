@@ -12,12 +12,17 @@ export const updateOnlineStatus = async (userId, isOnline = true) => {
         const userStatusRef = ref(rtdb, `users/${userId}/status`);
 
         // Önce mevcut durumu kontrol et
-        const snapshot = await get(userStatusRef);
-        const currentStatus = snapshot.val();
+        try {
+            const snapshot = await get(userStatusRef);
+            const currentStatus = snapshot.val();
 
-        // Eğer kullanıcı zaten offline ise ve offline yapmaya çalışıyorsak, işlemi atla
-        if (!isOnline && currentStatus?.state === 'offline') {
-            return;
+            // Eğer kullanıcı zaten offline ise ve offline yapmaya çalışıyorsak, işlemi atla
+            if (!isOnline && currentStatus?.state === 'offline') {
+                return;
+            }
+        } catch (error) {
+            console.warn('Kullanıcı durumu kontrolü sırasında hata:', error.message);
+            // Durum kontrolünde hata olsa bile devam et
         }
 
         const status = {
@@ -26,20 +31,37 @@ export const updateOnlineStatus = async (userId, isOnline = true) => {
         };
 
         // Önce disconnect handler'ı temizle
-        await onDisconnect(userStatusRef).cancel();
+        try {
+            await onDisconnect(userStatusRef).cancel();
+        } catch (error) {
+            console.warn('Disconnect handler temizleme hatası:', error.message);
+            // Temizleme işleminde hata olsa bile devam et
+        }
 
         // Durumu güncelle
-        await set(userStatusRef, status);
+        try {
+            await set(userStatusRef, status);
+        } catch (error) {
+            console.warn('Durum güncelleme hatası:', error.message);
+            // İzin hatası nedeniyle durumu güncelleyemezsek, sessizce devam et
+            return; // Sonraki işlemleri yapmayı denemeyelim
+        }
 
         // Eğer online yapılıyorsa, disconnect handler'ı ayarla
         if (isOnline) {
-            await onDisconnect(userStatusRef).set({
-                state: 'offline',
-                lastSeen: serverTimestamp(),
-            });
+            try {
+                await onDisconnect(userStatusRef).set({
+                    state: 'offline',
+                    lastSeen: serverTimestamp(),
+                });
+            } catch (error) {
+                console.warn('Disconnect handler ayarlama hatası:', error.message);
+                // Handler ayarlanamasa bile sessizce devam et
+            }
         }
     } catch (error) {
         console.error('Çevrimiçi durumu güncellenirken hata:', error);
+        // Ana hata bloğu, tüm işlemler başarısız olsa bile uygulamanın çökmesini engeller
     }
 };
 
@@ -105,22 +127,40 @@ export const setOfflineOnLogout = async (userId) => {
         const statusRef = ref(rtdb, `users/${userId}`);
 
         // Tüm event listener'ları temizle
-        off(statusRef);
+        try {
+            off(statusRef);
+        } catch (error) {
+            console.warn('Event listener temizleme hatası:', error.message);
+        }
 
         // Disconnect handler'ı temizle
-        await onDisconnect(userStatusRef).cancel();
+        try {
+            await onDisconnect(userStatusRef).cancel();
+        } catch (error) {
+            console.warn('Disconnect handler temizleme hatası:', error.message);
+        }
 
         // Offline durumuna geç
-        await set(userStatusRef, {
-            state: 'offline',
-            lastSeen: serverTimestamp(),
-        });
+        try {
+            await set(userStatusRef, {
+                state: 'offline',
+                lastSeen: serverTimestamp(),
+            });
+        } catch (error) {
+            console.warn('Offline durumu ayarlama hatası:', error.message);
+            // Yetki hatası oluşursa sessizce geç
+        }
 
-        // Tüm bağlantıları kapat
-        goOffline(rtdb);
-        await goOnline(rtdb);
+        // Tüm bağlantıları kapat ve yeniden aç
+        try {
+            goOffline(rtdb);
+            await goOnline(rtdb);
+        } catch (error) {
+            console.warn('Bağlantı yönetimi hatası:', error.message);
+        }
 
     } catch (error) {
         console.error('Çıkış yapılırken çevrimdışı duruma geçilemedi:', error);
+        // Ana hata olsa bile sessizce devam ediyoruz, çıkış işleminin tamamlanmasını engellememek için
     }
 };

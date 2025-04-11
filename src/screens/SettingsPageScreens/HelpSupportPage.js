@@ -14,57 +14,57 @@ const HelpSupportPage = ({ navigation }) => {
         {
             id: 1,
             question: 'Nasıl arkadaş ekleyebilirim?',
-            answer: 'Arkadaşlar sekmesinden "Arkadaş Ekle" butonuna tıklayarak e-posta adresi veya kullanıcı adı ile arkadaşlarınızı bulabilirsiniz. Ayrıca QR kod ile de hızlıca arkadaş ekleyebilirsiniz.'
+            answer: 'Arkadaşlar sekmesinden "Arkadaş Ekle" butonuna tıklayarak e-posta adresi veya kullanıcı adı ile arkadaşlarınızı bulabilirsiniz. QR kod ile de hızlıca arkadaş ekleyebilirsiniz. Ayrıca arkadaşlık isteği gönderdiğinizde, karşı taraf onaylayana kadar beklemeli ve istek onaylandığında bildirim alacaksınız.'
         },
         {
             id: 2,
             question: 'Şifremi nasıl değiştirebilirim?',
-            answer: 'Profil ayarlarından "Şifre Değiştir" seçeneğine tıklayarak şifrenizi güncelleyebilirsiniz. Şifrenizi unuttuysanız, giriş ekranındaki "Şifremi Unuttum" seçeneğini kullanabilirsiniz.'
+            answer: 'Profil ayarlarından "Şifre Değiştir" seçeneğine tıklayarak şifrenizi güncelleyebilirsiniz. Şifrenizi unuttuysanız, giriş ekranındaki "Şifremi Unuttum" seçeneğini kullanarak e-posta adresinize sıfırlama bağlantısı gönderebilirsiniz.'
         },
         {
             id: 3,
             question: 'Bildirimler gelmiyor, ne yapmalıyım?',
-            answer: '1. Telefon ayarlarından uygulama bildirimlerinin açık olduğunu kontrol edin.\n2. Uygulama içi bildirim ayarlarını kontrol edin.\n3. İnternet bağlantınızı kontrol edin.\n4. Uygulamayı kapatıp yeniden açmayı deneyin.\n5. Sorun devam ederse uygulamayı kaldırıp yeniden yükleyin.'
+            answer: '1. Ayarlar > Bildirimler bölümünden "Tüm Bildirimler" seçeneğinin açık olduğunu kontrol edin.\n2. Telefon ayarlarından uygulama bildirimlerine izin verildiğinden emin olun.\n3. İnternet bağlantınızı kontrol edin.\n4. Uygulamayı kapatıp yeniden açmayı deneyin.\n5. Sorun devam ederse, ilgili bildirim türünün (Yeni Arkadaş İstekleri, Mesajlar vb.) de açık olduğundan emin olun.'
         },
         {
             id: 4,
             question: 'Konum paylaşımı nasıl çalışır?',
-            answer: 'Konum paylaşımı iki şekilde yapılabilir:\n1. Anlık Konum: Tek seferlik konum paylaşımı\n2. Canlı Konum: Belirli bir süre boyunca sürekli güncellenen konum paylaşımı\nKonum paylaşımını başlatmak için arkadaş profilindeki "Konum Paylaş" butonunu kullanabilirsiniz.'
+            answer: 'Konum paylaşımı iki şekilde yapılabilir:\n1. Anlık Konum: Tek seferlik konum paylaşımı\n2. Canlı Konum: Belirli bir süre boyunca sürekli güncellenen konum paylaşımı\nKonum paylaşmak için:\n- Arkadaşlar sekmesinde ilgili arkadaşınızı seçin\n- "Konum Paylaş" butonuna tıklayın\n- Paylaşım türünü seçin (Anlık/Canlı)\nAynı kişiyle aktif bir konum paylaşımınız varsa, tekrar paylaşım yapamazsınız.'
         },
         {
             id: 5,
             question: 'Konum paylaşımını nasıl durdurabilirim?',
-            answer: 'Aktif bir konum paylaşımını durdurmak için:\n1. Arkadaş profiline gidin\n2. "Paylaşımı Durdur" butonuna tıklayın\nveya\nHarita ekranındaki aktif paylaşımlar listesinden paylaşımı durdurabilirsiniz.'
+            answer: 'Aktif bir konum paylaşımını durdurmak için:\n1. Harita ekranındaki aktif paylaşımlar listesinden ilgili paylaşımı bulun\n2. "Paylaşımı Durdur" butonuna tıklayın\nAlternatif olarak:\n- Arkadaş profiline gidin\n- Aktif paylaşım bilgisinin yanındaki "Durdur" butonuna tıklayın'
         },
         {
             id: 6,
             question: 'Hesabımı nasıl silebilirim?',
-            answer: 'Hesap silme işlemi için:\n1. Ayarlar > Gizlilik > Hesabı Sil yolunu izleyin\n2. Silme nedeninizi seçin\n3. Şifrenizi girin\n4. Onaylayın\nNot: Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinir.'
+            answer: 'Hesap silme işlemi için:\n1. Ayarlar > Gizlilik > "Hesabımı Sil" butonuna tıklayın\n2. Açılan onay ekranında "Devam Et" seçeneğini seçin\n3. Hesap silme nedeninizi belirtin (Uygulamayı kullanmama, Gizlilik endişeleri vb.)\n4. Şifrenizi girin ve "Hesabı Sil" butonuna tıklayın\nDikkat: Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinir.'
         },
         {
             id: 7,
             question: 'Uygulama çok pil tüketiyor, ne yapabilirim?',
-            answer: '1. Arka plan konum izinlerini kapatın\n2. Sürekli konum paylaşımı yerine anlık konum paylaşımını tercih edin\n3. Kullanmadığınız zamanlarda uygulamadan çıkış yapın\n4. Bildirim sıklığını azaltın\n5. Karanlık temayı kullanın'
+            answer: '1. Canlı konum paylaşımını kullanmadığınızda kapatın\n2. Ayarlar > Bildirimler bölümünden kullanmadığınız bildirim türlerini kapatın\n3. Arka plan konum izinlerini sınırlayın (Telefon ayarları > Uygulamalar > STeaPP > İzinler > Konum)\n4. Karanlık temayı kullanın (Ayarlar > Tema > Koyu Tema)\n5. Uygulamayı en son sürüme güncelleyin (Şu anki sürüm: 1.0.1)'
         },
         {
             id: 8,
             question: 'İstenmeyen arkadaşlık isteklerini nasıl engelleyebilirim?',
-            answer: 'Ayarlar > Gizlilik > Arkadaşlık İstekleri menüsünden:\n1. Sadece telefon rehberinizdeki kişilerden\n2. Sadece arkadaşlarınızın arkadaşlarından\n3. Hiç kimseden\nseçeneklerinden birini seçebilirsiniz.'
+            answer: 'Ayarlar > Gizlilik bölümünden arkadaşlık istekleri için kısıtlamalar getirebilirsiniz:\n1. Belirli kullanıcıları engelleyerek onlardan gelen istekleri tamamen önleyebilirsiniz\n2. Arkadaşlık isteklerini tamamen kapatabilirsiniz\n3. Sadece telefon rehberinizde kayıtlı kişilerden gelen istekleri kabul edebilirsiniz'
         },
         {
             id: 9,
             question: 'Bir kullanıcıyı nasıl engelleyebilirim?',
-            answer: 'Kullanıcıyı engellemek için:\n1. Kullanıcının profiline gidin\n2. Sağ üst köşedeki menü ikonuna tıklayın\n3. "Engelle" seçeneğini seçin\nEngellenen kullanıcı size mesaj gönderemez ve konumunuzu göremez.'
+            answer: 'Kullanıcıyı engellemek için:\n1. Kullanıcının profiline gidin\n2. Sağ üst köşedeki menü ikonuna tıklayın\n3. "Engelle" seçeneğini seçin\n4. Onay ekranında "Engelle" butonuna tıklayın\nEngellenen kullanıcı size mesaj gönderemez, konum paylaşamaz ve içeriklerinizi göremez. Ayrıca arkadaşsa, otomatik olarak arkadaş listenizden çıkarılır.'
         },
         {
             id: 10,
             question: 'Veri kullanımını nasıl azaltabilirim?',
-            answer: 'Ayarlar > Veri Kullanımı menüsünden:\n1. Düşük veri modunu aktifleştirin\n2. Otomatik konum güncellemelerini azaltın\n3. Sadece WiFi bağlantısında güncelleme yapacak şekilde ayarlayın\n4. Medya otomatik indirmeyi kapatın'
+            answer: '1. Canlı konum paylaşımı yerine anlık konum paylaşımını tercih edin\n2. Çoklu arkadaş seçiminde aynı anda sadece gerekli kişilerle konum paylaşın\n3. Konum güncellemelerini daha seyrek ayarlayın\n4. Sadece WiFi bağlantısı varken uygulamayı kullanın\n5. Konum paylaşımlarını aktif olarak kullanmadığınızda sonlandırın'
         },
         {
             id: 11,
             question: 'Geçmiş konum verilerimi nasıl silebilirim?',
-            answer: 'Konum geçmişinizi silmek için:\n1. Ayarlar > Gizlilik > Konum Geçmişi\n2. "Geçmişi Temizle" butonuna tıklayın\n3. Temizlemek istediğiniz tarih aralığını seçin\nNot: Silinen veriler geri getirilemez.'
+            answer: 'Konum geçmişinizi silmek için:\n1. Ayarlar > Gizlilik > Konum Geçmişi bölümüne gidin\n2. "Geçmişi Temizle" butonuna tıklayın\n3. Temizlemek istediğiniz tarih aralığını seçin (Tümü, Son 7 gün, Son 30 gün)\nNot: Silinen konum verileri geri getirilemez. Bu işlem sadece sizin tarafınızdan paylaşılan konum verilerini siler, arkadaşlarınızın cihazlarındaki verileri etkilemez.'
         }
     ];
 

@@ -6,6 +6,8 @@ import { lightTheme, darkTheme } from '../../themes';
 import { useNotifications } from '../../Notifications/useNotifications';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../../../firebaseConfig';
 
 const NotificationsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -22,6 +24,21 @@ const NotificationsPage = ({ navigation }) => {
     useEffect(() => {
         loadNotificationSettings();
     }, []);
+
+    const updateNotificationSetting = async (settingName, value) => {
+        try {
+            const userId = auth.currentUser.uid;
+            const userRef = doc(db, 'users', userId);
+
+            await updateDoc(userRef, {
+                [`notificationSettings.${settingName}`]: value
+            });
+
+            toggleNotificationSetting(settingName, value);
+        } catch (error) {
+            console.error('Bildirim ayarları güncellenirken hata:', error);
+        }
+    };
 
     if (loading) {
         return (
@@ -92,6 +109,30 @@ const NotificationsPage = ({ navigation }) => {
                     <Switch
                         value={settings.activityUpdates}
                         onValueChange={(value) => toggleNotificationSetting('activityUpdates', value)}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
+                    />
+                </View>
+
+                <View style={styles.settingItem}>
+                    <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
+                        Beğeni Bildirimleri
+                    </Text>
+                    <Switch
+                        value={settings.likeNotifications}
+                        onValueChange={(value) => updateNotificationSetting('likeNotifications', value)}
+                        trackColor={{ false: "#767577", true: "#4CAF50" }}
+                        disabled={!settings.allNotifications}
+                    />
+                </View>
+
+                <View style={styles.settingItem}>
+                    <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
+                        Yorum Bildirimleri
+                    </Text>
+                    <Switch
+                        value={settings.commentNotifications}
+                        onValueChange={(value) => updateNotificationSetting('commentNotifications', value)}
                         trackColor={{ false: "#767577", true: "#4CAF50" }}
                         disabled={!settings.allNotifications}
                     />

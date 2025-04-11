@@ -123,7 +123,15 @@ const SignupPage = ({ navigation }) => {
                 });
             }
         } catch (error) {
-            setErrorMessage(error || 'Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.');
+            // Daha detaylı hata yakalama ve gösterme
+            console.error('Kayıt hatası detayları:', JSON.stringify(error));
+
+            // Hata bir string ise direkt göster, object ise mesaj kısmını al
+            let errorMsg = typeof error === 'string'
+                ? error
+                : error?.message || 'Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.';
+
+            setErrorMessage(errorMsg);
         } finally {
             setIsLoading(false);
         }

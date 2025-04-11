@@ -29,11 +29,25 @@ const UpdatesPage = ({ navigation }) => {
             headerBackTitle: ' ',
         });
         checkForUpdates();
+
+        // Eğer başlangıçta bir güncelleme indirilmişse, durumu güncelle
+        if (global.updateDownloaded) {
+            setUpdateAvailable(true);
+        }
     }, [navigation]);
 
     const checkForUpdates = async () => {
         try {
             setIsChecking(true);
+            // Eğer daha önce indirilmiş bir güncelleme varsa
+            if (global.updateDownloaded) {
+                setUpdateAvailable(true);
+                setLastChecked(new Date());
+                setUpdateInfo({ isAvailable: true });
+                setIsChecking(false);
+                return;
+            }
+
             const update = await Updates.checkForUpdateAsync();
             setUpdateAvailable(update.isAvailable);
             setLastChecked(new Date());
@@ -49,6 +63,13 @@ const UpdatesPage = ({ navigation }) => {
     const installUpdate = async () => {
         try {
             setIsChecking(true);
+
+            // Eğer başlangıçta indirilmiş güncelleme varsa direkt reload yap
+            if (global.updateDownloaded) {
+                await Updates.reloadAsync();
+                return;
+            }
+
             Alert.alert(
                 'Güncelleme',
                 'Güncelleme indirilip yüklenecek. Uygulama yeniden başlatılacak.',
@@ -59,6 +80,7 @@ const UpdatesPage = ({ navigation }) => {
                         onPress: async () => {
                             try {
                                 await Updates.fetchUpdateAsync();
+                                global.updateDownloaded = true;
                                 await Updates.reloadAsync();
                             } catch (error) {
                                 Alert.alert('Hata', 'Güncelleme yüklenirken bir hata oluştu.');

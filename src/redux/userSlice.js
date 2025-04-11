@@ -173,6 +173,16 @@ export const register = createAsyncThunk('user/register', async ({ email, passwo
                 received: []
             },
             createdAt: new Date(),
+            // Bildirim ayarlarını ekle
+            notificationSettings: {
+                allNotifications: true,
+                newFriends: true,
+                messages: true,
+                activityUpdates: true,
+                likeNotifications: true,
+                commentNotifications: true,
+                emailNotifications: false
+            }
         };
 
         await setDoc(userDoc, userData);
@@ -180,13 +190,19 @@ export const register = createAsyncThunk('user/register', async ({ email, passwo
         // E-posta doğrulama gönder
         await sendEmailVerification(user);
 
-        // Realtime Database'de kullanıcının online durumunu ayarla
-        const rtdb = getFirebaseRtdb();
-        const userStatusRef = ref(rtdb, `/status/${user.uid}`);
-        await set(userStatusRef, {
-            state: 'online',
-            last_changed: serverTimestamp(),
-        });
+        // Realtime Database işlemlerini ayrı bir try-catch bloğunda ele alıyoruz
+        try {
+            const rtdb = getFirebaseRtdb();
+            const userStatusRef = ref(rtdb, `/status/${user.uid}`);
+            await set(userStatusRef, {
+                state: 'online',
+                last_changed: serverTimestamp(),
+            });
+        } catch (rtdbError) {
+            // Realtime Database hatalarını kaydet ama işleme devam et
+            console.warn('Realtime Database kayıt hatası:', rtdbError.code, rtdbError.message);
+            // Bu hata, kullanıcı kaydını engellemeyecek
+        }
 
         const userDataToStore = {
             token,
@@ -298,6 +314,16 @@ export const socialLogin = createAsyncThunk(
                         received: []
                     },
                     createdAt: new Date(),
+                    // Bildirim ayarlarını ekle
+                    notificationSettings: {
+                        allNotifications: true,
+                        newFriends: true,
+                        messages: true,
+                        activityUpdates: true,
+                        likeNotifications: true,
+                        commentNotifications: true,
+                        emailNotifications: false
+                    }
                 };
 
                 await setDoc(userDoc, newUserData);

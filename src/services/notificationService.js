@@ -99,4 +99,35 @@ class NotificationService {
             throw error;
         }
     }
+
+    static async sendLikeNotification(toUserId, fromUser, postId) {
+        // TODO: Backend API endpoint'ini ekle
+        try {
+            const response = await axios.post('/api/notifications/like', {
+                toUserId,
+                fromUser,
+                postId
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Beğeni bildirimi gönderme hatası:', error);
+            throw error;
+        }
+    }
+
+    static async sendCommentNotification(toUserId, fromUser, postId, commentText) {
+        // TODO: Backend API endpoint'ini ekle
+        try {
+            const response = await axios.post('/api/notifications/comment', {
+                toUserId,
+                fromUser,
+                postId,
+                commentText
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Yorum bildirimi gönderme hatası:', error);
+            throw error;
+        }
+    }
 } 

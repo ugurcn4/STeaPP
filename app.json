@@ -2,7 +2,7 @@
   "expo": {
     "name": "STeaPP",
     "slug": "steapp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
         "googleMapsApiKey": "AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8"
       },
       "bundleIdentifier": "com.ugurrucr.steapp",
-      "buildNumber": "1.0.0",
+      "buildNumber": "1.0.1",
       "icon": "./assets/images/logo.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -32,6 +32,13 @@
         "NSContactsUsageDescription": "Arkadaşlarınızı bulabilmek için rehber izni gereklidir",
         "NSCalendarsUsageDescription": "Etkinlikleri takviminize ekleyebilmek için takvim izni gereklidir",
         "NSMotionUsageDescription": "Hareket sensörlerini kullanabilmek için izin gereklidir",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.54620040129-glhj2871msevbkcd3iklvdte1ebinc0c"
+            ]
+          }
+        ],
         "UIBackgroundModes": [
           "location",
           "fetch"
@@ -71,7 +78,7 @@
         "ACCESS_NETWORK_STATE"
       ],
       "package": "com.ugurrucr.steapp",
-      "versionCode": 1
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -104,6 +111,7 @@
       "iosDisplayInForeground": true,
       "androidMode": "default",
       "androidCollapsedTitle": "Yeni Bildirim"
-    }
+    },
+    "scheme": "steapp"
   }
 }
