@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert, SafeAreaView, StatusBar } from 'react-native';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { changeLanguage, loadLanguage } from '../../redux/slices/languageSlice';
+import { translate } from '../../i18n/i18n';
 
 // Dil seçenekleri
 const languageOptions = [
@@ -18,30 +20,30 @@ const languageOptions = [
         name: 'İngilizce',
         nativeName: 'English',
         flag: '🇬🇧',
-        isActive: false,
-        comingSoon: true
+        isActive: true,
+        comingSoon: false
     },
     {
         id: 'de',
         name: 'Almanca',
         nativeName: 'Deutsch',
         flag: '🇩🇪',
-        isActive: false,
-        comingSoon: true
-    },
-    {
-        id: 'fr',
-        name: 'Fransızca',
-        nativeName: 'Français',
-        flag: '🇫🇷',
-        isActive: false,
-        comingSoon: true
+        isActive: true,
+        comingSoon: false
     },
     {
         id: 'es',
         name: 'İspanyolca',
         nativeName: 'Español',
         flag: '🇪🇸',
+        isActive: true,
+        comingSoon: false
+    },
+    {
+        id: 'fr',
+        name: 'Fransızca',
+        nativeName: 'Français',
+        flag: '🇫🇷',
         isActive: false,
         comingSoon: true
     },
@@ -58,7 +60,18 @@ const languageOptions = [
 const DilSecenekleriPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
     const currentTheme = theme === 'dark' ? darkTheme : lightTheme;
-    const [selectedLanguage, setSelectedLanguage] = useState('tr');
+    const currentLanguage = useSelector((state) => state.language.language);
+    const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage);
+    const dispatch = useDispatch();
+
+    // Sayfa yüklendiğinde AsyncStorage'dan dil ayarını yükle
+    useEffect(() => {
+        dispatch(loadLanguage());
+    }, [dispatch]);
+
+    useEffect(() => {
+        setSelectedLanguage(currentLanguage);
+    }, [currentLanguage]);
 
     const handleLanguageSelect = (langId) => {
         // Eğer yakında eklenecek bir dil ise bilgilendirme mesajı göster
@@ -66,23 +79,32 @@ const DilSecenekleriPage = ({ navigation }) => {
 
         if (language.comingSoon) {
             Alert.alert(
-                "Çok Yakında",
-                `${language.name} dil desteği yakında eklenecektir.`,
-                [{ text: "Tamam", style: "default" }]
+                translate('language_coming_soon'),
+                `${language.name} ${translate('language_settings_description')}`,
+                [{ text: translate('done'), style: "default" }]
             );
             return;
         }
 
-        // Burada dil değiştirme işlemi yapılacak
-        setSelectedLanguage(langId);
-        Alert.alert(
-            "Dil Değiştirildi",
-            `Uygulama dili ${language.name} olarak değiştirildi.`,
-            [{ text: "Tamam", style: "default" }]
-        );
-
-        // Gerçek uygulamada burada redux action'ı çağrılacak
-        // ve dil değişikliği persistent storage'a kaydedilecek
+        // AsyncStorage ile Redux'u kullanarak dil değişimini yap
+        dispatch(changeLanguage(langId))
+            .unwrap()
+            .then(() => {
+                setSelectedLanguage(langId);
+                Alert.alert(
+                    translate('language_changed'),
+                    translate('language_changed_message', { language: language.name }),
+                    [{ text: translate('done'), style: "default" }]
+                );
+            })
+            .catch((error) => {
+                console.error("Dil değiştirme hatası:", error);
+                Alert.alert(
+                    translate('error'),
+                    translate('language_change_error'),
+                    [{ text: translate('done'), style: "default" }]
+                );
+            });
     };
 
     return (
@@ -99,7 +121,7 @@ const DilSecenekleriPage = ({ navigation }) => {
                     <Ionicons name="arrow-back" size={24} color={currentTheme.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: currentTheme.text }]}>
-                    Dil Seçenekleri
+                    {translate('language_settings')}
                 </Text>
                 <View style={styles.placeholderRight} />
             </View>
@@ -112,7 +134,7 @@ const DilSecenekleriPage = ({ navigation }) => {
                 <View style={styles.infoContainer}>
                     <Ionicons name="information-circle-outline" size={22} color={currentTheme.textSecondary} />
                     <Text style={[styles.infoText, { color: currentTheme.textSecondary }]}>
-                        Uygulama içerisinde kullanılacak dili seçin. Bu değişiklik tüm metinleri etkileyecektir.
+                        {translate('language_settings_description')}
                     </Text>
                 </View>
 
@@ -156,7 +178,7 @@ const DilSecenekleriPage = ({ navigation }) => {
                             <View style={styles.languageStatus}>
                                 {language.comingSoon ? (
                                     <View style={styles.comingSoonBadge}>
-                                        <Text style={styles.comingSoonText}>Yakında</Text>
+                                        <Text style={styles.comingSoonText}>{translate('language_coming_soon')}</Text>
                                     </View>
                                 ) : selectedLanguage === language.id ? (
                                     <View style={styles.selectedIconContainer}>
@@ -169,7 +191,7 @@ const DilSecenekleriPage = ({ navigation }) => {
                 </View>
 
                 <Text style={[styles.footerText, { color: currentTheme.textSecondary }]}>
-                    Daha fazla dil yakında eklenecektir.
+                    {translate('more_languages_soon')}
                 </Text>
             </ScrollView>
         </SafeAreaView>

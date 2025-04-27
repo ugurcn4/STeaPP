@@ -14,6 +14,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../../i18n/i18n';
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
@@ -24,13 +25,13 @@ const getPhotoUrl = (photoReference) => {
 // Benzin tipleri için renkler
 const getFuelTypeColor = (fuelType) => {
     switch (fuelType) {
-        case 'Benzin':
+        case translate('fuel_type_gasoline'):
             return '#FF9800';
-        case 'Dizel':
+        case translate('fuel_type_diesel'):
             return '#4CAF50';
-        case 'LPG':
+        case translate('fuel_type_lpg'):
             return '#2196F3';
-        case 'Elektrik':
+        case translate('fuel_type_electric'):
             return '#9C27B0';
         default:
             return '#757575';
@@ -111,7 +112,7 @@ const GasStationCard = memo(({ item, onPress }) => (
                             styles.statusText,
                             { color: item.isOpen ? '#4CAF50' : '#FF5252' }
                         ]}>
-                            {item.isOpen ? '24 Saat Açık' : 'Kapalı'}
+                            {item.isOpen ? translate('gas_stations_24hour') : translate('gas_stations_closed')}
                         </Text>
                     </View>
                 )}
@@ -134,9 +135,9 @@ const GasStations = () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    'İzin Gerekli',
-                    'Yakındaki yakıt istasyonlarını görebilmek için konum izni gerekiyor.',
-                    [{ text: 'Tamam' }]
+                    translate('gas_stations_permission_title'),
+                    translate('gas_stations_permission_message'),
+                    [{ text: translate('gas_stations_ok') }]
                 );
                 setLoading(false);
                 return;
@@ -156,7 +157,12 @@ const GasStations = () => {
                 const formattedStations = data.results.map(place => {
                     // Rastgele yakıt tipleri ekleyelim (gerçek veri olmadığı için)
                     const fuelTypes = [];
-                    const allFuelTypes = ['Benzin', 'Dizel', 'LPG', 'Elektrik'];
+                    const allFuelTypes = [
+                        translate('fuel_type_gasoline'),
+                        translate('fuel_type_diesel'),
+                        translate('fuel_type_lpg'),
+                        translate('fuel_type_electric')
+                    ];
 
                     // Her istasyon için rastgele yakıt tipleri
                     const fuelCount = Math.floor(Math.random() * 3) + 1; // 1-3 arası yakıt tipi
@@ -199,7 +205,7 @@ const GasStations = () => {
 
             setLoading(false);
         } catch (error) {
-            console.error('Benzin istasyonu verileri alınırken hata:', error);
+            console.error(translate('gas_stations_loading_error'), error);
 
             // Hata durumunda örnek verilerle gösterelim
             const location = await Location.getCurrentPositionAsync({});
@@ -215,19 +221,24 @@ const GasStations = () => {
     const generateMockGasStations = (baseLatitude, baseLongitude) => {
         const mockData = [];
         const stationNames = [
-            'BP Akaryakıt',
-            'Shell İstasyonu',
-            'Opet',
-            'Total',
-            'Petrol Ofisi',
-            'Aytemiz',
-            'Lukoil',
-            'GO',
-            'Alpet',
-            'MOil'
+            translate('station_bp'),
+            translate('station_shell'),
+            translate('station_opet'),
+            translate('station_total'),
+            translate('station_petrol_ofisi'),
+            translate('station_aytemiz'),
+            translate('station_lukoil'),
+            translate('station_go'),
+            translate('station_alpet'),
+            translate('station_moil')
         ];
 
-        const allFuelTypes = ['Benzin', 'Dizel', 'LPG', 'Elektrik'];
+        const allFuelTypes = [
+            translate('fuel_type_gasoline'),
+            translate('fuel_type_diesel'),
+            translate('fuel_type_lpg'),
+            translate('fuel_type_electric')
+        ];
 
         for (let i = 0; i < 10; i++) {
             // Rastgele konum oluştur (mevcut konumun yakınında)
@@ -249,7 +260,7 @@ const GasStations = () => {
             mockData.push({
                 id: `mock-station-${i}`,
                 name: stationNames[i],
-                address: `Örnek Bulvarı No: ${Math.floor(Math.random() * 100) + 1}`,
+                address: `${translate('gas_stations_mock_address')} ${Math.floor(Math.random() * 100) + 1}`,
                 rating: (Math.random() * 3 + 2).toFixed(1), // 2.0 ile 5.0 arası
                 totalRatings: Math.floor(Math.random() * 500),
                 isOpen: Math.random() > 0.3, // %70 ihtimalle açık
@@ -325,7 +336,7 @@ const GasStations = () => {
                     onPress={() => navigation.goBack()}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="#2C3E50" />
-                    <Text style={styles.headerTitle}>Yakındaki Yakıt İstasyonları</Text>
+                    <Text style={styles.headerTitle}>{translate('gas_stations_title')}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -345,8 +356,8 @@ const GasStations = () => {
             ) : (
                 <View style={styles.emptyContainer}>
                     <MaterialIcons name="sentiment-dissatisfied" size={64} color="#BDBDBD" />
-                    <Text style={styles.emptyText}>Yakında yakıt istasyonu bulunamadı</Text>
-                    <Text style={styles.emptySubText}>Farklı bir konumda tekrar deneyin</Text>
+                    <Text style={styles.emptyText}>{translate('gas_stations_empty')}</Text>
+                    <Text style={styles.emptySubText}>{translate('gas_stations_empty_subtitle')}</Text>
                 </View>
             )}
         </View>

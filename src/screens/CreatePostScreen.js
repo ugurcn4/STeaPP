@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import { translate } from '../i18n/i18n';
 
 const { width, height } = Dimensions.get('window');
 const THUMB_SIZE = width / 4;
@@ -98,13 +99,13 @@ const CreatePostScreen = ({ navigation }) => {
             setIsLoadingAlbums(true);
             const { status } = await MediaLibrary.requestPermissionsAsync();
             if (status !== 'granted') {
-                alert('Galeriye erişim izni gerekiyor!');
+                alert(translate('gallery_permission_error'));
                 return;
             }
 
             const albumsResult = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
             // Tüm fotoğraflar seçeneği ekleyelim
-            const allPhotosOption = { id: 'all', title: 'Tüm Fotoğraflar', assetCount: 0 };
+            const allPhotosOption = { id: 'all', title: translate('all_photos'), assetCount: 0 };
             setAlbums([allPhotosOption, ...albumsResult]);
         } catch (error) {
             console.error('Albüm yükleme hatası:', error);
@@ -117,7 +118,7 @@ const CreatePostScreen = ({ navigation }) => {
         try {
             const { status } = await MediaLibrary.requestPermissionsAsync();
             if (status !== 'granted') {
-                alert('Galeriye erişim izni gerekiyor!');
+                alert(translate('gallery_permission_error'));
                 return;
             }
 
@@ -233,7 +234,7 @@ const CreatePostScreen = ({ navigation }) => {
                     ListEmptyComponent={() => (
                         <View style={styles.emptyGallery}>
                             <Ionicons name="images-outline" size={48} color="#ccc" />
-                            <Text style={styles.emptyGalleryText}>Bu albümde görsel bulunamadı</Text>
+                            <Text style={styles.emptyGalleryText}>{translate('no_images_in_album')}</Text>
                         </View>
                     )}
                     ListFooterComponent={() => (
@@ -266,7 +267,7 @@ const CreatePostScreen = ({ navigation }) => {
                     ) : (
                         <View style={styles.noImagePlaceholder}>
                             <Ionicons name="images-outline" size={48} color="#666" />
-                            <Text style={styles.noImageText}>Görsel Seçin</Text>
+                            <Text style={styles.noImageText}>{translate('select_image')}</Text>
                         </View>
                     )}
                 </Animated.View>
@@ -288,14 +289,14 @@ const CreatePostScreen = ({ navigation }) => {
                         >
                             <Ionicons name="close" size={24} color="#000" />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Yeni Gönderi</Text>
+                        <Text style={styles.headerTitle}>{translate('create_post_title')}</Text>
                         <TouchableOpacity
                             onPress={() => navigation.navigate('CreatePostDetails', { image: selectedImage })}
                             disabled={!selectedImage}
                             style={[styles.nextButton, !selectedImage && styles.nextButtonDisabled]}
                         >
                             <Text style={[styles.nextButtonText, !selectedImage && styles.nextButtonTextDisabled]}>
-                                İleri
+                                {translate('next')}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -303,13 +304,13 @@ const CreatePostScreen = ({ navigation }) => {
                     {/* Albüm Seçici - Header altına sabit */}
                     <View style={styles.albumSelectorContainer}>
                         <View style={styles.albumSelectorWrapper}>
-                            <Text style={styles.albumLabel}>Albüm:</Text>
+                            <Text style={styles.albumLabel}>{translate('album_label')}</Text>
                             <TouchableOpacity
                                 style={styles.albumSelector}
                                 onPress={() => setShowAlbumPicker(true)}
                             >
                                 <Text style={styles.albumSelectorText} numberOfLines={1} ellipsizeMode="tail">
-                                    {selectedAlbum ? selectedAlbum.title : 'Tüm Fotoğraflar'}
+                                    {selectedAlbum ? selectedAlbum.title : translate('all_photos')}
                                 </Text>
                                 <MaterialIcons name="arrow-drop-down" size={24} color="#2196F3" />
                             </TouchableOpacity>
@@ -331,7 +332,7 @@ const CreatePostScreen = ({ navigation }) => {
                     >
                         <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
                             <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>Albüm Seçin</Text>
+                                <Text style={styles.modalTitle}>{translate('select_album')}</Text>
                                 <TouchableOpacity onPress={() => setShowAlbumPicker(false)}>
                                     <Ionicons name="close" size={24} color="#000" />
                                 </TouchableOpacity>
@@ -340,7 +341,7 @@ const CreatePostScreen = ({ navigation }) => {
                             {isLoadingAlbums ? (
                                 <View style={styles.loadingAlbums}>
                                     <ActivityIndicator size="large" color="#2196F3" />
-                                    <Text style={styles.loadingText}>Albümler yükleniyor...</Text>
+                                    <Text style={styles.loadingText}>{translate('album_loading')}</Text>
                                 </View>
                             ) : (
                                 <FlatList
@@ -363,7 +364,7 @@ const CreatePostScreen = ({ navigation }) => {
                                                 <View style={styles.albumTextContainer}>
                                                     <Text style={styles.albumTitle}>{item.title}</Text>
                                                     {item.id !== 'all' && (
-                                                        <Text style={styles.albumCount}>{item.assetCount} fotoğraf</Text>
+                                                        <Text style={styles.albumCount}>{item.assetCount} {translate('photo_count')}</Text>
                                                     )}
                                                 </View>
                                             </View>

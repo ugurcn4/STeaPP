@@ -15,6 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../../i18n/i18n';
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
@@ -84,14 +85,14 @@ const PharmacyCard = memo(({ item, onPress }) => (
                 {item.hasDelivery && (
                     <View style={styles.infoItem}>
                         <MaterialIcons name="delivery-dining" size={16} color="#4CAF50" />
-                        <Text style={styles.infoText}>Teslimat Hizmeti</Text>
+                        <Text style={styles.infoText}>{translate('pharmacies_delivery')}</Text>
                     </View>
                 )}
 
                 {item.has24HourService && (
                     <View style={styles.infoItem}>
                         <MaterialIcons name="schedule" size={16} color="#2196F3" />
-                        <Text style={styles.infoText}>24 Saat Hizmet</Text>
+                        <Text style={styles.infoText}>{translate('pharmacies_24hour')}</Text>
                     </View>
                 )}
             </View>
@@ -117,7 +118,7 @@ const PharmacyCard = memo(({ item, onPress }) => (
                             styles.dutyText,
                             { color: item.isOnDuty ? '#4CAF50' : '#00ACC1' }
                         ]}>
-                            {item.isOnDuty ? 'Nöbetçi' : 'Normal Mesai'}
+                            {item.isOnDuty ? translate('pharmacies_on_duty') : translate('pharmacies_normal_hours')}
                         </Text>
                     </View>
                 )}
@@ -129,7 +130,7 @@ const PharmacyCard = memo(({ item, onPress }) => (
                     onPress={() => Linking.openURL(`tel:${item.phoneNumber}`)}
                 >
                     <MaterialIcons name="phone" size={16} color="#FFF" />
-                    <Text style={styles.callButtonText}>Ara</Text>
+                    <Text style={styles.callButtonText}>{translate('pharmacies_call')}</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -169,9 +170,9 @@ const Pharmacies = () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    'İzin Gerekli',
-                    'Yakındaki eczaneleri görebilmek için konum izni gerekiyor.',
-                    [{ text: 'Tamam' }]
+                    translate('pharmacies_permission_title'),
+                    translate('pharmacies_permission_message'),
+                    [{ text: translate('pharmacies_ok') }]
                 );
                 setLoading(false);
                 return;
@@ -194,8 +195,8 @@ const Pharmacies = () => {
                     const has24HourService = isOnDuty || Math.random() > 0.9; // Nöbetçiyse veya %10 ihtimalle 24 saat
                     const hasDelivery = Math.random() > 0.5; // %50 ihtimalle teslimat
 
-                    // Telefon numarası oluştur
-                    const phoneNumber = `0${Math.floor(Math.random() * 1000000000).toString().padStart(9, '5')}`;
+                    // Google Places tarafından sağlanan telefon bilgisi yok, bu nedenle boş bırakıyoruz
+                    // Gerçek telefon numarası ayrı bir API çağrısı gerektirir (place_details API)
 
                     return {
                         id: place.place_id,
@@ -209,7 +210,7 @@ const Pharmacies = () => {
                         isOnDuty: isOnDuty,
                         has24HourService: has24HourService,
                         hasDelivery: hasDelivery,
-                        phoneNumber: phoneNumber,
+                        phoneNumber: null, // Rastgele telefon numarası oluşturmak yerine null kullanıyoruz
                         distance: calculateDistance(
                             latitude,
                             longitude,
@@ -222,76 +223,19 @@ const Pharmacies = () => {
                 setPharmacies(formattedPharmacies);
                 setFilteredPharmacies(formattedPharmacies);
             } else {
-                // Eğer gerçek veri alınamazsa, örnek veriler oluştur
-                const mockPharmacies = generateMockPharmacies(latitude, longitude);
-                setPharmacies(mockPharmacies);
-                setFilteredPharmacies(mockPharmacies);
+                // Gerçek veri alınamadı, boş liste ile devam et
+                setPharmacies([]);
+                setFilteredPharmacies([]);
             }
 
             setLoading(false);
         } catch (error) {
-            console.error('Eczane verileri alınırken hata:', error);
-
-            // Hata durumunda örnek veriler gösterelim
-            const location = await Location.getCurrentPositionAsync({});
-            const { latitude, longitude } = location.coords;
-            const mockPharmacies = generateMockPharmacies(latitude, longitude);
-            setPharmacies(mockPharmacies);
-            setFilteredPharmacies(mockPharmacies);
-
+            console.error(translate('pharmacies_loading_error'), error);
+            // Hata durumunda boş liste göster
+            setPharmacies([]);
+            setFilteredPharmacies([]);
             setLoading(false);
         }
-    };
-
-    // Örnek veri oluşturma fonksiyonu
-    const generateMockPharmacies = (baseLatitude, baseLongitude) => {
-        const mockData = [];
-        const pharmacyNames = [
-            'Hayat Eczanesi',
-            'Merkez Eczanesi',
-            'Güven Eczanesi',
-            'Şifa Eczanesi',
-            'Sağlık Eczanesi',
-            'Yeni Eczane',
-            'Park Eczanesi',
-            'Deniz Eczanesi',
-            'Aile Eczanesi',
-            'Yaşam Eczanesi'
-        ];
-
-        for (let i = 0; i < 10; i++) {
-            // Rastgele konum oluştur (mevcut konumun yakınında)
-            const latOffset = (Math.random() - 0.5) * 0.02;
-            const lngOffset = (Math.random() - 0.5) * 0.02;
-            const lat = baseLatitude + latOffset;
-            const lng = baseLongitude + lngOffset;
-
-            // Eczane özellikleri
-            const isOnDuty = Math.random() > 0.85; // %15 ihtimalle nöbetçi
-            const has24HourService = isOnDuty || Math.random() > 0.9; // Nöbetçiyse veya %10 ihtimalle 24 saat
-            const hasDelivery = Math.random() > 0.5; // %50 ihtimalle teslimat
-
-            // Telefon numarası oluştur
-            const phoneNumber = `0${Math.floor(Math.random() * 1000000000).toString().padStart(9, '5')}`;
-
-            mockData.push({
-                id: `mock-pharmacy-${i}`,
-                name: pharmacyNames[i],
-                address: `${Math.floor(Math.random() * 100) + 1}. Sokak No: ${Math.floor(Math.random() * 100) + 1}`,
-                rating: (Math.random() * 3 + 2).toFixed(1), // 2.0 ile 5.0 arası
-                totalRatings: Math.floor(Math.random() * 500),
-                photoReference: null, // Mock veri için resim yok
-                latitude: lat,
-                longitude: lng,
-                isOnDuty: isOnDuty,
-                has24HourService: has24HourService,
-                hasDelivery: hasDelivery,
-                phoneNumber: phoneNumber,
-                distance: calculateDistance(baseLatitude, baseLongitude, lat, lng)
-            });
-        }
-
-        return mockData;
     };
 
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -348,19 +292,19 @@ const Pharmacies = () => {
                 contentContainerStyle={styles.filterScrollContent}
             >
                 <FilterButton
-                    title="Tümü"
+                    title={translate('filter_all')}
                     icon="format-list-bulleted"
                     active={activeFilter === 'all'}
                     onPress={() => setActiveFilter('all')}
                 />
                 <FilterButton
-                    title="En Yakın"
+                    title={translate('filter_nearest')}
                     icon="near-me"
                     active={activeFilter === 'nearest'}
                     onPress={() => setActiveFilter('nearest')}
                 />
                 <FilterButton
-                    title="Nöbetçi"
+                    title={translate('filter_on_duty')}
                     icon="assignment-turned-in"
                     active={activeFilter === 'onDuty'}
                     onPress={() => setActiveFilter('onDuty')}
@@ -385,7 +329,7 @@ const Pharmacies = () => {
                     onPress={() => navigation.goBack()}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="#2C3E50" />
-                    <Text style={styles.headerTitle}>Yakındaki Eczaneler</Text>
+                    <Text style={styles.headerTitle}>{translate('pharmacies_title')}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -409,13 +353,13 @@ const Pharmacies = () => {
                     <MaterialIcons name="sentiment-dissatisfied" size={64} color="#BDBDBD" />
                     {activeFilter === 'onDuty' ? (
                         <>
-                            <Text style={styles.emptyText}>Nöbetçi eczane bulunamadı</Text>
-                            <Text style={styles.emptySubText}>Şu anda yakınınızda nöbetçi eczane bulunmuyor</Text>
+                            <Text style={styles.emptyText}>{translate('pharmacies_on_duty_empty')}</Text>
+                            <Text style={styles.emptySubText}>{translate('pharmacies_on_duty_empty_subtitle')}</Text>
                         </>
                     ) : (
                         <>
-                            <Text style={styles.emptyText}>Yakında eczane bulunamadı</Text>
-                            <Text style={styles.emptySubText}>Farklı bir konumda tekrar deneyin</Text>
+                            <Text style={styles.emptyText}>{translate('pharmacies_empty')}</Text>
+                            <Text style={styles.emptySubText}>{translate('pharmacies_empty_subtitle')}</Text>
                         </>
                     )}
                 </View>

@@ -24,10 +24,10 @@ import { getRecentChats, getUnreadMessageCount } from '../services/messageServic
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchNotifications, markNotificationAsRead } from '../redux/slices/notificationSlice';
 import NotificationItem from '../components/NotificationItem';
-import FastImage from 'react-native-fast-image';
-import { fetchPosts, toggleLikePost, addComment, deleteComment, deletePost } from '../services/postService';
+import { fetchPosts, toggleLikePost, addComment, deleteComment } from '../services/postService';
 import { getAuth } from 'firebase/auth';
-import { SafeAreaProvider, SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
+import {  SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
+import { translate } from '../i18n/i18n';
 
 // Activity bileşenini performans için memoize edelim
 const MemoizedActivity = React.memo(Activity);
@@ -541,7 +541,7 @@ const ActivitiesScreen = ({ navigation, route }) => {
                                     styles.headerTabText,
                                     activeTab !== 'activities' && styles.inactiveTabText
                                 ]}>
-                                    Keşfet
+                                    {translate('discover')}
                                 </Text>
                             </TouchableOpacity>
                             <Text style={styles.headerTabDivider}>|</Text>
@@ -553,7 +553,7 @@ const ActivitiesScreen = ({ navigation, route }) => {
                                     styles.headerTabText,
                                     activeTab !== 'notifications' && styles.inactiveTabText
                                 ]}>
-                                    Bildirimler
+                                    {translate('notifications')}
                                 </Text>
                             </TouchableOpacity>
                         </View>

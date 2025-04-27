@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Audio } from 'expo-av';
 import { ApplicationId } from '../../constants';
+import { translate } from '../../i18n/i18n';
 
 const PermissionsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -66,15 +67,15 @@ const PermissionsPage = ({ navigation }) => {
         try {
             if (permissions[type]) {
                 Alert.alert(
-                    "İzni Kapat",
-                    `${getPermissionName(type)} iznini kapatmak için cihaz ayarlarına gitmeniz gerekiyor. Ayarları açmak ister misiniz?`,
+                    translate('turn_off_permission'),
+                    translate('turn_off_permission_message', { permission: getPermissionName(type) }),
                     [
                         {
-                            text: "İptal",
+                            text: translate('cancel'),
                             style: "cancel"
                         },
                         {
-                            text: "Ayarları Aç",
+                            text: translate('open_settings'),
                             onPress: () => openSettings()
                         }
                     ]
@@ -112,15 +113,7 @@ const PermissionsPage = ({ navigation }) => {
     };
 
     const getPermissionName = (type) => {
-        const names = {
-            location: 'konum',
-            camera: 'kamera',
-            notifications: 'bildirim',
-            photos: 'galeri',
-            microphone: 'mikrofon'
-        };
-        const name = names[type];
-        return name.charAt(0).toUpperCase() + name.slice(1);
+        return translate(`permission_${type}`);
     };
 
     const openSettings = async () => {
@@ -128,7 +121,7 @@ const PermissionsPage = ({ navigation }) => {
             if (Platform.OS === 'ios') {
                 await Linking.openSettings();
             } else {
-                const packageName = 'com.yourdomain.yourappname'; // Android uygulama ID'nizi buraya yazın
+                const packageName = ApplicationId; // Android uygulama ID'nizi constants dosyasından alıyoruz
                 await IntentLauncher.startActivityAsync(
                     IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
                     { data: 'package:' + packageName }
@@ -139,9 +132,9 @@ const PermissionsPage = ({ navigation }) => {
             Linking.openSettings().catch(err => {
                 console.error('Alternatif ayarlar açma hatası:', err);
                 Alert.alert(
-                    "Hata",
-                    "Ayarlar açılamadı. Lütfen manuel olarak uygulama ayarlarına gidin.",
-                    [{ text: "Tamam" }]
+                    translate('error'),
+                    translate('settings_error'),
+                    [{ text: translate('done') }]
                 );
             });
         }
@@ -149,15 +142,15 @@ const PermissionsPage = ({ navigation }) => {
 
     const showPermissionAlert = (permissionType) => {
         Alert.alert(
-            "İzin Gerekli",
-            `${permissionType} izni için ayarları açmak ister misiniz?`,
+            translate('permission_required'),
+            translate('permission_settings_question', { permission: permissionType }),
             [
                 {
-                    text: "İptal",
+                    text: translate('cancel'),
                     style: "cancel"
                 },
                 {
-                    text: "Ayarları Aç",
+                    text: translate('open_settings'),
                     onPress: openSettings
                 }
             ]
@@ -178,7 +171,7 @@ const PermissionsPage = ({ navigation }) => {
                     />
                 </TouchableOpacity>
                 <Text style={[styles.header, { color: currentTheme.text }]}>
-                    İzinler
+                    {translate('permissions_page')}
                 </Text>
             </View>
 
@@ -188,10 +181,10 @@ const PermissionsPage = ({ navigation }) => {
                         <Ionicons name="location-outline" size={24} color={currentTheme.text} />
                         <View style={styles.textContainer}>
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
-                                Konum
+                                {translate('permission_location')}
                             </Text>
                             <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
-                                Arkadaşlarınızla konum paylaşımı için gerekli
+                                {translate('permission_location_desc')}
                             </Text>
                         </View>
                     </View>
@@ -208,10 +201,10 @@ const PermissionsPage = ({ navigation }) => {
                         <Ionicons name="camera-outline" size={24} color={currentTheme.text} />
                         <View style={styles.textContainer}>
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
-                                Kamera
+                                {translate('permission_camera')}
                             </Text>
                             <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
-                                Fotoğraf çekmek ve paylaşmak için gerekli
+                                {translate('permission_camera_desc')}
                             </Text>
                         </View>
                     </View>
@@ -228,10 +221,10 @@ const PermissionsPage = ({ navigation }) => {
                         <Ionicons name="notifications-outline" size={24} color={currentTheme.text} />
                         <View style={styles.textContainer}>
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
-                                Bildirimler
+                                {translate('permission_notifications')}
                             </Text>
                             <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
-                                Mesaj ve etkinlik bildirimlerini almak için gerekli
+                                {translate('permission_notifications_desc')}
                             </Text>
                         </View>
                     </View>
@@ -248,10 +241,10 @@ const PermissionsPage = ({ navigation }) => {
                         <Ionicons name="images-outline" size={24} color={currentTheme.text} />
                         <View style={styles.textContainer}>
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
-                                Fotoğraflar
+                                {translate('permission_photos')}
                             </Text>
                             <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
-                                Galeriden fotoğraf seçmek ve paylaşmak için gerekli
+                                {translate('permission_photos_desc')}
                             </Text>
                         </View>
                     </View>
@@ -268,10 +261,10 @@ const PermissionsPage = ({ navigation }) => {
                         <Ionicons name="mic-outline" size={24} color={currentTheme.text} />
                         <View style={styles.textContainer}>
                             <Text style={[styles.permissionTitle, { color: currentTheme.text }]}>
-                                Mikrofon
+                                {translate('permission_microphone')}
                             </Text>
                             <Text style={[styles.permissionDescription, { color: currentTheme.textSecondary }]}>
-                                Sesli mesaj göndermek için gerekli
+                                {translate('permission_microphone_desc')}
                             </Text>
                         </View>
                     </View>
@@ -285,7 +278,7 @@ const PermissionsPage = ({ navigation }) => {
             </View>
 
             <Text style={[styles.note, { color: currentTheme.textSecondary }]}>
-                Not: Bu izinler uygulamanın düzgün çalışması için gereklidir. İzinleri istediğiniz zaman cihaz ayarlarından değiştirebilirsiniz.
+                {translate('permission_note')}
             </Text>
 
             <View style={styles.bottomSection}>
@@ -300,7 +293,7 @@ const PermissionsPage = ({ navigation }) => {
                         style={styles.buttonIcon}
                     />
                     <Text style={[styles.buttonText, { color: currentTheme.text }]}>
-                        Sistem İzinlerini Yönet
+                        {translate('manage_system_permissions')}
                     </Text>
                 </TouchableOpacity>
 
@@ -312,7 +305,7 @@ const PermissionsPage = ({ navigation }) => {
                             color={currentTheme.textSecondary}
                         />
                         <Text style={[styles.infoText, { color: currentTheme.textSecondary }]}>
-                            Verileriniz güvende
+                            {translate('data_secure')}
                         </Text>
                     </View>
                     <View style={styles.infoItem}>
@@ -322,7 +315,7 @@ const PermissionsPage = ({ navigation }) => {
                             color={currentTheme.textSecondary}
                         />
                         <Text style={[styles.infoText, { color: currentTheme.textSecondary }]}>
-                            KVKK uyumlu
+                            {translate('kvkk_compliant')}
                         </Text>
                     </View>
                 </View>

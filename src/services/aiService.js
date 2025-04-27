@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { getCurrentLanguage } from '../i18n/i18n';
 
 // API anahtarını direkt tanımlayalım
 const genAI = new GoogleGenerativeAI("AIzaSyC_AUToC4TeClkw8amFNLsK63lInLOn4QU");
@@ -39,6 +40,9 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
 
         // Kullanıcı profil bilgilerini alalım
         const userProfileData = await getUserProfileData();
+        
+        // Mevcut dil kodunu alalım
+        const currentLanguage = getCurrentLanguage();
 
         const currentHour = new Date().getHours();
         const timeOfDay = currentHour >= 5 && currentHour < 12 ? 'sabah' :
@@ -68,6 +72,20 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
 
         // Streak bilgisi
         const currentStreak = userProfileData?.currentStreak || 0;
+
+        // Yanıt dilini belirle
+        let responseLang = '';
+        if (currentLanguage === 'tr') {
+            responseLang = 'Türkçe';
+        } else if (currentLanguage === 'en') {
+            responseLang = 'English';
+        } else if (currentLanguage === 'de') {
+            responseLang = 'Deutsch';
+        } else if (currentLanguage === 'es') {
+            responseLang = 'Español';
+        } else {
+            responseLang = 'Türkçe'; // Varsayılan olarak Türkçe
+        }
 
         const prompt = `Sen STeaPPY adında bir seyahat ve uygulama asistanısın. Enerjik, samimi ve esprili bir kişiliğin var.
 
@@ -136,7 +154,9 @@ export const getAIResponse = async (message, coords, messageHistory = []) => {
         - Ana içeriği 2-3 paragrafta sun
         - Gerekirse madde işaretleri kullan
         - Sonunda kısa bir kapanış cümlesi ekle
-
+        
+        ÖNEMLİ: Kullanıcıya yanıtını ${responseLang} dilinde ver. Şu anda uygulama dili olarak ${responseLang} seçilmiş durumda. Yanıtını mutlaka ${responseLang} dilinde oluştur.
+        
         Lütfen kısa, öz ve kullanışlı bir yanıt ver.`;
 
         // Yeniden deneme mantığı ekleyelim

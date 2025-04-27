@@ -28,16 +28,22 @@ import UpdatesPage from '../screens/SettingsPageScreens/UpdatesPage';
 import { OnboardingScreen } from '../screens';
 import CreatePostScreen from '../screens/CreatePostScreen';
 import CreatePostDetails from '../screens/CreatePostDetails';
-import ImageEditor from '../screens/ImageEditor';
 import LikedPostsScreen from '../screens/LikedPostsScreen';
 import LikedByScreen from '../screens/LikedByScreen';
-import MapPage from '../screens/MapPage';
 import ProfileModal from '../screens/ProfileModal';
 import FriendProfileModal from '../modals/friendProfileModal';
 import DilSecenekleriPage from '../screens/SettingsPageScreens/DilSecenekleriPage';
 import NearbyToilets from '../screens/HomePageCards/NearbyToilets';
 import GasStations from '../screens/HomePageCards/GasStations';
 import Pharmacies from '../screens/HomePageCards/Pharmacies';
+import SifremiDegistirPage from '../screens/SettingsPageScreens/SifremiDegistirPage';
+import ForgotPasswordPage from '../screens/forgotPassword';
+import CreateGroupScreen from '../screens/CreateGroupScreen';
+import GroupDetail from '../screens/GroupDetailScreen';
+import GroupsList from '../components/GroupsList';
+import FriendRequestsScreen from "../screens/FriendRequestsScreen";
+import AllMeetingsScreen from "../screens/AllMeetingsScreen";
+
 
 const Stack = createNativeStackNavigator();
 
@@ -235,14 +241,6 @@ const MainStack = () => {
                 }}
             />
             <Stack.Screen
-                name="ImageEditor"
-                component={ImageEditor}
-                options={{
-                    headerShown: false,
-                    presentation: 'modal'
-                }}
-            />
-            <Stack.Screen
                 name="LikedPosts"
                 component={LikedPostsScreen}
                 options={{ headerShown: false }}
@@ -299,6 +297,56 @@ const MainStack = () => {
                 name="Pharmacies"
                 component={Pharmacies}
                 options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="SifremiDegistir"
+                component={SifremiDegistirPage}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="ForgotPassword"
+                component={ForgotPasswordPage}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="CreateGroupScreen"
+                component={CreateGroupScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="GroupDetail"
+                component={GroupDetail}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="GroupsList"
+                component={GroupsList}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="FriendRequests"
+                component={FriendRequestsScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="AllMeetings"
+                component={AllMeetingsScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
             />
         </Stack.Navigator>
     );

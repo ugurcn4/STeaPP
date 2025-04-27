@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert,
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../redux/userSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { setTheme } from '../redux/themeSlice';
 import { lightTheme, darkTheme } from '../themes';
+import { translate } from '../i18n/i18n';
 
 // Shadow Wrapper Component
 const ShadowWrapper = ({ children, style }) => {
@@ -32,63 +32,69 @@ const SettingsPage = ({ navigation }) => {
 
     const sections = [
         {
-            title: "Mavi Tik Sorgulama",
+            title: translate('blue_green_tick'),
             iconName: "checkmark-circle",
             screen: "MaviTikSorgulama",
             iconColor: '#1E90FF',
             isNew: true,
-            badge: "Yeni Özellik"
+            badge: translate('new_feature')
         },
         {
-            title: "Dil Seçenekleri",
+            title: translate('change_password'),
+            iconName: "key",
+            screen: "SifremiDegistir",
+            iconColor: '#FF5733'
+        },
+        {
+            title: translate('language_settings'),
             iconName: "language-outline",
             screen: "DilSecenekleri",
             iconColor: '#8A2BE2'
         },
         {
-            title: "Bildirimler",
+            title: translate('notifications'),
             iconName: "notifications-outline",
             screen: "Bildirimler",
             iconColor: '#FF6347'
         },
         {
-            title: "İzinler",
+            title: translate('permissions'),
             iconName: "key-outline",
             screen: "Izinler",
             iconColor: '#4682B4'
         },
         {
-            title: "Gizlilik",
+            title: translate('privacy'),
             iconName: "lock-closed-outline",
             screen: "Gizlilik",
             iconColor: '#32CD32'
         },
         {
-            title: "Güncellemeler",
+            title: translate('updates'),
             iconName: "cloud-download-outline",
             screen: "Updates",
             iconColor: '#4CAF50'
         },
         {
-            title: "Tanıtım Ekranı",
+            title: translate('onboarding'),
             iconName: "layers-outline",
             screen: "Onboarding",
             iconColor: '#9C27B0'
         },
         {
-            title: "Yardım ve Destek",
+            title: translate('help_support'),
             iconName: "help-circle-outline",
             screen: "YardimDestek",
             iconColor: '#FFD700'
         },
         {
-            title: "Hakkında",
+            title: translate('about'),
             iconName: "information-circle-outline",
             screen: "Hakkinda",
             iconColor: '#1E90FF'
         },
         {
-            title: "Arkadaşlarınızı davet edin",
+            title: translate('invite_friends'),
             iconName: "people-outline",
             screen: "Arkadaşlarımı Davet Et",
             iconColor: '#FF69B4'
@@ -103,30 +109,30 @@ const SettingsPage = ({ navigation }) => {
     const inviteCards = [
         {
             id: 1,
-            title: "Arkadaşını Davet Et",
-            description: "Arkadaşlarını davet et ve birlikte STeaPP deneyimini keşfedin!",
+            title: translate('invite_friend'),
+            description: translate('invite_friend_desc'),
             iconName: "people-circle-outline",
             color: "#FF69B4",
             screen: "Arkadaşlarımı Davet Et",
-            buttonText: "Davet Et"
+            buttonText: translate('invite')
         },
         {
             id: 2,
-            title: "100 Puan Kazan",
-            description: "Her başarılı davet için 100 puan! Puanlarını ödüllerle değiştir.",
+            title: translate('earn_points'),
+            description: translate('earn_points_desc'),
             iconName: "trophy-outline",
             color: "#4CAF50",
             screen: "Arkadaşlarımı Davet Et",
-            buttonText: "Puan Kazan"
+            buttonText: translate('earn')
         },
         {
             id: 3,
-            title: "Premium Fırsatı",
-            description: "5 arkadaşını davet et, 1 ay ücretsiz premium üyelik kazan!",
-            iconName: "diamond-outline",
+            title: translate('blue_green_tick'),
+            description: translate('blue_green_tick_desc'),
+            iconName: "flash",
             color: "#FFD700",
-            screen: "Arkadaşlarımı Davet Et",
-            buttonText: "Premium Kazan"
+            screen: "MaviTikSorgulama",
+            buttonText: translate('explore')
         }
     ];
 
@@ -176,12 +182,12 @@ const SettingsPage = ({ navigation }) => {
 
     const handleLogout = () => {
         Alert.alert(
-            "Çıkış Yap",
-            "Çıkış yapmak istediğinize emin misiniz?",
+            translate('logout_title'),
+            translate('logout_confirm'),
             [
-                { text: "Hayır", onPress: () => { } },
+                { text: translate('no'), onPress: () => { } },
                 {
-                    text: "Evet",
+                    text: translate('yes'),
                     onPress: async () => {
                         await dispatch(logout());
                         navigation.reset({
@@ -195,9 +201,6 @@ const SettingsPage = ({ navigation }) => {
         );
     };
 
-    const handleThemeChange = (selectedTheme) => {
-        dispatch(setTheme(selectedTheme));
-    };
 
     const handleNavigation = (screen) => {
         if (screen === 'Onboarding') {
@@ -215,17 +218,17 @@ const SettingsPage = ({ navigation }) => {
                 </View>
                 <View style={styles.flashTextContainer}>
                     <Text style={[styles.flashTitle, { color: currentTheme.text }]}>
-                        Mavi Tik & Yeşil Tik
+                        {translate('blue_green_tick')}
                     </Text>
                     <Text style={[styles.flashDescription, { color: currentTheme.textSecondary }]}>
-                        Profil doğrulama özelliği artık kullanımda! Hemen sorgulayın.
+                        {translate('blue_green_tick_desc')}
                     </Text>
                 </View>
                 <TouchableOpacity
                     style={styles.flashButton}
                     onPress={() => handleNavigation('MaviTikSorgulama')}
                 >
-                    <Text style={styles.flashButtonText}>İncele</Text>
+                    <Text style={styles.flashButtonText}>{translate('explore')}</Text>
                 </TouchableOpacity>
             </View>
         </ShadowWrapper>
@@ -238,13 +241,13 @@ const SettingsPage = ({ navigation }) => {
             <View style={styles.carouselSection}>
                 <View style={styles.sectionTitleContainer}>
                     <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                        Özel Kampanyalar
+                        {translate('special_campaigns')}
                     </Text>
                     <TouchableOpacity
                         onPress={() => handleNavigation('Arkadaşlarımı Davet Et')}
                         style={styles.seeAllButton}
                     >
-                        <Text style={styles.seeAllText}>Tümünü Gör</Text>
+                        <Text style={styles.seeAllText}>{translate('see_all')}</Text>
                     </TouchableOpacity>
                 </View>
                 <FlatList
@@ -332,7 +335,7 @@ const SettingsPage = ({ navigation }) => {
                 styles.logoutButtonText,
                 Platform.OS === 'android' && styles.logoutButtonTextAndroid
             ]}>
-                Çıkış Yap
+                {translate('logout')}
             </Text>
         </TouchableOpacity>
     );
@@ -343,7 +346,7 @@ const SettingsPage = ({ navigation }) => {
             contentContainerStyle={{ paddingBottom: 80 }}
         >
             <ShadowWrapper style={[styles.header, { backgroundColor: currentTheme.background }]}>
-                <Text style={[styles.headerTitle, { color: currentTheme.text }]}>Ayarlar</Text>
+                <Text style={[styles.headerTitle, { color: currentTheme.text }]}>{translate('settings')}</Text>
 
                 {/* Arama Çubuğu */}
                 <View style={[styles.searchContainer, { backgroundColor: currentTheme.cardBackground }]}>
@@ -354,7 +357,7 @@ const SettingsPage = ({ navigation }) => {
                             { color: currentTheme.text },
                             Platform.OS === 'ios' ? { fontStyle: 'normal' } : null
                         ]}
-                        placeholder="Hızlı ayar arama..."
+                        placeholder={translate('search_settings')}
                         placeholderTextColor={Platform.OS === 'ios'
                             ? `${currentTheme.textSecondary}99`
                             : currentTheme.textSecondary}
@@ -365,9 +368,6 @@ const SettingsPage = ({ navigation }) => {
             </ShadowWrapper>
 
             <View style={styles.content}>
-                {/* Mavi Tik Banner */}
-                {renderVerificationBanner()}
-
                 {/* Davet Kartları Carousel */}
                 {renderInviteCardsCarousel()}
 
@@ -400,7 +400,7 @@ const SettingsPage = ({ navigation }) => {
                 ) : (
                     <ShadowWrapper style={[styles.settingsCard, { backgroundColor: currentTheme.cardBackground }]}>
                         <Text style={[styles.noResults, { color: currentTheme.textSecondary }]}>
-                            Sonuç bulunamadı
+                            {translate('no_results')}
                         </Text>
                     </ShadowWrapper>
                 )}

@@ -9,17 +9,45 @@ import {
     Alert,
     Linking,
     Platform,
-    Image
+    Image,
+    ScrollView
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../../i18n/i18n';
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
 const getPhotoUrl = (photoReference) => {
     return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
 };
+
+// Filtre butonları için bileşen
+const FilterButton = memo(({ title, active, onPress, icon }) => (
+    <TouchableOpacity
+        style={[
+            styles.filterButton,
+            active && styles.filterButtonActive
+        ]}
+        onPress={onPress}
+    >
+        <MaterialIcons
+            name={icon}
+            size={18}
+            color={active ? '#FFFFFF' : '#4CAF50'}
+            style={styles.filterIcon}
+        />
+        <Text
+            style={[
+                styles.filterButtonText,
+                active && styles.filterButtonTextActive
+            ]}
+        >
+            {title}
+        </Text>
+    </TouchableOpacity>
+));
 
 const RestaurantCard = memo(({ item, onPress }) => (
     <TouchableOpacity
@@ -33,7 +61,7 @@ const RestaurantCard = memo(({ item, onPress }) => (
             />
         ) : (
             <View style={styles.placeholderImage}>
-                <MaterialIcons name="restaurant" size={40} color="#ddd" />
+                <MaterialIcons name="restaurant" size={40} color="#4CAF50" />
             </View>
         )}
 
@@ -60,7 +88,7 @@ const RestaurantCard = memo(({ item, onPress }) => (
                             {item.rating}
                         </Text>
                         <Text style={styles.totalRatings}>
-                            ({item.totalRatings})
+                            ({item.totalRatings || 0})
                         </Text>
                     </View>
                 )}
@@ -73,11 +101,20 @@ const RestaurantCard = memo(({ item, onPress }) => (
                             styles.statusText,
                             { color: item.isOpen ? '#4CAF50' : '#FF5252' }
                         ]}>
-                            {item.isOpen ? 'Açık' : 'Kapalı'}
+                            {item.isOpen ? translate('restaurant_open') : translate('restaurant_closed')}
                         </Text>
                     </View>
                 )}
             </View>
+
+            {/* Web sitesi butonu */}
+            <TouchableOpacity
+                style={styles.websiteButton}
+                onPress={() => Linking.openURL(`https://www.google.com/search?q=${encodeURIComponent(item.name)}`)}
+            >
+                <MaterialIcons name="search" size={16} color="#FFF" />
+                <Text style={styles.websiteButtonText}>{translate('restaurant_search_web')}</Text>
+            </TouchableOpacity>
         </View>
     </TouchableOpacity>
 ));
@@ -85,20 +122,42 @@ const RestaurantCard = memo(({ item, onPress }) => (
 const NearbyRestaurants = () => {
     const navigation = useNavigation();
     const [restaurants, setRestaurants] = useState([]);
+    const [filteredRestaurants, setFilteredRestaurants] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'nearest', 'rating', 'open'
 
     useEffect(() => {
         getLocationAndRestaurants();
     }, []);
+
+    // Aktif filtreye göre restoranları filtrele
+    useEffect(() => {
+        if (restaurants.length === 0) return;
+
+        let filtered = [...restaurants];
+
+        if (activeFilter === 'nearest') {
+            // Mesafeye göre sırala (en yakından en uzağa)
+            filtered.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+        } else if (activeFilter === 'rating') {
+            // Puana göre sırala (en yüksekten en düşüğe)
+            filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        } else if (activeFilter === 'open') {
+            // Sadece açık olan restoranları filtrele
+            filtered = filtered.filter(restaurant => restaurant.isOpen);
+        }
+
+        setFilteredRestaurants(filtered);
+    }, [activeFilter, restaurants]);
 
     const getLocationAndRestaurants = async () => {
         try {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    'İzin Gerekli',
-                    'Yakındaki restoranları görebilmek için konum izni gerekiyor.',
-                    [{ text: 'Tamam' }]
+                    translate('restaurants_permission_title'),
+                    translate('restaurants_permission_message'),
+                    [{ text: translate('restaurants_ok') }]
                 );
                 setLoading(false);
                 return;
@@ -133,18 +192,19 @@ const NearbyRestaurants = () => {
                 }));
 
                 setRestaurants(formattedRestaurants);
+                setFilteredRestaurants(formattedRestaurants);
             } else {
-                throw new Error('API yanıtı başarısız');
+                // Gerçek veri alınamadı, boş liste ile devam et
+                setRestaurants([]);
+                setFilteredRestaurants([]);
             }
 
             setLoading(false);
         } catch (error) {
-            console.error(error);
-            Alert.alert(
-                'Hata',
-                'Restoranlar yüklenirken bir hata oluştu.',
-                [{ text: 'Tamam' }]
-            );
+            console.error(translate('restaurants_loading_error'), error);
+            // Hata durumunda boş liste göster
+            setRestaurants([]);
+            setFilteredRestaurants([]);
             setLoading(false);
         }
     };
@@ -194,10 +254,46 @@ const NearbyRestaurants = () => {
         index,
     }), []);
 
+    // Filtre butonlarını render etme fonksiyonu
+    const renderFilterButtons = () => (
+        <View style={styles.filterContainer}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScrollContent}
+            >
+                <FilterButton
+                    title={translate('filter_all')}
+                    icon="format-list-bulleted"
+                    active={activeFilter === 'all'}
+                    onPress={() => setActiveFilter('all')}
+                />
+                <FilterButton
+                    title={translate('filter_nearest')}
+                    icon="near-me"
+                    active={activeFilter === 'nearest'}
+                    onPress={() => setActiveFilter('nearest')}
+                />
+                <FilterButton
+                    title={translate('restaurant_filter_rating')}
+                    icon="star"
+                    active={activeFilter === 'rating'}
+                    onPress={() => setActiveFilter('rating')}
+                />
+                <FilterButton
+                    title={translate('restaurant_filter_open')}
+                    icon="lock-open"
+                    active={activeFilter === 'open'}
+                    onPress={() => setActiveFilter('open')}
+                />
+            </ScrollView>
+        </View>
+    );
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#25D220" />
+                <ActivityIndicator size="large" color="#4CAF50" />
             </View>
         );
     }
@@ -210,22 +306,32 @@ const NearbyRestaurants = () => {
                     onPress={() => navigation.goBack()}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="#2C3E50" />
-                    <Text style={styles.headerTitle}>Yakındaki Restoranlar</Text>
+                    <Text style={styles.headerTitle}>{translate('restaurants_title')}</Text>
                 </TouchableOpacity>
             </View>
 
-            <FlatList
-                data={restaurants}
-                renderItem={renderRestaurant}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContainer}
-                showsVerticalScrollIndicator={false}
-                getItemLayout={getItemLayout}
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={10}
-                windowSize={10}
-                initialNumToRender={8}
-            />
+            {renderFilterButtons()}
+
+            {filteredRestaurants.length > 0 ? (
+                <FlatList
+                    data={filteredRestaurants}
+                    renderItem={renderRestaurant}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={styles.listContainer}
+                    showsVerticalScrollIndicator={false}
+                    getItemLayout={getItemLayout}
+                    removeClippedSubviews={true}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    initialNumToRender={8}
+                />
+            ) : (
+                <View style={styles.emptyContainer}>
+                    <MaterialIcons name="sentiment-dissatisfied" size={64} color="#BDBDBD" />
+                    <Text style={styles.emptyText}>{translate('restaurants_empty')}</Text>
+                    <Text style={styles.emptySubText}>{translate('restaurants_empty_subtitle')}</Text>
+                </View>
+            )}
         </View>
     );
 };
@@ -241,6 +347,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#F5F6FA',
     },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    emptyText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#2C3E50',
+        marginTop: 16,
+    },
+    emptySubText: {
+        fontSize: 14,
+        color: '#7F8C8D',
+        textAlign: 'center',
+        marginTop: 8,
+    },
     header: {
         backgroundColor: '#fff',
         paddingTop: Platform.OS === 'ios' ? 50 : 20,
@@ -255,22 +379,57 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
         color: '#2C3E50',
-        marginLeft: 12,
+        marginLeft: 8,
+    },
+    filterContainer: {
+        backgroundColor: '#fff',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    filterScrollContent: {
+        paddingHorizontal: 16,
+    },
+    filterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: '#F1F8E9',
+        borderRadius: 20,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#4CAF50',
+    },
+    filterButtonActive: {
+        backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
+    },
+    filterButtonText: {
+        color: '#4CAF50',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    filterButtonTextActive: {
+        color: '#FFFFFF',
+    },
+    filterIcon: {
+        marginRight: 4,
     },
     listContainer: {
         padding: 16,
-        paddingTop: 8,
+        paddingBottom: 100,
     },
     restaurantCard: {
         backgroundColor: '#fff',
-        borderRadius: 20,
+        borderRadius: 12,
         marginBottom: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowRadius: 4,
         elevation: 3,
         overflow: 'hidden',
     },
@@ -282,7 +441,7 @@ const styles = StyleSheet.create({
     placeholderImage: {
         width: '100%',
         height: 180,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -325,7 +484,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 4,
+        marginBottom: 12,
     },
     ratingContainer: {
         flexDirection: 'row',
@@ -354,6 +513,22 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    websiteButton: {
+        backgroundColor: '#4CAF50',
+        borderRadius: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'flex-start',
+    },
+    websiteButtonText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '600',
+        marginLeft: 4,
     }
 });
 

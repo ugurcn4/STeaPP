@@ -26,6 +26,7 @@ import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../../firebaseConfig';
 import * as MediaLibrary from 'expo-media-library';
+import { translate } from '../i18n/i18n';
 
 const { width } = Dimensions.get('window');
 const IMAGE_HEIGHT = width / 2;
@@ -72,7 +73,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                 });
             } catch (error) {
                 console.error('Kullanıcı bilgileri alma hatası:', error);
-                alert('Kullanıcı bilgileri alınamadı');
+                alert(translate('user_data_fetch_error'));
             }
         };
 
@@ -114,12 +115,12 @@ const CreatePostDetails = ({ route, navigation }) => {
 
     const handleShare = async () => {
         if (!image) {
-            alert('Lütfen bir görsel seçin.');
+            alert(translate('select_image_required'));
             return;
         }
 
         if (!userData?.uid) {
-            alert('Oturum açmanız gerekiyor.');
+            alert(translate('login_required'));
             navigation.replace('Auth');
             return;
         }
@@ -133,7 +134,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                 try {
                     const { status } = await MediaLibrary.requestPermissionsAsync();
                     if (status !== 'granted') {
-                        alert('Fotoğraflara erişim izni gerekiyor');
+                        alert(translate('gallery_permission_error'));
                         setIsLoading(false);
                         return;
                     }
@@ -154,7 +155,7 @@ const CreatePostDetails = ({ route, navigation }) => {
             }
 
             if (!processedImageUri) {
-                throw new Error('Geçerli resim bulunamadı');
+                throw new Error(translate('valid_image_not_found'));
             }
 
             const postData = {
@@ -185,7 +186,7 @@ const CreatePostDetails = ({ route, navigation }) => {
 
         } catch (error) {
             console.error('Paylaşım hatası:', error);
-            alert('Paylaşım sırasında bir hata oluştu: ' + error.message);
+            alert(translate('share_error') + error.message);
         } finally {
             setIsLoading(false);
         }
@@ -238,7 +239,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                         <TouchableOpacity onPress={() => navigation.goBack()}>
                             <Ionicons name="arrow-back" size={24} color="#000" />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Yeni Gönderi</Text>
+                        <Text style={styles.headerTitle}>{translate('create_post_title')}</Text>
                         <TouchableOpacity
                             onPress={handleShare}
                             style={[styles.shareButton, !image && styles.shareButtonDisabled]}
@@ -247,7 +248,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                             {isLoading ? (
                                 <ActivityIndicator color="#fff" size="small" />
                             ) : (
-                                <Text style={styles.shareButtonText}>Paylaş</Text>
+                                <Text style={styles.shareButtonText}>{translate('share')}</Text>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -269,7 +270,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                                             style={styles.userAvatar}
                                         />
                                         <View style={styles.userTextContainer}>
-                                            <Text style={styles.userName}>{userData?.informations?.name || 'Kullanıcı Adı'}</Text>
+                                            <Text style={styles.userName}>{userData?.informations?.name || translate('user_name')}</Text>
                                         </View>
                                     </View>
                                 </View>
@@ -288,14 +289,14 @@ const CreatePostDetails = ({ route, navigation }) => {
                                         <View style={styles.imageFooter}>
                                             <View style={styles.imageInfo}>
                                                 <MaterialIcons name="photo-camera" size={16} color="#fff" />
-                                                <Text style={styles.imageInfoText}>Orijinal</Text>
+                                                <Text style={styles.imageInfoText}>{translate('original')}</Text>
                                             </View>
                                             <TouchableOpacity
                                                 style={styles.imageButton}
                                                 onPress={() => navigation.goBack()}
                                             >
                                                 <MaterialIcons name="photo-library" size={22} color="#fff" />
-                                                <Text style={styles.imageButtonText}>Değiştir</Text>
+                                                <Text style={styles.imageButtonText}>{translate('change')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </LinearGradient>
@@ -317,7 +318,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                                         </View>
                                     </View>
                                     <Text style={styles.postPreviewDescription}>
-                                        {description ? description : 'Açıklama buraya gelecek...'}
+                                        {description ? description : translate('description_preview')}
                                     </Text>
                                     {location && (
                                         <View style={styles.locationPreview}>
@@ -332,13 +333,13 @@ const CreatePostDetails = ({ route, navigation }) => {
                                             ))}
                                         </View>
                                     )}
-                                    <Text style={styles.timePreview}>Şimdi</Text>
+                                    <Text style={styles.timePreview}>{translate('now')}</Text>
                                 </View>
                             </View>
 
                             {/* İçerik Alanı */}
                             <View style={styles.contentContainer}>
-                                <Text style={styles.sectionTitle}>Gönderi Detayları</Text>
+                                <Text style={styles.sectionTitle}>{translate('post_details')}</Text>
 
                                 {/* Açıklama */}
                                 <View style={styles.inputContainer}>
@@ -350,7 +351,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                                                 maxHeight: MAX_INPUT_HEIGHT
                                             }
                                         ]}
-                                        placeholder="Bir açıklama ekle..."
+                                        placeholder={translate('add_description')}
                                         value={description}
                                         onChangeText={setDescription}
                                         multiline
@@ -370,7 +371,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                                         <Text style={styles.hashTag}>#</Text>
                                         <TextInput
                                             style={styles.tagInputField}
-                                            placeholder="Etiket ekle"
+                                            placeholder={translate('add_tag')}
                                             value={currentTag}
                                             onChangeText={text => setCurrentTag(text.replace(/\s+/g, ''))}
                                             onSubmitEditing={handleAddTag}
@@ -406,7 +407,7 @@ const CreatePostDetails = ({ route, navigation }) => {
                                 >
                                     <MaterialIcons name="location-on" size={24} color="#666" />
                                     <Text style={styles.optionText}>
-                                        {location ? location.name : 'Konum ekle'}
+                                        {location ? location.name : translate('add_location')}
                                     </Text>
                                     <MaterialIcons name="chevron-right" size={24} color="#666" />
                                 </TouchableOpacity>
@@ -438,7 +439,7 @@ const CreatePostDetails = ({ route, navigation }) => {
 
                                 {/* Gizlilik Ayarı */}
                                 <View style={styles.privacyContainer}>
-                                    <Text style={styles.privacyTitle}>Kimler görebilir?</Text>
+                                    <Text style={styles.privacyTitle}>{translate('who_can_see')}</Text>
                                     <TouchableOpacity
                                         style={[
                                             styles.privacyOption,
@@ -458,10 +459,10 @@ const CreatePostDetails = ({ route, navigation }) => {
                                                 styles.privacyOptionTitle,
                                                 isPublic && styles.privacyOptionTitleSelected
                                             ]}>
-                                                Herkese Açık
+                                                {translate('public')}
                                             </Text>
                                             <Text style={styles.privacyOptionDescription}>
-                                                Tüm kullanıcılar bu gönderiyi görebilir
+                                                {translate('public_description')}
                                             </Text>
                                         </View>
                                         <MaterialIcons
@@ -490,10 +491,10 @@ const CreatePostDetails = ({ route, navigation }) => {
                                                 styles.privacyOptionTitle,
                                                 !isPublic && styles.privacyOptionTitleSelected
                                             ]}>
-                                                Sadece Arkadaşlar
+                                                {translate('friends_only')}
                                             </Text>
                                             <Text style={styles.privacyOptionDescription}>
-                                                Yalnızca arkadaş listenizde olanlar görebilir
+                                                {translate('friends_only_description')}
                                             </Text>
                                         </View>
                                         <MaterialIcons

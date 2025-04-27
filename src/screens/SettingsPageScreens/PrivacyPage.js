@@ -8,6 +8,7 @@ import { EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'fir
 import { doc, deleteDoc, collection, query, where, getDocs, writeBatch, getDoc, updateDoc } from 'firebase/firestore';
 import { logout, updatePrivacySettings, savePrivacySettings, updateVisibility, setAllPrivacySettings } from '../../redux/userSlice';
 import Toast from 'react-native-toast-message';
+import { translate } from '../../i18n/i18n';
 
 const PrivacyPage = ({ navigation }) => {
     const dispatch = useDispatch();
@@ -27,7 +28,7 @@ const PrivacyPage = ({ navigation }) => {
         if (!user?.uid) {
             const currentUser = auth.currentUser;
             if (!currentUser?.uid) {
-                Alert.alert('Hata', 'Oturum süreniz dolmuş olabilir. Lütfen tekrar giriş yapın.');
+                Alert.alert(translate('error'), translate('session_expired'));
                 navigation.navigate('Login');
                 return;
             }
@@ -71,37 +72,37 @@ const PrivacyPage = ({ navigation }) => {
         switch (setting) {
             case 'visibility':
                 return value === 'public'
-                    ? 'Artık herkes profilinizi görüntüleyebilir'
-                    : 'Şu an sadece arkadaşlarınız profilinizi görüntüleyebilir';
+                    ? translate('visibility_public')
+                    : translate('visibility_private');
             case 'locationSharing':
                 return value
-                    ? 'Artık arkadaşlarınız konumunuzu görebilir'
-                    : 'Artık kimse konumunuzu göremez';
+                    ? translate('location_enabled')
+                    : translate('location_disabled');
             case 'activityStatus':
                 return value
-                    ? 'Arkadaşlarınız çevrimiçi olduğunuzu görebilir'
-                    : 'Çevrimiçi durumunuz gizlendi';
+                    ? translate('activity_enabled')
+                    : translate('activity_disabled');
             case 'friendsList':
                 return value
-                    ? 'Arkadaş listeniz herkese açık'
-                    : 'Arkadaş listeniz gizlendi';
+                    ? translate('friends_list_enabled')
+                    : translate('friends_list_disabled');
             case 'searchable':
                 return value
-                    ? 'Kullanıcılar sizi arama sonuçlarında görebilir'
-                    : 'Artık arama sonuçlarında görünmeyeceksiniz';
+                    ? translate('search_enabled')
+                    : translate('search_disabled');
             case 'dataCollection':
                 return value
-                    ? 'Uygulama deneyiminizi iyileştirmek için veri toplanacak'
-                    : 'Artık verileriniz toplanmayacak';
+                    ? translate('data_collection_enabled')
+                    : translate('data_collection_disabled');
             default:
-                return 'Ayarlar güncellendi';
+                return translate('settings_updated');
         }
     };
 
     const showToast = (message) => {
         Toast.show({
             type: 'success',
-            text1: 'Bilgi',
+            text1: translate('info'),
             text2: message,
             position: 'top',
             visibilityTime: 4000,
@@ -110,7 +111,7 @@ const PrivacyPage = ({ navigation }) => {
 
     const toggleSetting = async (key) => {
         if (!user?.uid) {
-            Alert.alert('Hata', 'Kullanıcı bilgilerine ulaşılamadı');
+            Alert.alert(translate('error'), translate('user_access_error'));
             return;
         }
 
@@ -129,13 +130,13 @@ const PrivacyPage = ({ navigation }) => {
             showToast(getSettingMessage(key, newValue));
         } catch (error) {
             console.error('Ayar güncellenirken hata:', error);
-            Alert.alert('Hata', 'Ayarlar kaydedilirken bir hata oluştu');
+            Alert.alert(translate('error'), translate('settings_error'));
         }
     };
 
     const handleVisibilityChange = async (newValue) => {
         if (!user?.uid) {
-            Alert.alert('Hata', 'Kullanıcı bilgilerine ulaşılamadı');
+            Alert.alert(translate('error'), translate('user_access_error'));
             return;
         }
 
@@ -149,29 +150,29 @@ const PrivacyPage = ({ navigation }) => {
             showToast(getSettingMessage('visibility', newValue));
         } catch (error) {
             console.error('Görünürlük ayarı güncellenirken hata:', error);
-            Alert.alert('Hata', 'Görünürlük ayarı kaydedilirken bir hata oluştu');
+            Alert.alert(translate('error'), translate('visibility_error'));
         }
     };
 
     const deleteReasons = [
-        'Uygulamayı artık kullanmıyorum',
-        'Gizlilik endişelerim var',
-        'Başka bir uygulama kullanıyorum',
-        'Teknik sorunlar yaşıyorum',
-        'Diğer'
+        translate('reason_not_using'),
+        translate('reason_privacy'),
+        translate('reason_another_app'),
+        translate('reason_technical'),
+        translate('reason_other')
     ];
 
     const showDeleteConfirmation = () => {
         Alert.alert(
-            "Hesap Silme",
-            "Hesabınızı silmek üzeresiniz. Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinecektir.",
+            translate('delete_account_title'),
+            translate('delete_account_confirmation'),
             [
                 {
-                    text: "İptal",
+                    text: translate('cancel'),
                     style: "cancel"
                 },
                 {
-                    text: "Devam Et",
+                    text: translate('continue'),
                     onPress: () => setDeleteModalVisible(true),
                     style: "destructive"
                 }
@@ -181,11 +182,11 @@ const PrivacyPage = ({ navigation }) => {
 
     const handleDeleteAccount = async () => {
         if (!password) {
-            Alert.alert("Hata", "Lütfen şifrenizi girin");
+            Alert.alert(translate('error'), translate('password_required'));
             return;
         }
         if (!deleteReason) {
-            Alert.alert("Hata", "Lütfen hesap silme nedeninizi seçin");
+            Alert.alert(translate('error'), translate('reason_required'));
             return;
         }
 
@@ -194,7 +195,7 @@ const PrivacyPage = ({ navigation }) => {
             const user = auth.currentUser;
 
             if (!user || !user.email) {
-                throw new Error('Kullanıcı bilgileri bulunamadı');
+                throw new Error(translate('user_not_found'));
             }
 
             // Kimlik doğrulama işlemini güncelle
@@ -209,18 +210,18 @@ const PrivacyPage = ({ navigation }) => {
                 console.error('Kimlik doğrulama hatası:', authError);
                 if (authError.code === 'auth/invalid-credential') {
                     Alert.alert(
-                        "Hata",
-                        "Girdiğiniz şifre yanlış. Lütfen şifrenizi kontrol edip tekrar deneyin."
+                        translate('error'),
+                        translate('wrong_password')
                     );
                 } else if (authError.code === 'auth/too-many-requests') {
                     Alert.alert(
-                        "Hata",
-                        "Çok fazla başarısız deneme. Lütfen bir süre bekleyip tekrar deneyin."
+                        translate('error'),
+                        translate('too_many_attempts')
                     );
                 } else {
                     Alert.alert(
-                        "Hata",
-                        "Kimlik doğrulama başarısız. Lütfen tekrar giriş yapıp deneyin."
+                        translate('error'),
+                        translate('auth_failed')
                     );
                 }
                 setLoading(false);
@@ -291,15 +292,15 @@ const PrivacyPage = ({ navigation }) => {
 
             // Bilgilendirme mesajı
             Alert.alert(
-                "Hesap Silindi",
-                "Hesabınız ve tüm verileriniz başarıyla silindi."
+                translate('account_deleted'),
+                translate('account_deleted_success')
             );
 
         } catch (error) {
             console.error('Hesap silme hatası:', error);
             Alert.alert(
-                "Hata",
-                "Hesap silinirken beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin."
+                translate('error'),
+                translate('account_delete_error')
             );
             setLoading(false);
             setDeleteModalVisible(false);
@@ -321,7 +322,7 @@ const PrivacyPage = ({ navigation }) => {
                         />
                     </TouchableOpacity>
                     <Text style={[styles.header, { color: currentTheme.text }]}>
-                        Gizlilik
+                        {translate('privacy_page')}
                     </Text>
                 </View>
 
@@ -331,10 +332,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="person-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Profil Görünürlüğü
+                                    {translate('profile_visibility')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Profilinizi kimler görebilir
+                                    {translate('profile_visibility_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -350,10 +351,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="location-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Konum Paylaşımı
+                                    {translate('location_sharing')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Konumunuzu arkadaşlarınızla paylaşın
+                                    {translate('location_sharing_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -369,10 +370,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="radio-button-on-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Çevrimiçi Durumu
+                                    {translate('online_status')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Çevrimiçi olduğunuzu göster
+                                    {translate('online_status_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -388,10 +389,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="people-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Arkadaş Listesi
+                                    {translate('friends_list')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Arkadaş listenizi kimler görebilir
+                                    {translate('friends_list_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -407,10 +408,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="search-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Arama Görünürlüğü
+                                    {translate('search_visibility')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Aramada görünür ol
+                                    {translate('search_visibility_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -426,10 +427,10 @@ const PrivacyPage = ({ navigation }) => {
                             <Ionicons name="analytics-outline" size={24} color={currentTheme.text} />
                             <View style={styles.textContainer}>
                                 <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                                    Veri Toplama
+                                    {translate('data_collection')}
                                 </Text>
                                 <Text style={styles.settingDescription}>
-                                    Deneyimi iyileştirmek için veri topla
+                                    {translate('data_collection_desc')}
                                 </Text>
                             </View>
                         </View>
@@ -442,13 +443,13 @@ const PrivacyPage = ({ navigation }) => {
                 </View>
 
                 <View style={styles.dangerZone}>
-                    <Text style={styles.dangerZoneTitle}>Tehlikeli Bölge</Text>
+                    <Text style={styles.dangerZoneTitle}>{translate('danger_zone')}</Text>
                     <TouchableOpacity
                         style={styles.deleteButton}
                         onPress={showDeleteConfirmation}
                     >
                         <Ionicons name="trash-outline" size={24} color="#FF3B30" />
-                        <Text style={styles.deleteButtonText}>Hesabı Sil</Text>
+                        <Text style={styles.deleteButtonText}>{translate('delete_account')}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -493,15 +494,15 @@ const PrivacyPage = ({ navigation }) => {
                                         <View style={styles.modalHeader}>
                                             <Ionicons name="warning-outline" size={40} color="#FF3B30" />
                                             <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
-                                                Hesabınızı Silmek İstediğinize Emin misiniz?
+                                                {translate('delete_account_sure')}
                                             </Text>
                                             <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
-                                                Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinecektir.
+                                                {translate('delete_account_permanent')}
                                             </Text>
                                         </View>
 
                                         <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                                            Silme Nedeni
+                                            {translate('delete_reason')}
                                         </Text>
                                         <ScrollView style={styles.reasonsContainer}>
                                             {deleteReasons.map((reason, index) => (
@@ -530,7 +531,7 @@ const PrivacyPage = ({ navigation }) => {
                                         </ScrollView>
 
                                         <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                                            Hesap Şifreniz
+                                            {translate('account_password')}
                                         </Text>
                                         <View style={styles.passwordContainer}>
                                             <TextInput
@@ -540,7 +541,7 @@ const PrivacyPage = ({ navigation }) => {
                                                     color: currentTheme.text,
                                                     flex: 1
                                                 }]}
-                                                placeholder="Şifrenizi girin"
+                                                placeholder={translate('enter_password')}
                                                 placeholderTextColor={currentTheme.textSecondary}
                                                 secureTextEntry={secureTextEntry}
                                                 value={password}
@@ -563,7 +564,7 @@ const PrivacyPage = ({ navigation }) => {
                                                 style={[styles.modalButton, styles.cancelButton]}
                                                 onPress={() => setDeleteModalVisible(false)}
                                             >
-                                                <Text style={styles.cancelButtonText}>Vazgeç</Text>
+                                                <Text style={styles.cancelButtonText}>{translate('go_back')}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={[
@@ -575,7 +576,7 @@ const PrivacyPage = ({ navigation }) => {
                                                 disabled={loading || !password || !deleteReason}
                                             >
                                                 <Text style={styles.confirmButtonText}>
-                                                    {loading ? 'Siliniyor...' : 'Hesabı Sil'}
+                                                    {loading ? translate('deleting') : translate('delete_account_btn')}
                                                 </Text>
                                             </TouchableOpacity>
                                         </View>
@@ -587,7 +588,7 @@ const PrivacyPage = ({ navigation }) => {
                 </Modal>
 
                 <Text style={[styles.note, { color: currentTheme.text }]}>
-                    Not: Gizlilik ayarlarınızı istediğiniz zaman değiştirebilirsiniz. Bu ayarlar hesabınızın güvenliğini ve gizliliğini etkiler.
+                    {translate('privacy_note')}
                 </Text>
             </ScrollView>
             <Toast />

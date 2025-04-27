@@ -4,22 +4,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { translate } from '../../i18n/i18n';
 
 // Bölge isimlerini düzgün formata çeviren fonksiyon
 const formatRegionName = (region) => {
-    if (!region) return 'Keşfedilmeyi Bekliyor';
+    if (!region) return translate('waiting_to_be_explored');
 
-    const regionMap = {
-        'ic_anadolu': 'İç Anadolu',
-        'dogu_anadolu': 'Doğu Anadolu',
-        'guneydogu_anadolu': 'Güneydoğu Anadolu',
-        'akdeniz': 'Akdeniz',
-        'ege': 'Ege',
-        'marmara': 'Marmara',
-        'karadeniz': 'Karadeniz'
-    };
-
-    return regionMap[region] || region;
+    const regionKey = `region_${region}`;
+    return translate(regionKey);
 };
 
 const CityExplorerCard = ({ navigation }) => {
@@ -104,7 +96,7 @@ const CityExplorerCard = ({ navigation }) => {
                 setCities(initialCities);
                 setLoading(false);
             } catch (error) {
-                console.error('Şehirler yüklenirken hata:', error);
+                console.error(translate('cities_loading_error'), error);
                 setLoading(false);
             }
         };
@@ -144,7 +136,7 @@ const CityExplorerCard = ({ navigation }) => {
                 >
                     <View style={styles.loadingContent}>
                         <MaterialIcons name="location-city" size={24} color="#FFF" />
-                        <Text style={styles.loadingText}>Yükleniyor...</Text>
+                        <Text style={styles.loadingText}>{translate('loading')}</Text>
                     </View>
                 </LinearGradient>
             </View>
@@ -162,10 +154,10 @@ const CityExplorerCard = ({ navigation }) => {
                 <View style={styles.emptyStateContent}>
                     <MaterialIcons name="explore" size={40} color="#FFF" style={styles.emptyStateIcon} />
                     <Text style={styles.emptyStateTitle}>
-                        Maceraya Hazır Mısın?
+                        {translate('ready_for_adventure')}
                     </Text>
                     <Text style={styles.emptyStateDescription}>
-                        İlk şehrini keşfetmeye başla ve rozetleri topla!
+                        {translate('start_explore_collect')}
                     </Text>
 
                     {/* Şehirler Kaydırması */}
@@ -197,19 +189,19 @@ const CityExplorerCard = ({ navigation }) => {
 
                     {/* Gamification Elementleri */}
                     <View style={styles.rewardsPreview}>
-                        <Text style={styles.rewardsTitle}>Seni Neler Bekliyor?</Text>
+                        <Text style={styles.rewardsTitle}>{translate('what_awaits_you')}</Text>
                         <View style={styles.rewardsList}>
                             <View style={styles.rewardItem}>
                                 <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
-                                <Text style={styles.rewardText}>Özel Rozetler</Text>
+                                <Text style={styles.rewardText}>{translate('special_badges')}</Text>
                             </View>
                             <View style={styles.rewardItem}>
                                 <MaterialIcons name="local-activity" size={24} color="#FFD700" />
-                                <Text style={styles.rewardText}>Şehir Puanları</Text>
+                                <Text style={styles.rewardText}>{translate('city_points')}</Text>
                             </View>
                             <View style={styles.rewardItem}>
                                 <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
-                                <Text style={styles.rewardText}>Sıralama</Text>
+                                <Text style={styles.rewardText}>{translate('ranking')}</Text>
                             </View>
                         </View>
                     </View>
@@ -219,7 +211,7 @@ const CityExplorerCard = ({ navigation }) => {
                         onPress={handleCardPress}
                     >
                         <Text style={styles.startButtonText}>
-                            {user ? 'Keşfetmeye Başla' : 'Giriş Yap'}
+                            {user ? translate('start_exploring') : translate('login')}
                         </Text>
                         <MaterialIcons name="arrow-forward" size={20} color="#FFF" />
                     </TouchableOpacity>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, TextInput, Platform, FlatList, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, TouchableWithoutFeedback, Animated, Alert, Modal, FlatList, ActivityIndicator } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { LinearGradient } from 'expo-linear-gradient';
 import CommentsModal from './CommentsModal';
 import { subscribeToPost, deletePost, toggleArchivePost, createArchiveGroup, updatePostArchiveGroups, fetchArchiveGroups, quickSavePost } from '../services/postService';
 import ArchiveGroupModal from '../modals/ArchiveGroupModal';
@@ -15,6 +14,7 @@ import { db } from '../../firebaseConfig';
 import ZoomableImage from './ZoomableImage';
 import VerificationBadge from '../components/VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
+import { translate } from '../i18n/i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -93,16 +93,16 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             const completeUserData = {
                 ...activity.user,
                 id: activity.userId || activity.user.id,
-                name: activity.user.name || 'İsimsiz Kullanıcı',
+                name: activity.user.name || translate('activity_unnamed_user'),
                 profilePicture: activity.user.profilePicture || activity.user.avatar || null,
                 bio: activity.user.bio || activity.user.informations?.bio || '',
                 friends: activity.user.friends || [],
                 informations: {
                     ...(activity.user.informations || {}),
-                    name: activity.user.name || activity.user.informations?.name || 'İsimsiz Kullanıcı',
+                    name: activity.user.name || activity.user.informations?.name || translate('activity_unnamed_user'),
                     username: activity.user.username ||
                         activity.user.informations?.username ||
-                        (activity.user.name || activity.user.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                        (activity.user.name || activity.user.informations?.name || translate('activity_user')).toLowerCase().replace(/\s+/g, '_'),
                     bio: activity.user.bio || activity.user.informations?.bio || ''
                 }
             };
@@ -117,16 +117,16 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             const completeUserData = {
                 ...user,
                 id: user.id,
-                name: user.name || 'İsimsiz Kullanıcı',
+                name: user.name || translate('activity_unnamed_user'),
                 profilePicture: user.profilePicture || user.avatar || null,
                 bio: user.bio || user.informations?.bio || '',
                 friends: user.friends || [],
                 informations: {
                     ...(user.informations || {}),
-                    name: user.name || user.informations?.name || 'İsimsiz Kullanıcı',
+                    name: user.name || user.informations?.name || translate('activity_unnamed_user'),
                     username: user.username ||
                         user.informations?.username ||
-                        (user.name || user.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                        (user.name || user.informations?.name || translate('activity_user')).toLowerCase().replace(/\s+/g, '_'),
                     bio: user.bio || user.informations?.bio || ''
                 }
             };
@@ -158,10 +158,10 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                     informations: {
                         ...(userData.informations || {}),
                         ...(firebaseUserData.informations || {}),
-                        name: userData.name || firebaseUserData.informations?.name || 'İsimsiz Kullanıcı',
+                        name: userData.name || firebaseUserData.informations?.name || translate('activity_unnamed_user'),
                         username: userData.informations?.username ||
                             firebaseUserData.informations?.username ||
-                            (userData.name || firebaseUserData.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
+                            (userData.name || firebaseUserData.informations?.name || translate('activity_user')).toLowerCase().replace(/\s+/g, '_'),
                         bio: userData.bio || firebaseUserData.bio || firebaseUserData.informations?.bio || ''
                     }
                 };
@@ -181,33 +181,6 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
         }
     };
 
-    const fetchUserInfo = async (userId) => {
-        try {
-            const userDoc = await getDoc(doc(db, 'users', userId));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const user = {
-                    id: userId,
-                    name: userData.informations?.name || 'İsimsiz Kullanıcı',
-                    profilePicture: userData.profilePicture || userData.avatar || null,
-                    bio: userData.bio || userData.informations?.bio || '',
-                    friends: userData.friends || [],
-                    informations: {
-                        ...(userData.informations || {}),
-                        name: userData.informations?.name || 'İsimsiz Kullanıcı',
-                        username: userData.informations?.username ||
-                            userData.username ||
-                            (userData.informations?.name || 'Kullanıcı').toLowerCase().replace(/\s+/g, '_'),
-                        bio: userData.bio || userData.informations?.bio || ''
-                    }
-                };
-                setSelectedFriend(user);
-                setFriendModalVisible(true);
-            }
-        } catch (error) {
-            console.error('Kullanıcı bilgileri alınırken hata:', error);
-        }
-    };
 
     const renderDescription = () => {
         if (!activity.description) return null;
@@ -244,7 +217,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                         <Text
                             style={styles.seeMore}
                             onPress={() => setIsDescriptionExpanded(true)}
-                        > devamını gör</Text>
+                        > {translate('activity_see_more')}</Text>
                     </Text>
                 </View>
             </View>
@@ -263,7 +236,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                                 style={styles.commentUsername}
                                 onPress={() => handleCommentUserPress(comment.user)}
                             >
-                                {comment.user?.name || 'Kullanıcı'}
+                                {comment.user?.name || translate('activity_user')}
                             </Text>
                             {/* Sadece yorum gönderen kişi gönderi sahibiyse rozeti göster */}
                             {comment.userId === activity.userId && (
@@ -281,7 +254,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 {activity.comments.length > 2 && (
                     <TouchableOpacity onPress={handleCommentPress}>
                         <Text style={styles.viewAllComments}>
-                            {activity.comments.length} yorumun tümünü gör
+                            {activity.comments.length} {translate('activity_view_all_comments')}
                         </Text>
                     </TouchableOpacity>
                 )}
@@ -381,15 +354,15 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
     const handleDeletePress = () => {
         setShowOptions(false);
         Alert.alert(
-            'Gönderiyi Sil',
-            'Bu gönderiyi silmek istediğinizden emin misiniz?',
+            translate('activity_delete_post'),
+            translate('activity_delete_confirm'),
             [
                 {
-                    text: 'İptal',
+                    text: translate('cancel'),
                     style: 'cancel'
                 },
                 {
-                    text: 'Sil',
+                    text: translate('delete'),
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -398,7 +371,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                                 onDelete(activity.id);
                             }
                         } catch (error) {
-                            Alert.alert('Hata', error.message);
+                            Alert.alert(translate('error'), error.message);
                         }
                     }
                 }
@@ -424,7 +397,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 // Başarılı kaldırma bildirimi göster
                 Toast.show({
                     type: 'success',
-                    text1: 'Kaydedilenlerden Kaldırıldı',
+                    text1: translate('activity_removed_from_saved'),
                     position: 'bottom',
                     visibilityTime: 2000,
                 });
@@ -439,8 +412,8 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                 // Başarılı kaydetme bildirimi göster
                 Toast.show({
                     type: 'success',
-                    text1: 'Kaydedildi',
-                    text2: `"${defaultCollection.name}" koleksiyonuna eklendi`,
+                    text1: translate('activity_saved'),
+                    text2: `"${defaultCollection.name}" ${translate('activity_added_to_collection')}`,
                     position: 'bottom',
                     visibilityTime: 2000,
                 });
@@ -449,8 +422,8 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             console.error('Kaydetme/kaldırma hatası:', error);
             Toast.show({
                 type: 'error',
-                text1: 'Hata',
-                text2: 'İşlem sırasında bir hata oluştu',
+                text1: translate('error'),
+                text2: translate('activity_operation_error'),
                 position: 'bottom',
             });
         } finally {
@@ -502,7 +475,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             setShowArchiveModal(false);
         } catch (error) {
             console.error('Arşivleme hatası:', error);
-            Alert.alert('Hata', 'Koleksiyon kaydedilirken bir hata oluştu');
+            Alert.alert(translate('error'), translate('activity_collection_save_error'));
         }
     };
 
@@ -575,7 +548,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             onPress={() => {
                 const completeUserData = {
                     ...item,
-                    name: item.informations?.name || 'İsimsiz Kullanıcı',
+                    name: item.informations?.name || translate('activity_unnamed_user'),
                     informations: {
                         ...item.informations,
                         username: item.informations?.username || item.informations?.name?.toLowerCase().replace(/\s+/g, '_') || 'kullanici'
@@ -595,7 +568,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
             />
             <View style={styles.likedByUserInfo}>
                 <View style={styles.likedByUserNameRow}>
-                    <Text style={styles.likedByUserName}>{item.informations?.name || 'İsimsiz Kullanıcı'}</Text>
+                    <Text style={styles.likedByUserName}>{item.informations?.name || translate('activity_unnamed_user')}</Text>
                     {item.verification && (
                         <VerificationBadge
                             hasBlueTick={item.verification.hasBlueTick}
@@ -626,7 +599,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                         />
                         <View style={styles.userTextContainer}>
                             <View style={styles.userNameVerificationRow}>
-                                <Text style={styles.username}>{activity.user?.name || 'İsimsiz Kullanıcı'}</Text>
+                                <Text style={styles.username}>{activity.user?.name || translate('activity_unnamed_user')}</Text>
 
                                 <VerificationBadge
                                     hasBlueTick={userVerification.hasBlueTick}
@@ -645,7 +618,7 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                                             ellipsizeMode="tail"
                                         >
                                             {typeof activity.location === 'object'
-                                                ? (activity.location.name || activity.location.address || 'Konum')
+                                                ? (activity.location.name || activity.location.address || translate('activity_location'))
                                                 : activity.location}
                                         </Text>
                                     </View>
@@ -780,8 +753,8 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                                         if (activity.likedBy[0] === currentUserId) {
                                             return (
                                                 <Text>
-                                                    <Text style={styles.likeSummaryTextBold}>Siz</Text>
-                                                    <Text style={styles.likeSummaryTextLight}> beğendiniz</Text>
+                                                    <Text style={styles.likeSummaryTextBold}>{translate('activity_you')}</Text>
+                                                    <Text style={styles.likeSummaryTextLight}> {translate('activity_liked')}</Text>
                                                 </Text>
                                             );
                                         }
@@ -796,24 +769,24 @@ const Activity = ({ activity, onLikePress, onCommentPress, isLiked, currentUserI
                                                         handleCommentUserPress(activity.user);
                                                     }}
                                                 >
-                                                    {activity.user?.name || 'Kullanıcı'}
+                                                    {activity.user?.name || translate('activity_user')}
                                                 </Text>
-                                                <Text style={styles.likeSummaryTextLight}> beğendi</Text>
+                                                <Text style={styles.likeSummaryTextLight}> {translate('activity_liked_by_other')}</Text>
                                             </Text>
                                         );
                                     }
 
                                     // Birden fazla beğeni varsa
                                     const isCurrentUserFirst = activity.likedBy[0] === currentUserId;
-                                    const firstLiker = isCurrentUserFirst ? 'Siz' : (activity.firstLikerName || activity.user?.name || 'Kullanıcı');
+                                    const firstLiker = isCurrentUserFirst ? translate('activity_you') : (activity.firstLikerName || activity.user?.name || translate('activity_user'));
                                     const otherCount = activity.likedBy.length - 1;
 
                                     return (
                                         <Text>
                                             <Text style={styles.likeSummaryTextBold}>{firstLiker}</Text>
-                                            <Text style={styles.likeSummaryTextLight}> ve </Text>
-                                            <Text style={styles.likeSummaryTextBold}>diğer {otherCount} kişi</Text>
-                                            <Text style={styles.likeSummaryTextLight}> beğendi</Text>
+                                            <Text style={styles.likeSummaryTextLight}> {translate('activity_and')} </Text>
+                                            <Text style={styles.likeSummaryTextBold}>{translate('activity_other_people', {count: otherCount})}</Text>
+                                            <Text style={styles.likeSummaryTextLight}> {translate('activity_liked_by_other')}</Text>
                                         </Text>
                                     );
                                 })()}

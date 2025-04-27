@@ -25,6 +25,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import VerificationBadge from './VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
+import { translate } from '../i18n/i18n';
+
+
 
 const CommentItem = ({ comment, onReply, currentUserId, postUserId, onDelete }) => {
     const canDelete = comment.userId === currentUserId || postUserId === currentUserId;
@@ -136,7 +139,7 @@ const CommentItem = ({ comment, onReply, currentUserId, postUserId, onDelete }) 
                                 style={styles.replyButton}
                                 onPress={() => onReply(comment)}
                             >
-                                <Text style={styles.replyButtonText}>Yanıtla</Text>
+                                <Text style={styles.replyButtonText}>{translate('reply')}</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -243,7 +246,7 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
                             <TouchableOpacity onPress={onClose}>
                                 <Ionicons name="close" size={24} color="#000" />
                             </TouchableOpacity>
-                            <Text style={styles.modalTitle}>Yorumlar</Text>
+                            <Text style={styles.modalTitle}>{translate('comments')}</Text>
                             <View style={{ width: 24 }} />
                         </View>
 
@@ -278,7 +281,7 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
                             {replyTo && (
                                 <View style={styles.replyingTo}>
                                     <Text style={styles.replyingToText}>
-                                        Yanıtlanıyor: {replyTo.user.name}
+                                        {translate('replying_to')}{replyTo.user.name}
                                     </Text>
                                     <TouchableOpacity onPress={() => setReplyTo(null)}>
                                         <Ionicons name="close-circle" size={20} color="#666" />
@@ -288,7 +291,7 @@ const CommentsModal = ({ visible, onClose, comments, onAddComment, currentUserId
                             <View style={styles.inputWrapper}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={replyTo ? "Yanıtını yaz..." : "Yorumunu yaz..."}
+                                    placeholder={replyTo ? translate('write_your_reply') : translate('write_your_comment')}
                                     value={newComment}
                                     onChangeText={setNewComment}
                                     multiline

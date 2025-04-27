@@ -26,6 +26,7 @@ import { getAuth } from 'firebase/auth';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { translate } from '../../i18n/i18n';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 50;
@@ -54,16 +55,16 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
     const bannerCards = [
         {
             id: '1',
-            title: 'Hesabınızı Doğrulayın',
-            description: 'Kimliğinizi doğrulayarak mavi tik veya yeşil tik rozetini edinebilirsiniz.',
+            title: translate('verify_account'),
+            description: translate('verify_account_desc'),
             backgroundColor: '#E6F2FF',
             iconName: 'shield-checkmark',
             iconColor: '#1E90FF'
         },
         {
             id: '2',
-            title: 'İlk 250 Kullanıcıya Özel',
-            description: 'Uygulamamızı indiren ilk 250 kayıtlı kullanıcımız ücretsiz olarak mavi tik veya yeşil tik alabilir!',
+            title: translate('special_first_250'),
+            description: translate('special_first_250_desc'),
             backgroundColor: '#FFF4E6',
             iconName: 'star',
             iconColor: '#FF9500'
@@ -315,7 +316,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
-                return { found: false, message: "Bu e-posta ile kayıtlı kullanıcı bulunamadı." };
+                return { found: false, message: translate('user_not_found') };
             }
 
             // Kullanıcı belgesini al
@@ -331,7 +332,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                     found: true,
                     isInFirst250: false,
                     rank: 999,
-                    message: "Kullanıcı kaydınız bulundu, ancak kayıt zamanı bilgisi eksik."
+                    message: translate('user_found_no_time')
                 };
             }
 
@@ -359,15 +360,15 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                 isInFirst250,
                 rank: userRank,
                 message: isInFirst250
-                    ? `Tebrikler! İlk 250 kullanıcımız arasındasınız (#${userRank}).`
-                    : `Maalesef ilk 250 kullanıcımız arasında değilsiniz. Sıranız: #${userRank}`
+                    ? translate('rank_first_250', { rank: userRank })
+                    : translate('rank_not_first_250', { rank: userRank })
             };
 
         } catch (error) {
             console.error("Kayıt sırası kontrolünde hata:", error);
             return {
                 found: false,
-                message: "Kullanıcı sırası kontrol edilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
+                message: translate('rank_check_error')
             };
         } finally {
             setLoading(false);
@@ -748,7 +749,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                     <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                         <Ionicons name="arrow-back" size={24} color="#000" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Profil Doğrulama</Text>
+                    <Text style={styles.headerTitle}>{translate('profile_verification')}</Text>
                     <View style={styles.placeholderRight} />
                 </View>
 
@@ -759,14 +760,14 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                             <View style={styles.applicationStatusContainer}>
                                 <View style={styles.applicationStatusHeader}>
                                     <Ionicons name="information-circle" size={24} color="#1E90FF" />
-                                    <Text style={styles.applicationStatusTitle}>Mevcut Başvuru Durumunuz</Text>
+                                    <Text style={styles.applicationStatusTitle}>{translate('current_application_status')}</Text>
                                 </View>
 
                                 {applicationStatus.pendingBlue && (
                                     <View style={[styles.statusItem, { borderLeftColor: '#FF9500' }]}>
                                         <Ionicons name="time-outline" size={20} color="#FF9500" />
                                         <Text style={styles.statusText}>
-                                            Mavi tik başvurunuz inceleme aşamasındadır. Sonuç size bildirilecektir.
+                                            {translate('blue_pending')}
                                         </Text>
                                     </View>
                                 )}
@@ -775,7 +776,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                     <View style={[styles.statusItem, { borderLeftColor: '#FF9500' }]}>
                                         <Ionicons name="time-outline" size={20} color="#FF9500" />
                                         <Text style={styles.statusText}>
-                                            Yeşil tik başvurunuz inceleme aşamasındadır. Sonuç size bildirilecektir.
+                                            {translate('green_pending')}
                                         </Text>
                                     </View>
                                 )}
@@ -784,7 +785,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                     <View style={[styles.statusItem, { borderLeftColor: '#32CD32' }]}>
                                         <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
                                         <Text style={styles.statusText}>
-                                            Mavi tik başvurunuz onaylanmıştır. Profiliniz doğrulanmış olarak işaretlenmiştir.
+                                            {translate('blue_approved')}
                                         </Text>
                                     </View>
                                 )}
@@ -793,7 +794,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                     <View style={[styles.statusItem, { borderLeftColor: '#32CD32' }]}>
                                         <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
                                         <Text style={styles.statusText}>
-                                            Yeşil tik başvurunuz onaylanmıştır. Profiliniz doğrulanmış olarak işaretlenmiştir.
+                                            {translate('green_approved')}
                                         </Text>
                                     </View>
                                 )}
@@ -802,9 +803,9 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                     <View style={[styles.statusItem, { borderLeftColor: '#FF3B30' }]}>
                                         <Ionicons name="close-circle" size={20} color="#FF3B30" />
                                         <Text style={styles.statusText}>
-                                            {applicationStatus.rejectedApplications} adet reddedilmiş başvurunuz bulunmaktadır.
+                                            {applicationStatus.rejectedApplications} {translate('rejected_applications')}
                                             {!applicationStatus.pendingBlue && !applicationStatus.pendingGreen ?
-                                                ' Yeni bir başvuru yapabilirsiniz.' : ''}
+                                                ` ${translate('can_apply_again')}` : ''}
                                         </Text>
                                     </View>
                                 )}
@@ -853,15 +854,15 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
 
                     {/* Öncelik Durumu Sorgulama */}
                     <View style={styles.priorityCheckContainer}>
-                        <Text style={styles.priorityCheckTitle}>İlk 250 Kullanıcı Kontrolü</Text>
+                        <Text style={styles.priorityCheckTitle}>{translate('first_250_check')}</Text>
                         <Text style={styles.priorityCheckDescription}>
-                            İlk 250 kullanıcımız arasında olup olmadığınızı kontrol edin ve ücretsiz mavi tik veya yeşil tik fırsatını kaçırmayın!
+                            {translate('first_250_check_desc')}
                         </Text>
 
                         <View style={styles.priorityCheckForm}>
                             <TextInput
                                 style={styles.priorityCheckInput}
-                                placeholder="E-posta adresinizi girin"
+                                placeholder={translate('enter_email')}
                                 value={userEmail}
                                 onChangeText={setUserEmail}
                                 keyboardType="email-address"
@@ -878,7 +879,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                 {loading ? (
                                     <ActivityIndicator size="small" color="#FFFFFF" />
                                 ) : (
-                                    <Text style={styles.priorityCheckButtonText}>Kontrol Et</Text>
+                                    <Text style={styles.priorityCheckButtonText}>{translate('check')}</Text>
                                 )}
                             </TouchableOpacity>
                         </View>
@@ -896,15 +897,12 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                 <View style={styles.priorityStatusTextContainer}>
                                     <Text style={styles.priorityStatusTitle}>
                                         {priorityStatus.isInFirst250
-                                            ? "Tebrikler! İlk 250 kullanıcı arasındasınız!"
-                                            : "Üzgünüz, ilk 250 kullanıcı arasında değilsiniz."
+                                            ? translate('congrats_first_250')
+                                            : translate('sorry_not_first_250')
                                         }
                                     </Text>
                                     <Text style={styles.priorityStatusDescription}>
-                                        {priorityStatus.isInFirst250
-                                            ? `Kaydınız ${priorityStatus.userNumber}. sırada. Ücretsiz mavi tik veya yeşil tik için başvurunuzu tamamlayın.`
-                                            : `Kaydınız ${priorityStatus.userNumber}. sırada. Yine de mavi tik veya yeşil tik başvurusu yapabilirsiniz.`
-                                        }
+                                        {priorityStatus.message}
                                     </Text>
                                 </View>
                             </View>
@@ -912,7 +910,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                     </View>
 
                     {/* Doğrulama Tipleri */}
-                    <Text style={styles.sectionTitle}>Doğrulama Tipini Seçin</Text>
+                    <Text style={styles.sectionTitle}>{translate('select_verification_type')}</Text>
                     <View style={styles.verificationTypes}>
                         <TouchableOpacity
                             style={[
@@ -923,10 +921,10 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                         >
                             <View style={styles.cardHeader}>
                                 <Ionicons name="checkmark-circle" size={28} color="#1E90FF" />
-                                <Text style={styles.cardTitle}>Mavi Tik</Text>
+                                <Text style={styles.cardTitle}>{translate('blue_tick')}</Text>
                             </View>
                             <Text style={styles.cardDescription}>
-                                Ünlüler, gazeteciler, politikacılar ve tanınmış kişiler için
+                                {translate('blue_tick_desc')}
                             </Text>
                         </TouchableOpacity>
 
@@ -939,45 +937,45 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                         >
                             <View style={styles.cardHeader}>
                                 <Ionicons name="checkmark-circle" size={28} color="#32CD32" />
-                                <Text style={styles.cardTitle}>Yeşil Tik</Text>
+                                <Text style={styles.cardTitle}>{translate('green_tick')}</Text>
                             </View>
                             <Text style={styles.cardDescription}>
-                                İşletmeler, kurumlar, dernekler ve resmi kuruluşlar için
+                                {translate('green_tick_desc')}
                             </Text>
                         </TouchableOpacity>
                     </View>
 
                     {/* Form */}
-                    <Text style={styles.sectionTitle}>Başvuru Formu</Text>
+                    <Text style={styles.sectionTitle}>{translate('application_form')}</Text>
                     <View style={styles.formContainer}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Tam Adınız</Text>
+                            <Text style={styles.inputLabel}>{translate('full_name')}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Adınızı ve soyadınızı giriniz"
+                                placeholder={translate('enter_full_name')}
                                 value={fullName}
                                 onChangeText={setFullName}
                             />
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Unvanınız</Text>
+                            <Text style={styles.inputLabel}>{translate('title')}</Text>
                             <TouchableOpacity
                                 style={styles.titleSelectButton}
                                 onPress={() => setShowTitleModal(true)}
                             >
                                 <Text style={selectedTitle ? styles.titleSelectedText : styles.titlePlaceholderText}>
-                                    {selectedTitle ? selectedTitle.name : 'Unvanınızı seçiniz'}
+                                    {selectedTitle ? selectedTitle.name : translate('select_title')}
                                 </Text>
                                 <Ionicons name="chevron-down" size={20} color="#666" />
                             </TouchableOpacity>
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Doğrulama Sebebi</Text>
+                            <Text style={styles.inputLabel}>{translate('verification_reason')}</Text>
                             <TextInput
                                 style={[styles.input, styles.multilineInput]}
-                                placeholder="Neden profil doğrulaması istediğinizi kısaca açıklayınız"
+                                placeholder={translate('verification_reason_hint')}
                                 value={reason}
                                 onChangeText={setReason}
                                 multiline
@@ -987,14 +985,14 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Ek Belge (İsteğe Bağlı)</Text>
+                            <Text style={styles.inputLabel}>{translate('additional_document')}</Text>
                             {!hasAttachedID ? (
                                 <TouchableOpacity
                                     style={styles.attachButton}
                                     onPress={attachFile}
                                 >
                                     <Ionicons name="cloud-upload-outline" size={22} color="#1E90FF" />
-                                    <Text style={styles.attachButtonText}>Belge Yükle</Text>
+                                    <Text style={styles.attachButtonText}>{translate('upload_document')}</Text>
                                 </TouchableOpacity>
                             ) : (
                                 <View style={styles.selectedFileContainer}>
@@ -1020,11 +1018,10 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                                 </View>
                             )}
                             <Text style={styles.attachNote}>
-                                Desteklenen formatlar: JPG, PNG, PDF, DOCX (Max. 1MB)
+                                {translate('supported_formats')}
                             </Text>
                             <Text style={styles.attachDescription}>
-                                Yüklemek zorunlu değildir ancak daha hızlı doğrulama için mesleki kimliğinizi veya faaliyetlerinizi
-                                gösteren bir belge yükleyebilirsiniz.
+                                {translate('document_note')}
                             </Text>
                         </View>
                     </View>
@@ -1033,9 +1030,8 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                     <View style={styles.infoContainer}>
                         <Ionicons name="information-circle-outline" size={24} color="#666" />
                         <Text style={styles.infoText}>
-                            Başvurunuz, uzman ekibimiz tarafından incelenecek ve genellikle
-                            1-2 iş günü içerisinde sonuçlandırılacaktır. Doğrulama kriterleri ve şartları hakkında
-                            daha fazla bilgi için <Text style={styles.link}>Gizlilik Politikası</Text>'nı inceleyebilirsiniz.
+                            {translate('info_text')}
+                            <Text style={styles.link}> {translate('privacy_policy')}</Text>.
                         </Text>
                     </View>
                 </ScrollView>
@@ -1050,7 +1046,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                         {loading ? (
                             <ActivityIndicator size="small" color="#FFFFFF" />
                         ) : (
-                            <Text style={styles.submitButtonText}>Başvuruyu Gönder</Text>
+                            <Text style={styles.submitButtonText}>{translate('send_application')}</Text>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -1066,7 +1062,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Unvan Seçiniz</Text>
+                            <Text style={styles.modalTitle}>{translate('select_title_modal')}</Text>
                             <TouchableOpacity onPress={() => setShowTitleModal(false)}>
                                 <Ionicons name="close" size={24} color="#000" />
                             </TouchableOpacity>
@@ -1076,7 +1072,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                             <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder="Unvan arayın..."
+                                placeholder={translate('search_title')}
                                 value={searchText}
                                 onChangeText={setSearchText}
                                 autoCapitalize="none"
@@ -1097,7 +1093,7 @@ const MaviTikSorgulamaPage = ({ navigation }) => {
                             ListEmptyComponent={() => (
                                 <View style={styles.noResultContainer}>
                                     <Ionicons name="search-outline" size={40} color="#CCC" />
-                                    <Text style={styles.noResultText}>Sonuç bulunamadı</Text>
+                                    <Text style={styles.noResultText}>{translate('no_results')}</Text>
                                 </View>
                             )}
                         />

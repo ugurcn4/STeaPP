@@ -10,19 +10,20 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { translate } from '../i18n/i18n';
 
 // Çizgi tasarım şablonları
 const LINE_STYLE_TEMPLATES = [
-    { id: 'default', name: 'Varsayılan', color: '#4CAF50', width: 6, pattern: 'solid' },
-    { id: 'blue', name: 'Mavi Yol', color: '#2196F3', width: 6, pattern: 'solid' },
-    { id: 'orange', name: 'Turuncu Yol', color: '#FF9800', width: 6, pattern: 'solid' },
-    { id: 'red', name: 'Kırmızı Yol', color: '#F44336', width: 6, pattern: 'solid' },
-    { id: 'purple', name: 'Mor Yol', color: '#9C27B0', width: 6, pattern: 'solid' },
-    { id: 'thin-black', name: 'İnce Siyah', color: '#212121', width: 3, pattern: 'solid' },
-    { id: 'dotted-black', name: 'Noktalı Siyah', color: '#212121', width: 4, pattern: 'dotted' },
-    { id: 'dashed-blue', name: 'Kesikli Mavi', color: '#2196F3', width: 5, pattern: 'dashed' },
-    { id: 'gradient-red', name: 'Kırmızı Gradyan', color: 'gradient-red', width: 6, pattern: 'solid' },
-    { id: 'gradient-blue', name: 'Mavi Gradyan', color: 'gradient-blue', width: 6, pattern: 'solid' },
+    { id: 'default', name: translate('line_style_default'), color: '#4CAF50', width: 6, pattern: 'solid' },
+    { id: 'blue', name: translate('line_style_blue'), color: '#2196F3', width: 6, pattern: 'solid' },
+    { id: 'orange', name: translate('line_style_orange'), color: '#FF9800', width: 6, pattern: 'solid' },
+    { id: 'red', name: translate('line_style_red'), color: '#F44336', width: 6, pattern: 'solid' },
+    { id: 'purple', name: translate('line_style_purple'), color: '#9C27B0', width: 6, pattern: 'solid' },
+    { id: 'thin-black', name: translate('line_style_thin_black'), color: '#212121', width: 3, pattern: 'solid' },
+    { id: 'dotted-black', name: translate('line_style_dotted_black'), color: '#212121', width: 4, pattern: 'dotted' },
+    { id: 'dashed-blue', name: translate('line_style_dashed_blue'), color: '#2196F3', width: 5, pattern: 'dashed' },
+    { id: 'gradient-red', name: translate('line_style_gradient_red'), color: 'gradient-red', width: 6, pattern: 'solid' },
+    { id: 'gradient-blue', name: translate('line_style_gradient_blue'), color: 'gradient-blue', width: 6, pattern: 'solid' },
 ];
 
 const LineStyleModal = ({
@@ -63,13 +64,13 @@ const LineStyleModal = ({
                                 <View style={styles.modalHandle} />
 
                                 {/* Modal Başlık */}
-                                <Text style={styles.lineStyleModalTitle}>Çizgi Tasarımını Değiştir</Text>
+                                <Text style={styles.lineStyleModalTitle}>{translate('change_line_style')}</Text>
                                 <Text style={styles.lineStyleModalSubtitle}>
-                                    Haritada görünen yollarınızın rengini ve stilini özelleştirebilirsiniz.
+                                    {translate('line_style_subtitle')}
                                 </Text>
 
                                 {/* Şablonlar */}
-                                <Text style={styles.lineStyleSectionTitle}>Hazır Şablonlar</Text>
+                                <Text style={styles.lineStyleSectionTitle}>{translate('ready_templates')}</Text>
 
                                 <View style={styles.lineStyleTemplatesContainer}>
                                     {LINE_STYLE_TEMPLATES.map((template) => (
@@ -110,7 +111,7 @@ const LineStyleModal = ({
                                 </View>
 
                                 {/* Özel Renk Seçimi */}
-                                <Text style={styles.lineStyleSectionTitle}>Özel Renk</Text>
+                                <Text style={styles.lineStyleSectionTitle}>{translate('custom_color')}</Text>
                                 <View style={styles.colorPickerContainer}>
                                     {['#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#212121', '#7CB342', '#00BCD4', '#FFD600', '#E91E63'].map(color => (
                                         <TouchableOpacity
@@ -126,7 +127,7 @@ const LineStyleModal = ({
                                 </View>
 
                                 {/* Çizgi Kalınlığı */}
-                                <Text style={styles.lineStyleSectionTitle}>Çizgi Kalınlığı</Text>
+                                <Text style={styles.lineStyleSectionTitle}>{translate('line_thickness')}</Text>
                                 <View style={styles.widthOptionsContainer}>
                                     {[2, 4, 6, 8, 10].map(width => (
                                         <TouchableOpacity
@@ -152,7 +153,7 @@ const LineStyleModal = ({
                                 </View>
 
                                 {/* Stil Seçenekleri */}
-                                <Text style={styles.lineStyleSectionTitle}>Çizgi Stili</Text>
+                                <Text style={styles.lineStyleSectionTitle}>{translate('line_style')}</Text>
                                 <View style={styles.patternOptionsContainer}>
                                     <TouchableOpacity
                                         style={[
@@ -170,7 +171,7 @@ const LineStyleModal = ({
                                                 }
                                             ]}
                                         />
-                                        <Text style={styles.patternName}>Düz</Text>
+                                        <Text style={styles.patternName}>{translate('solid')}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity
@@ -192,7 +193,7 @@ const LineStyleModal = ({
                                                 }
                                             ]}
                                         />
-                                        <Text style={styles.patternName}>Kesikli</Text>
+                                        <Text style={styles.patternName}>{translate('dashed')}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity
@@ -214,7 +215,7 @@ const LineStyleModal = ({
                                                 }
                                             ]}
                                         />
-                                        <Text style={styles.patternName}>Noktalı</Text>
+                                        <Text style={styles.patternName}>{translate('dotted')}</Text>
                                     </TouchableOpacity>
                                 </View>
 
@@ -226,7 +227,7 @@ const LineStyleModal = ({
                                         onClose();
                                     }}
                                 >
-                                    <Text style={styles.applyButtonText}>Değişiklikleri Uygula</Text>
+                                    <Text style={styles.applyButtonText}>{translate('apply_changes')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>

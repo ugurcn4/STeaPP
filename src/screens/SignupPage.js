@@ -12,11 +12,44 @@ import {
     ActivityIndicator,
     TouchableWithoutFeedback,
     Keyboard,
-    StyleSheet
+    StyleSheet,
+    Modal,
+    FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { register } from '../redux/userSlice';
+import { translate, loadI18nLanguage } from '../i18n/i18n';
+import { changeLanguage } from '../redux/slices/languageSlice';
+import { BlurView } from 'expo-blur';
+
+// Dil seçenekleri
+const languageOptions = [
+    {
+        id: 'tr',
+        name: 'Türkçe',
+        nativeName: 'Türkçe',
+        flag: '🇹🇷',
+    },
+    {
+        id: 'en',
+        name: 'İngilizce',
+        nativeName: 'English',
+        flag: '🇬🇧',
+    },
+    {
+        id: 'de',
+        name: 'Almanca',
+        nativeName: 'Deutsch',
+        flag: '🇩🇪',
+    },
+    {
+        id: 'es',
+        name: 'İspanyolca',
+        nativeName: 'Español',
+        flag: '🇪🇸',
+    }
+];
 
 const SignupPage = ({ navigation }) => {
     const [username, setUserName] = useState('');
@@ -27,9 +60,12 @@ const SignupPage = ({ navigation }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [showVerifyPassword, setShowVerifyPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [languageModalVisible, setLanguageModalVisible] = useState(false);
+    const [forceRender, setForceRender] = useState(false);
 
     const dispatch = useDispatch();
     const { Loading } = useSelector(state => state.user);
+    const currentLanguage = useSelector((state) => state.language.language) || 'tr';
 
     useEffect(() => {
         navigation.setOptions({
@@ -42,7 +78,7 @@ const SignupPage = ({ navigation }) => {
         // Türkçe karakterler ve diğer geçerli karakterler için regex
         const usernameRegex = /^[a-zA-ZğĞüÜşŞıİöÖçÇ0-9_]{3,20}$/;
         if (!usernameRegex.test(username)) {
-            return 'Kullanıcı adı 3-20 karakter arasında olmalı ve sadece harf, rakam ve alt çizgi içerebilir';
+            return translate('signup_error_username');
         }
         return '';
     };
@@ -51,7 +87,7 @@ const SignupPage = ({ navigation }) => {
     const validateEmail = (email) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            return 'Geçerli bir e-posta adresi giriniz';
+            return translate('signup_error_email');
         }
         return '';
     };
@@ -59,13 +95,13 @@ const SignupPage = ({ navigation }) => {
     // Şifre doğrulama
     const validatePassword = (password) => {
         if (password.length < 6) {
-            return 'Şifre en az 6 karakter olmalıdır';
+            return translate('signup_error_password_length');
         }
         if (!/[A-Z]/.test(password)) {
-            return 'Şifre en az bir büyük harf içermelidir';
+            return translate('signup_error_password_uppercase');
         }
         if (!/[0-9]/.test(password)) {
-            return 'Şifre en az bir rakam içermelidir';
+            return translate('signup_error_password_number');
         }
         return '';
     };
@@ -76,7 +112,7 @@ const SignupPage = ({ navigation }) => {
 
         // Tüm alanların dolu olduğunu kontrol et
         if (!username || !email || !password || !verifyPassword) {
-            setErrorMessage('Lütfen tüm alanları doldurunuz');
+            setErrorMessage(translate('signup_error_empty_fields'));
             setIsLoading(false);
             return;
         }
@@ -107,7 +143,7 @@ const SignupPage = ({ navigation }) => {
 
         // Şifre eşleşme kontrolü
         if (password !== verifyPassword) {
-            setErrorMessage('Şifreler uyuşmuyor');
+            setErrorMessage(translate('signup_error_password_match'));
             setIsLoading(false);
             return;
         }
@@ -129,7 +165,7 @@ const SignupPage = ({ navigation }) => {
             // Hata bir string ise direkt göster, object ise mesaj kısmını al
             let errorMsg = typeof error === 'string'
                 ? error
-                : error?.message || 'Kayıt işlemi başarısız oldu. Lütfen tekrar deneyin.';
+                : error?.message || translate('signup_error_default');
 
             setErrorMessage(errorMsg);
         } finally {
@@ -143,10 +179,90 @@ const SignupPage = ({ navigation }) => {
         setter(value);
     };
 
+    // Dil değiştirme fonksiyonu
+    const handleLanguageSelect = (langId) => {
+        dispatch(changeLanguage(langId))
+            .unwrap()
+            .then(() => {
+                // Dil değiştikten sonra i18n'i güncelleyelim
+                loadI18nLanguage(langId);
+                // Şimdi modal'ı kapatalım
+                setLanguageModalVisible(false);
+                // Ekranı zorla tekrar render edelim
+                setForceRender(prev => !prev);
+            })
+            .catch(error => {
+                console.error('Dil değiştirme hatası:', error);
+                setErrorMessage(translate('language_change_error'));
+            });
+    };
+
+    // Mevcut dil bilgisini al
+    const getCurrentLanguageName = () => {
+        const lang = languageOptions.find(lang => lang.id === currentLanguage);
+        return lang ? lang.flag : '🇹🇷';
+    };
+
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <SafeAreaView style={styles.container}>
                 <StatusBar barStyle="dark-content" />
+                
+                {/* Dil değiştirme butonu */}
+                <TouchableOpacity 
+                    style={styles.languageButton}
+                    onPress={() => setLanguageModalVisible(true)}
+                >
+                    <Text style={styles.languageButtonText}>{getCurrentLanguageName()}</Text>
+                    <Ionicons name="chevron-down" size={16} color="#666" />
+                </TouchableOpacity>
+
+                {/* Dil seçim modal */}
+                <Modal
+                    animationType="fade"
+                    transparent={true}
+                    visible={languageModalVisible}
+                    onRequestClose={() => setLanguageModalVisible(false)}
+                >
+                    <TouchableOpacity 
+                        style={styles.modalOverlay} 
+                        activeOpacity={1}
+                        onPress={() => setLanguageModalVisible(false)}
+                    >
+                        <BlurView intensity={15} style={StyleSheet.absoluteFill} />
+                        <View style={styles.languageModalContainer}>
+                            <View style={styles.languageModalHeader}>
+                                <Text style={styles.languageModalTitle}>{translate('select_language')}</Text>
+                                <TouchableOpacity onPress={() => setLanguageModalVisible(false)}>
+                                    <Ionicons name="close-circle" size={24} color="#666" />
+                                </TouchableOpacity>
+                            </View>
+                            <FlatList
+                                data={languageOptions}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.languageItem,
+                                            currentLanguage === item.id && styles.selectedLanguageItem
+                                        ]}
+                                        onPress={() => handleLanguageSelect(item.id)}
+                                    >
+                                        <Text style={styles.languageFlag}>{item.flag}</Text>
+                                        <View style={styles.languageTextContainer}>
+                                            <Text style={styles.languageName}>{item.name}</Text>
+                                            <Text style={styles.languageNativeName}>{item.nativeName}</Text>
+                                        </View>
+                                        {currentLanguage === item.id && (
+                                            <Ionicons name="checkmark-circle" size={22} color="#FF6B6B" />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+                
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.keyboardView}
@@ -158,14 +274,14 @@ const SignupPage = ({ navigation }) => {
                     >
                         <View style={styles.mainContent}>
                             <View style={styles.header}>
-                                <Text style={styles.title}>Aramıza Katıl</Text>
-                                <Text style={styles.subtitle}>Konumunu paylaş, arkadaşlarınla bağlantıda kal</Text>
+                                <Text style={styles.title}>{translate('signup_welcome')}</Text>
+                                <Text style={styles.subtitle}>{translate('signup_subtitle')}</Text>
                             </View>
 
                             <View style={styles.formContainer}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Kullanıcı Adı"
+                                    placeholder={translate('signup_username')}
                                     value={username}
                                     onChangeText={handleInputChange(setUserName)}
                                     autoCapitalize="none"
@@ -174,7 +290,7 @@ const SignupPage = ({ navigation }) => {
 
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="E-posta"
+                                    placeholder={translate('signup_email')}
                                     value={email}
                                     onChangeText={handleInputChange(setEmail)}
                                     keyboardType="email-address"
@@ -185,7 +301,7 @@ const SignupPage = ({ navigation }) => {
                                 <View style={styles.passwordContainer}>
                                     <TextInput
                                         style={[styles.input, styles.passwordInput]}
-                                        placeholder="Şifre"
+                                        placeholder={translate('signup_password')}
                                         value={password}
                                         onChangeText={handleInputChange(setPassword)}
                                         secureTextEntry={!showPassword}
@@ -206,7 +322,7 @@ const SignupPage = ({ navigation }) => {
                                 <View style={styles.passwordContainer}>
                                     <TextInput
                                         style={[styles.input, styles.passwordInput]}
-                                        placeholder="Şifreyi Doğrula"
+                                        placeholder={translate('signup_verify_password')}
                                         value={verifyPassword}
                                         onChangeText={handleInputChange(setVerifyPassword)}
                                         secureTextEntry={!showVerifyPassword}
@@ -236,14 +352,14 @@ const SignupPage = ({ navigation }) => {
                                     {isLoading ? (
                                         <ActivityIndicator color="#FFF" />
                                     ) : (
-                                        <Text style={styles.signUpButtonText}>KAYIT OL</Text>
+                                        <Text style={styles.signUpButtonText}>{translate('signup_button')}</Text>
                                     )}
                                 </TouchableOpacity>
 
                                 <View style={styles.loginContainer}>
-                                    <Text style={styles.loginText}>Zaten hesabın var mı? </Text>
+                                    <Text style={styles.loginText}>{translate('signup_have_account')} </Text>
                                     <TouchableOpacity onPress={() => navigation.navigate('Giriş Yap')}>
-                                        <Text style={styles.loginLink}>Giriş Yap</Text>
+                                        <Text style={styles.loginLink}>{translate('signup_login')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -251,11 +367,11 @@ const SignupPage = ({ navigation }) => {
 
                         <View style={styles.termsSection}>
                             <Text style={styles.termsText}>
-                                Kayıt olarak,
-                                <Text style={styles.termsLink}> Kullanım Koşullarını </Text>
-                                ve
-                                <Text style={styles.termsLink}> Gizlilik Politikasını </Text>
-                                kabul etmiş olursunuz
+                                {translate('signup_terms')}
+                                <Text style={styles.termsLink}>{translate('signup_terms_of_use')}</Text>
+                                {translate('signup_and')}
+                                <Text style={styles.termsLink}>{translate('signup_privacy_policy')}</Text>
+                                {translate('signup_agree')}
                             </Text>
                         </View>
                     </ScrollView>
@@ -383,6 +499,95 @@ const styles = StyleSheet.create({
     },
     signUpButtonDisabled: {
         opacity: 0.7,
+    },
+    // Dil buton stilleri
+    languageButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 50 : 30,
+        right: 20,
+        zIndex: 99,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 4,
+    },
+    languageButtonText: {
+        fontSize: 18,
+        marginRight: 4,
+    },
+    // Modal stilleri
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    languageModalContainer: {
+        width: '80%',
+        maxHeight: '70%',
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 12,
+    },
+    languageModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    languageModalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    languageItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+        marginVertical: 4,
+    },
+    selectedLanguageItem: {
+        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    },
+    languageFlag: {
+        fontSize: 24,
+        marginRight: 12,
+    },
+    languageTextContainer: {
+        flex: 1,
+    },
+    languageName: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#1A1A1A',
+    },
+    languageNativeName: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 2,
     },
 });
 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert } 
 import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { translate } from '../../i18n/i18n';
 
 const HelpSupportPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -13,82 +14,82 @@ const HelpSupportPage = ({ navigation }) => {
     const faqData = [
         {
             id: 1,
-            question: 'Nasıl arkadaş ekleyebilirim?',
-            answer: 'Arkadaşlar sekmesinden "Arkadaş Ekle" butonuna tıklayarak e-posta adresi veya kullanıcı adı ile arkadaşlarınızı bulabilirsiniz. QR kod ile de hızlıca arkadaş ekleyebilirsiniz. Ayrıca arkadaşlık isteği gönderdiğinizde, karşı taraf onaylayana kadar beklemeli ve istek onaylandığında bildirim alacaksınız.'
+            question: translate('faq_add_friend_question'),
+            answer: translate('faq_add_friend_answer')
         },
         {
             id: 2,
-            question: 'Şifremi nasıl değiştirebilirim?',
-            answer: 'Profil ayarlarından "Şifre Değiştir" seçeneğine tıklayarak şifrenizi güncelleyebilirsiniz. Şifrenizi unuttuysanız, giriş ekranındaki "Şifremi Unuttum" seçeneğini kullanarak e-posta adresinize sıfırlama bağlantısı gönderebilirsiniz.'
+            question: translate('faq_change_password_question'),
+            answer: translate('faq_change_password_answer')
         },
         {
             id: 3,
-            question: 'Bildirimler gelmiyor, ne yapmalıyım?',
-            answer: '1. Ayarlar > Bildirimler bölümünden "Tüm Bildirimler" seçeneğinin açık olduğunu kontrol edin.\n2. Telefon ayarlarından uygulama bildirimlerine izin verildiğinden emin olun.\n3. İnternet bağlantınızı kontrol edin.\n4. Uygulamayı kapatıp yeniden açmayı deneyin.\n5. Sorun devam ederse, ilgili bildirim türünün (Yeni Arkadaş İstekleri, Mesajlar vb.) de açık olduğundan emin olun.'
+            question: translate('faq_notifications_question'),
+            answer: translate('faq_notifications_answer')
         },
         {
             id: 4,
-            question: 'Konum paylaşımı nasıl çalışır?',
-            answer: 'Konum paylaşımı iki şekilde yapılabilir:\n1. Anlık Konum: Tek seferlik konum paylaşımı\n2. Canlı Konum: Belirli bir süre boyunca sürekli güncellenen konum paylaşımı\nKonum paylaşmak için:\n- Arkadaşlar sekmesinde ilgili arkadaşınızı seçin\n- "Konum Paylaş" butonuna tıklayın\n- Paylaşım türünü seçin (Anlık/Canlı)\nAynı kişiyle aktif bir konum paylaşımınız varsa, tekrar paylaşım yapamazsınız.'
+            question: translate('faq_location_sharing_question'),
+            answer: translate('faq_location_sharing_answer')
         },
         {
             id: 5,
-            question: 'Konum paylaşımını nasıl durdurabilirim?',
-            answer: 'Aktif bir konum paylaşımını durdurmak için:\n1. Harita ekranındaki aktif paylaşımlar listesinden ilgili paylaşımı bulun\n2. "Paylaşımı Durdur" butonuna tıklayın\nAlternatif olarak:\n- Arkadaş profiline gidin\n- Aktif paylaşım bilgisinin yanındaki "Durdur" butonuna tıklayın'
+            question: translate('faq_stop_sharing_question'),
+            answer: translate('faq_stop_sharing_answer')
         },
         {
             id: 6,
-            question: 'Hesabımı nasıl silebilirim?',
-            answer: 'Hesap silme işlemi için:\n1. Ayarlar > Gizlilik > "Hesabımı Sil" butonuna tıklayın\n2. Açılan onay ekranında "Devam Et" seçeneğini seçin\n3. Hesap silme nedeninizi belirtin (Uygulamayı kullanmama, Gizlilik endişeleri vb.)\n4. Şifrenizi girin ve "Hesabı Sil" butonuna tıklayın\nDikkat: Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinir.'
+            question: translate('faq_delete_account_question'),
+            answer: translate('faq_delete_account_answer')
         },
         {
             id: 7,
-            question: 'Uygulama çok pil tüketiyor, ne yapabilirim?',
-            answer: '1. Canlı konum paylaşımını kullanmadığınızda kapatın\n2. Ayarlar > Bildirimler bölümünden kullanmadığınız bildirim türlerini kapatın\n3. Arka plan konum izinlerini sınırlayın (Telefon ayarları > Uygulamalar > STeaPP > İzinler > Konum)\n4. Karanlık temayı kullanın (Ayarlar > Tema > Koyu Tema)\n5. Uygulamayı en son sürüme güncelleyin (Şu anki sürüm: 1.0.1)'
+            question: translate('faq_battery_usage_question'),
+            answer: translate('faq_battery_usage_answer')
         },
         {
             id: 8,
-            question: 'İstenmeyen arkadaşlık isteklerini nasıl engelleyebilirim?',
-            answer: 'Ayarlar > Gizlilik bölümünden arkadaşlık istekleri için kısıtlamalar getirebilirsiniz:\n1. Belirli kullanıcıları engelleyerek onlardan gelen istekleri tamamen önleyebilirsiniz\n2. Arkadaşlık isteklerini tamamen kapatabilirsiniz\n3. Sadece telefon rehberinizde kayıtlı kişilerden gelen istekleri kabul edebilirsiniz'
+            question: translate('faq_unwanted_requests_question'),
+            answer: translate('faq_unwanted_requests_answer')
         },
         {
             id: 9,
-            question: 'Bir kullanıcıyı nasıl engelleyebilirim?',
-            answer: 'Kullanıcıyı engellemek için:\n1. Kullanıcının profiline gidin\n2. Sağ üst köşedeki menü ikonuna tıklayın\n3. "Engelle" seçeneğini seçin\n4. Onay ekranında "Engelle" butonuna tıklayın\nEngellenen kullanıcı size mesaj gönderemez, konum paylaşamaz ve içeriklerinizi göremez. Ayrıca arkadaşsa, otomatik olarak arkadaş listenizden çıkarılır.'
+            question: translate('faq_block_user_question'),
+            answer: translate('faq_block_user_answer')
         },
         {
             id: 10,
-            question: 'Veri kullanımını nasıl azaltabilirim?',
-            answer: '1. Canlı konum paylaşımı yerine anlık konum paylaşımını tercih edin\n2. Çoklu arkadaş seçiminde aynı anda sadece gerekli kişilerle konum paylaşın\n3. Konum güncellemelerini daha seyrek ayarlayın\n4. Sadece WiFi bağlantısı varken uygulamayı kullanın\n5. Konum paylaşımlarını aktif olarak kullanmadığınızda sonlandırın'
+            question: translate('faq_reduce_data_question'),
+            answer: translate('faq_reduce_data_answer')
         },
         {
             id: 11,
-            question: 'Geçmiş konum verilerimi nasıl silebilirim?',
-            answer: 'Konum geçmişinizi silmek için:\n1. Ayarlar > Gizlilik > Konum Geçmişi bölümüne gidin\n2. "Geçmişi Temizle" butonuna tıklayın\n3. Temizlemek istediğiniz tarih aralığını seçin (Tümü, Son 7 gün, Son 30 gün)\nNot: Silinen konum verileri geri getirilemez. Bu işlem sadece sizin tarafınızdan paylaşılan konum verilerini siler, arkadaşlarınızın cihazlarındaki verileri etkilemez.'
+            question: translate('faq_delete_history_question'),
+            answer: translate('faq_delete_history_answer')
         }
     ];
 
     const supportLinks = [
         {
             id: 1,
-            title: 'Destek Merkezi',
+            title: translate('support_center'),
             icon: 'help-circle-outline',
             color: '#4CAF50',
             action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/destek-merkezi')
         },
         {
             id: 2,
-            title: 'E-posta ile İletişim',
+            title: translate('email_contact'),
             icon: 'mail-outline',
             color: '#2196F3',
             action: () => Linking.openURL('mailto:ucarugur57@gmail.com')
         },
         {
             id: 3,
-            title: 'Canlı Destek',
+            title: translate('quick_support'),
             icon: 'chatbubbles-outline',
             color: '#FF9800',
-            action: () => Linking.openURL('https://www.instagram.com/ugurrucr/')
+            action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/destek-ekibi')
         }
     ];
 
@@ -110,12 +111,12 @@ const HelpSupportPage = ({ navigation }) => {
                     />
                 </TouchableOpacity>
                 <Text style={[styles.header, { color: currentTheme.text }]}>
-                    Yardım ve Destek
+                    {translate('help_support')}
                 </Text>
             </View>
 
             <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                Sık Sorulan Sorular
+                {translate('frequently_asked_questions')}
             </Text>
 
             <View style={styles.faqSection}>
@@ -145,7 +146,7 @@ const HelpSupportPage = ({ navigation }) => {
             </View>
 
             <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                Destek Kanalları
+                {translate('support_channels')}
             </Text>
 
             <View style={styles.supportSection}>
@@ -164,17 +165,17 @@ const HelpSupportPage = ({ navigation }) => {
                             </Text>
                             {item.id === 1 && (
                                 <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
-                                    Sık sorulan sorular ve yardım makaleleri
+                                    {translate('support_center_desc')}
                                 </Text>
                             )}
                             {item.id === 2 && (
                                 <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
-                                    STeaPP Destek Merkezine e-posta gönderin
+                                    {translate('email_contact_desc')}
                                 </Text>
                             )}
                             {item.id === 3 && (
                                 <Text style={[styles.supportDescription, { color: currentTheme.textSecondary }]}>
-                                    Instagram üzerinden mesaj gönderin
+                                    {translate('quick_support_desc')}
                                 </Text>
                             )}
                         </View>
@@ -184,7 +185,7 @@ const HelpSupportPage = ({ navigation }) => {
             </View>
 
             <Text style={styles.note}>
-                7/24 destek ekibimiz size yardımcı olmaktan mutluluk duyacaktır.
+                {translate('support_note')}
             </Text>
         </ScrollView>
     );

@@ -5,6 +5,7 @@ import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { getCityData } from '../services/cityService';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { CITY_AREAS, BADGE_THRESHOLDS } from '../constants/cityAreas';
+import { translate } from '../i18n/i18n';
 
 const CityExplorer = ({ navigation }) => {
     const [cityData, setCityData] = useState(null);
@@ -18,15 +19,15 @@ const CityExplorer = ({ navigation }) => {
     const [showActivitiesModal, setShowActivitiesModal] = useState(false);
 
     const regions = [
-        { id: 'explored', name: 'Keşfedilen', icon: '⭐' },
-        { id: 'all', name: 'Tümü', icon: '🗺️' },
-        { id: 'marmara', name: 'Marmara', icon: '🌊' },
-        { id: 'ege', name: 'Ege', icon: '🏖️' },
-        { id: 'akdeniz', name: 'Akdeniz', icon: '🌅' },
-        { id: 'karadeniz', name: 'Karadeniz', icon: '🌲' },
-        { id: 'ic_anadolu', name: 'İç Anadolu', icon: '🏔️' },
-        { id: 'dogu_anadolu', name: 'Doğu Anadolu', icon: '⛰️' },
-        { id: 'guneydogu_anadolu', name: 'Güneydoğu', icon: '🏺' },
+        { id: 'explored', name: translate('waiting_to_be_explored'), icon: '⭐' },
+        { id: 'all', name: translate('total'), icon: '🗺️' },
+        { id: 'marmara', name: translate('region_marmara'), icon: '🌊' },
+        { id: 'ege', name: translate('region_ege'), icon: '🏖️' },
+        { id: 'akdeniz', name: translate('region_akdeniz'), icon: '🌅' },
+        { id: 'karadeniz', name: translate('region_karadeniz'), icon: '🌲' },
+        { id: 'ic_anadolu', name: translate('region_ic_anadolu'), icon: '🏔️' },
+        { id: 'dogu_anadolu', name: translate('region_dogu_anadolu'), icon: '⛰️' },
+        { id: 'guneydogu_anadolu', name: translate('region_guneydogu_anadolu'), icon: '🏺' },
     ];
 
     // Şehir verilerini yükle
@@ -54,7 +55,7 @@ const CityExplorer = ({ navigation }) => {
                 });
             }
         } catch (error) {
-            console.error('Şehir verileri yüklenirken hata:', error);
+            console.error(translate('cities_loading_error'), error);
         } finally {
             setLoading(false);
         }
@@ -86,7 +87,7 @@ const CityExplorer = ({ navigation }) => {
 
             setCities(filteredCities);
         } catch (error) {
-            console.error('Bölge filtreleme hatası:', error);
+            console.error(translate('refresh_error'), error);
         } finally {
             setLoading(false);
         }
@@ -210,14 +211,14 @@ const CityExplorer = ({ navigation }) => {
 
         // Gerçek keşfedilen şehir sayısını hesapla (Bilinmeyen Şehir hariç)
         const realExploredCities = Object.entries(stats.cityStats || {}).filter(([cityName, stats]) => {
-            return cityName !== 'Bilinmeyen Şehir' && stats.pathCount > 0;
+            return cityName !== translate('unauthorized_user') && stats.pathCount > 0;
         }).length;
 
         // Kazanılan rozet sayısını hesapla
         const earnedBadges = [];
         if (cityData?.cityStats) {
             Object.entries(cityData.cityStats).forEach(([cityName, stats]) => {
-                if (cityName === 'Bilinmeyen' || cityName === 'Bilinmeyen Şehir') return;
+                if (cityName === translate('unauthorized_user') || cityName === translate('unauthorized_user')) return;
 
                 const explorationPercentage = Math.min(
                     Math.round((stats.exploredArea / stats.totalArea) * 100),
@@ -244,14 +245,14 @@ const CityExplorer = ({ navigation }) => {
                         <Ionicons name="chevron-back" size={28} color="#FFF" />
                     </TouchableOpacity>
 
-                    <Text style={styles.title}>Şehir Koleksiyonu</Text>
+                    <Text style={styles.title}>{translate('city_points')}</Text>
                 </View>
 
                 <View style={styles.statsContainer}>
                     <View style={styles.statCard}>
                         <MaterialIcons name="location-city" size={24} color="#FFF" />
                         <Text style={styles.statValue}>{realExploredCities}</Text>
-                        <Text style={styles.statLabel}>Şehir</Text>
+                        <Text style={styles.statLabel}>{translate('cities')}</Text>
                     </View>
 
                     <TouchableOpacity
@@ -260,7 +261,7 @@ const CityExplorer = ({ navigation }) => {
                     >
                         <MaterialIcons name="emoji-events" size={24} color="#FFF" />
                         <Text style={styles.statValue}>{earnedBadges.length}</Text>
-                        <Text style={styles.statLabel}>Rozet</Text>
+                        <Text style={styles.statLabel}>{translate('special_badges')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -269,7 +270,7 @@ const CityExplorer = ({ navigation }) => {
                     >
                         <MaterialIcons name="directions-run" size={24} color="#FFF" />
                         <Text style={styles.statValue}>{stats.totalActivities}</Text>
-                        <Text style={styles.statLabel}>Aktivite</Text>
+                        <Text style={styles.statLabel}>{translate('attractions')}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -279,7 +280,7 @@ const CityExplorer = ({ navigation }) => {
                         style={styles.howItWorksButton}
                     >
                         <MaterialIcons name="info-outline" size={20} color="#FFF" />
-                        <Text style={styles.howItWorksText}>Nasıl Çalışır?</Text>
+                        <Text style={styles.howItWorksText}>{translate('how_calculated')}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -291,7 +292,7 @@ const CityExplorer = ({ navigation }) => {
         const earnedBadges = [];
         if (cityData?.cityStats) {
             Object.entries(cityData.cityStats).forEach(([cityName, stats]) => {
-                if (cityName === 'Bilinmeyen' || cityName === 'Bilinmeyen Şehir') return;
+                if (cityName === translate('unauthorized_user') || cityName === translate('unauthorized_user')) return;
 
                 const explorationPercentage = Math.min(
                     Math.round((stats.exploredArea / stats.totalArea) * 100),
@@ -303,7 +304,7 @@ const CityExplorer = ({ navigation }) => {
                         city: cityName,
                         level: 'gold',
                         icon: '🥇',
-                        name: `${cityName} Ustası`,
+                        name: `${cityName} ${translate('gold_master')}`,
                         earnedAt: stats.lastUpdate
                     });
                 } else if (explorationPercentage >= BADGE_THRESHOLDS.silver) {
@@ -311,7 +312,7 @@ const CityExplorer = ({ navigation }) => {
                         city: cityName,
                         level: 'silver',
                         icon: '🥈',
-                        name: `${cityName} Uzmanı`,
+                        name: `${cityName} ${translate('silver_expert')}`,
                         earnedAt: stats.lastUpdate
                     });
                 } else if (explorationPercentage >= BADGE_THRESHOLDS.bronze) {
@@ -319,7 +320,7 @@ const CityExplorer = ({ navigation }) => {
                         city: cityName,
                         level: 'bronze',
                         icon: '🥉',
-                        name: `${cityName} Kaşifi`,
+                        name: `${cityName} ${translate('bronze_explorer')}`,
                         earnedAt: stats.lastUpdate
                     });
                 }
@@ -331,7 +332,7 @@ const CityExplorer = ({ navigation }) => {
 
         return (
             <View style={styles.achievementsContainer}>
-                <Text style={styles.sectionTitle}>Son Kazanılan Rozetler</Text>
+                <Text style={styles.sectionTitle}>{translate('last_earned_badges')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.badgeScroll}>
                     {earnedBadges.length > 0 ? (
                         earnedBadges.map((badge, index) => (
@@ -361,9 +362,9 @@ const CityExplorer = ({ navigation }) => {
                                 style={styles.emptyBadgesGradient}
                             >
                                 <MaterialIcons name="emoji-events" size={32} color="rgba(255,255,255,0.9)" />
-                                <Text style={styles.emptyBadgesTitle}>Henüz Rozet Kazanılmadı</Text>
+                                <Text style={styles.emptyBadgesTitle}>{translate('no_badges_yet')}</Text>
                                 <Text style={styles.emptyBadgesSubtitle}>
-                                    Şehirleri keşfederek rozetler kazanabilirsiniz
+                                    {translate('explore_cities_to_earn_badges')}
                                 </Text>
                             </LinearGradient>
                         </View>
@@ -375,7 +376,7 @@ const CityExplorer = ({ navigation }) => {
 
     const renderRegionFilter = () => (
         <View style={styles.filterContainer}>
-            <Text style={styles.filterTitle}>Bölgeler</Text>
+            <Text style={styles.filterTitle}>{translate('regions')}</Text>
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -410,8 +411,6 @@ const CityExplorer = ({ navigation }) => {
             totalArea: CITY_AREAS[item.name] || 0,
             pathCount: 0
         };
-
-
 
         const completionPercentage = Math.min(
             Math.round((cityStats.exploredArea / (CITY_AREAS[item.name] || 1)) * 100),
@@ -460,7 +459,7 @@ const CityExplorer = ({ navigation }) => {
                             <View style={styles.activityCount}>
                                 <MaterialIcons name="directions-run" size={16} color="#666" />
                                 <Text style={styles.activityCountText}>
-                                    {cityStats.pathCount} Aktivite
+                                    {cityStats.pathCount} {translate('attractions')}
                                 </Text>
                             </View>
                             {earnedBadges.length > 0 && (
@@ -505,7 +504,7 @@ const CityExplorer = ({ navigation }) => {
                             <View style={styles.activityTitleContainer}>
                                 <View style={styles.activityTitleRow}>
                                     <Text style={styles.activityTitle}>{activity.name}</Text>
-                                    <Text style={styles.activityPoints}>+{activity.points} puan</Text>
+                                    <Text style={styles.activityPoints}>+{activity.points} {translate('points')}</Text>
                                 </View>
                                 <View style={styles.activityMeta}>
                                     <MaterialIcons name="schedule" size={16} color="#666" />
@@ -513,13 +512,13 @@ const CityExplorer = ({ navigation }) => {
                                     {activity.type === 'food' && (
                                         <>
                                             <MaterialIcons name="restaurant" size={16} color="#666" />
-                                            <Text style={styles.activityMetaText}>Yemek</Text>
+                                            <Text style={styles.activityMetaText}>{translate('restaurants')}</Text>
                                         </>
                                     )}
                                     {activity.type === 'activity' && (
                                         <>
                                             <MaterialIcons name="directions-run" size={16} color="#666" />
-                                            <Text style={styles.activityMetaText}>Aktivite</Text>
+                                            <Text style={styles.activityMetaText}>{translate('attractions')}</Text>
                                         </>
                                     )}
                                 </View>
@@ -533,7 +532,7 @@ const CityExplorer = ({ navigation }) => {
                                 style={[styles.startActivityButton, { backgroundColor: '#cccccc' }]}
                                 disabled={true}
                             >
-                                <Text style={styles.startActivityButtonText}>Yakında Geliyor</Text>
+                                <Text style={styles.startActivityButtonText}>{translate('coming_soon')}</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -579,26 +578,26 @@ const CityExplorer = ({ navigation }) => {
 
                             <View style={styles.cityProgressContainer}>
                                 <View style={styles.cityProgressHeader}>
-                                    <Text style={styles.cityProgressTitle}>Şehir İlerlemesi</Text>
+                                    <Text style={styles.cityProgressTitle}>{translate('city_progress')}</Text>
                                     <Text style={styles.cityProgressPercentage}>%{Math.round(completionPercentage)}</Text>
                                 </View>
                                 <View style={styles.cityProgressBar}>
                                     <View style={[styles.cityProgressFill, { width: `${Math.min(completionPercentage, 100)}%` }]} />
                                 </View>
                                 <Text style={styles.cityProgressText}>
-                                    {cityProgress} / {totalActivities} Aktivite Tamamlandı
+                                    {cityProgress} / {totalActivities} {translate('completed_activities')}
                                 </Text>
                             </View>
 
                             {/* Aktiviteler Bölümü */}
                             <View style={styles.sectionContainer}>
-                                <Text style={styles.sectionTitle}>Aktiviteler</Text>
+                                <Text style={styles.sectionTitle}>{translate('attractions')}</Text>
                                 {renderActivitySection(selectedCity.activities, selectedCity.id)}
                             </View>
 
                             {/* Rozetler Bölümü */}
                             <View style={styles.sectionContainer}>
-                                <Text style={styles.sectionTitle}>Rozetler</Text>
+                                <Text style={styles.sectionTitle}>{translate('special_badges')}</Text>
                                 <View style={styles.badgesContainer}>
                                     {Object.entries(selectedCity?.badges || {}).map(([level, badge]) => {
                                         const cityStats = cityData.cityStats[selectedCity.name] || {
@@ -648,7 +647,7 @@ const CityExplorer = ({ navigation }) => {
                                                                 />
                                                             </View>
                                                             <Text style={styles.badgeProgressText}>
-                                                                {isUnlocked ? 'Kazanıldı!' : `%${explorationPercentage} / %${targetPercentage}`}
+                                                                {isUnlocked ? translate('earned') : `%${explorationPercentage} / %${targetPercentage}`}
                                                             </Text>
                                                         </View>
                                                     </View>
@@ -678,7 +677,7 @@ const CityExplorer = ({ navigation }) => {
 
         if (cityData?.cityStats) {
             Object.entries(cityData.cityStats).forEach(([cityName, stats]) => {
-                if (cityName === 'Bilinmeyen' || cityName === 'Bilinmeyen Şehir') return;
+                if (cityName === translate('unauthorized_user') || cityName === translate('unauthorized_user')) return;
 
                 const explorationPercentage = Math.min(
                     Math.round((stats.exploredArea / stats.totalArea) * 100),
@@ -689,21 +688,21 @@ const CityExplorer = ({ navigation }) => {
                     badgesByLevel.gold.push({
                         city: cityName,
                         icon: '🥇',
-                        name: `${cityName} Ustası`,
+                        name: `${cityName} ${translate('gold_master')}`,
                         percentage: explorationPercentage
                     });
                 } else if (explorationPercentage >= BADGE_THRESHOLDS.silver) {
                     badgesByLevel.silver.push({
                         city: cityName,
                         icon: '🥈',
-                        name: `${cityName} Uzmanı`,
+                        name: `${cityName} ${translate('silver_expert')}`,
                         percentage: explorationPercentage
                     });
                 } else if (explorationPercentage >= BADGE_THRESHOLDS.bronze) {
                     badgesByLevel.bronze.push({
                         city: cityName,
                         icon: '🥉',
-                        name: `${cityName} Kaşifi`,
+                        name: `${cityName} ${translate('bronze_explorer')}`,
                         percentage: explorationPercentage
                     });
                 }
@@ -750,7 +749,7 @@ const CityExplorer = ({ navigation }) => {
                             >
                                 <Ionicons name="close" size={24} color="#333" />
                             </TouchableOpacity>
-                            <Text style={styles.allBadgesModalTitle}>Kazanılan Rozetler</Text>
+                            <Text style={styles.allBadgesModalTitle}>{translate('earned_badges')}</Text>
                         </View>
 
                         <ScrollView style={styles.allBadgesModalScroll}>
@@ -761,9 +760,9 @@ const CityExplorer = ({ navigation }) => {
                             {Object.values(badgesByLevel).every(badges => badges.length === 0) && (
                                 <View style={styles.noBadgesContainer}>
                                     <MaterialIcons name="emoji-events" size={64} color="rgba(0,0,0,0.2)" />
-                                    <Text style={styles.noBadgesText}>Henüz rozet kazanılmadı</Text>
+                                    <Text style={styles.noBadgesText}>{translate('no_badges_yet')}</Text>
                                     <Text style={styles.noBadgesSubtext}>
-                                        Şehirleri keşfederek rozetler kazanabilirsiniz
+                                        {translate('explore_cities_to_earn_badges')}
                                     </Text>
                                 </View>
                             )}
@@ -793,76 +792,78 @@ const CityExplorer = ({ navigation }) => {
                             >
                                 <Ionicons name="close" size={24} color="#333" />
                             </TouchableOpacity>
-                            <Text style={styles.infoModalTitle}>Şehir Keşif Sistemi</Text>
+                            <Text style={styles.infoModalTitle}>{translate('city_discovery_system')}</Text>
                         </View>
 
                         <ScrollView style={styles.infoModalScroll}>
                             <View style={styles.infoSection}>
                                 <View style={styles.infoSectionHeader}>
                                     <MaterialIcons name="explore" size={24} color="#2196F3" />
-                                    <Text style={styles.infoSectionTitle}>Keşif Alanı Hesaplama</Text>
+                                    <Text style={styles.infoSectionTitle}>{translate('exploration_area_calculation')}</Text>
                                 </View>
                                 <View style={styles.infoSectionContent}>
-                                    <Text style={styles.infoText}>• Her aktivitenizde geçtiğiniz yollar otomatik olarak kaydedilir</Text>
-                                    <Text style={styles.infoText}>• Yollar etrafında 500 metrelik bir etki alanı oluşturulur</Text>
-                                    <Text style={styles.infoText}>• Toplam keşfedilen alan km² cinsinden hesaplanır</Text>
-                                    <Text style={styles.infoText}>• Aynı bölgeden geçseniz bile her aktivite kaydedilir</Text>
+                                    <Text style={styles.infoText}>{translate('info_recorded_routes')}</Text>
+                                    <Text style={styles.infoText}>{translate('info_impact_area')}</Text>
+                                    <Text style={styles.infoText}>{translate('info_calculated_area')}</Text>
+                                    <Text style={styles.infoText}>{translate('info_every_activity_counted')}</Text>
                                 </View>
                             </View>
 
                             <View style={styles.infoSection}>
                                 <View style={styles.infoSectionHeader}>
                                     <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
-                                    <Text style={styles.infoSectionTitle}>Rozet Sistemi</Text>
+                                    <Text style={styles.infoSectionTitle}>{translate('special_badges_system')}</Text>
                                 </View>
                                 <View style={styles.infoSectionContent}>
                                     <View style={styles.badgeInfoRow}>
                                         <Text style={styles.badgeIcon}>🥉</Text>
                                         <View style={styles.badgeInfoContent}>
-                                            <Text style={styles.badgeTitle}>Bronz Rozet</Text>
-                                            <Text style={styles.infoText}>Şehrin %1'ini keşfettiğinizde kazanılır</Text>
+                                            <Text style={styles.badgeTitle}>{translate('bronze_badge')}</Text>
+                                            <Text style={styles.infoText}>{translate('bronze_badge_description')}</Text>
                                         </View>
                                     </View>
                                     <View style={styles.badgeInfoRow}>
                                         <Text style={styles.badgeIcon}>🥈</Text>
                                         <View style={styles.badgeInfoContent}>
-                                            <Text style={styles.badgeTitle}>Gümüş Rozet</Text>
-                                            <Text style={styles.infoText}>Şehrin %3'ünü keşfettiğinizde kazanılır</Text>
+                                            <Text style={styles.badgeTitle}>{translate('silver_badge')}</Text>
+                                            <Text style={styles.infoText}>{translate('silver_badge_description')}</Text>
                                         </View>
                                     </View>
                                     <View style={styles.badgeInfoRow}>
                                         <Text style={styles.badgeIcon}>🥇</Text>
                                         <View style={styles.badgeInfoContent}>
-                                            <Text style={styles.badgeTitle}>Altın Rozet</Text>
-                                            <Text style={styles.infoText}>Şehrin %5'ini keşfettiğinizde kazanılır</Text>
+                                            <Text style={styles.badgeTitle}>{translate('gold_badge')}</Text>
+                                            <Text style={styles.infoText}>{translate('gold_badge_description')}</Text>
                                         </View>
                                     </View>
                                 </View>
                             </View>
 
+
                             <View style={styles.infoSection}>
                                 <View style={styles.infoSectionHeader}>
                                     <MaterialIcons name="analytics" size={24} color="#4CAF50" />
-                                    <Text style={styles.infoSectionTitle}>İstatistikler</Text>
+                                    <Text style={styles.infoSectionTitle}>{translate('statistics')}</Text>
                                 </View>
                                 <View style={styles.infoSectionContent}>
-                                    <Text style={styles.infoText}>• Keşfedilen şehir sayısı: En az bir aktivite yapılan şehirler</Text>
-                                    <Text style={styles.infoText}>• Kazanılan rozet sayısı: Tüm şehirlerden kazanılan rozetler</Text>
-                                    <Text style={styles.infoText}>• Toplam aktivite sayısı: Tüm şehirlerde yapılan aktiviteler</Text>
+                                    <Text style={styles.infoText}>{translate('stat_city_count')}</Text>
+                                    <Text style={styles.infoText}>{translate('stat_badge_count')}</Text>
+                                    <Text style={styles.infoText}>{translate('stat_activity_count')}</Text>
                                 </View>
                             </View>
 
                             <View style={styles.infoSection}>
                                 <View style={styles.infoSectionHeader}>
                                     <MaterialIcons name="tips-and-updates" size={24} color="#FF9800" />
-                                    <Text style={styles.infoSectionTitle}>İpuçları</Text>
+                                    <Text style={styles.infoSectionTitle}>{translate('tips')}</Text>
                                 </View>
                                 <View style={styles.infoSectionContent}>
-                                    <Text style={styles.infoText}>• Farklı rotalar kullanarak şehri daha hızlı keşfedebilirsiniz</Text>
-                                    <Text style={styles.infoText}>• Her aktivite öncesi GPS'inizin açık olduğundan emin olun</Text>
-                                    <Text style={styles.infoText}>• Aktivitelerinizi düzenli kaydetmeyi unutmayın</Text>
+                                    <Text style={styles.infoText}>{translate('tip_explore_faster')}</Text>
+                                    <Text style={styles.infoText}>{translate('tip_gps_on')}</Text>
+                                    <Text style={styles.infoText}>{translate('tip_dont_forget_to_record')}</Text>
                                 </View>
                             </View>
+
                         </ScrollView>
                     </View>
                 </View>
@@ -909,11 +910,11 @@ const CityExplorer = ({ navigation }) => {
                                 >
                                     <Ionicons name="close" size={24} color="#333" />
                                 </TouchableOpacity>
-                                <Text style={styles.allActivitiesModalTitle}>Aktivitelerim</Text>
+                                <Text style={styles.allActivitiesModalTitle}>{translate('my_activities')}</Text>
                             </View>
                             <View style={styles.totalActivitiesBadge}>
                                 <MaterialIcons name="directions-run" size={16} color="#2196F3" />
-                                <Text style={styles.totalActivitiesText}>{totalActivities} Aktivite</Text>
+                                <Text style={styles.totalActivitiesText}>{totalActivities} {translate('attractions')}</Text>
                             </View>
                         </View>
 
@@ -936,7 +937,7 @@ const CityExplorer = ({ navigation }) => {
                                                 <Text style={styles.activityCityName}>{cityName}</Text>
                                                 <View style={styles.activityCityStats}>
                                                     <MaterialIcons name="directions-run" size={16} color="#2196F3" />
-                                                    <Text style={styles.activityCityCount}>{data.count} Aktivite</Text>
+                                                    <Text style={styles.activityCityCount}>{data.count} {translate('attractions')}</Text>
                                                 </View>
                                             </View>
                                             <MaterialIcons name="chevron-right" size={24} color="#666" />
@@ -968,7 +969,7 @@ const CityExplorer = ({ navigation }) => {
                                         <MaterialIcons name="directions-run" size={64} color="#2196F3" />
                                         <Text style={styles.noActivitiesText}>Henüz aktivite yok</Text>
                                         <Text style={styles.noActivitiesSubtext}>
-                                            Şehirleri keşfederek aktiviteler oluşturabilirsiniz
+                                            {translate('explore_cities_to_earn_activities')}
                                         </Text>
                                     </LinearGradient>
                                 </View>

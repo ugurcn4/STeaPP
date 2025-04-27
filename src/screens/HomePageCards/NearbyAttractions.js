@@ -9,21 +9,23 @@ import {
     Alert,
     Image,
     ScrollView,
-    Platform
+    Platform,
+    Linking
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../../i18n/i18n';
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
 const categories = [
-    { id: 'all', name: 'Tümü', icon: 'place' },
-    { id: 'museum', name: 'Müzeler', icon: 'museum' },
-    { id: 'park', name: 'Parklar', icon: 'park' },
-    { id: 'tourist_attraction', name: 'Turistik', icon: 'attractions' },
-    { id: 'historic', name: 'Tarihi', icon: 'account-balance' },
-    { id: 'natural', name: 'Doğal', icon: 'landscape' }
+    { id: 'all', name: translate('attraction_all'), icon: 'place' },
+    { id: 'museum', name: translate('attraction_museums'), icon: 'museum' },
+    { id: 'park', name: translate('attraction_parks'), icon: 'park' },
+    { id: 'tourist_attraction', name: translate('attraction_tourist'), icon: 'attractions' },
+    { id: 'historic', name: translate('attraction_historic'), icon: 'account-balance' },
+    { id: 'natural', name: translate('attraction_natural'), icon: 'landscape' }
 ];
 
 const getPhotoUrl = (photoReference) => {
@@ -41,7 +43,7 @@ const CategoryButton = memo(({ item, isSelected, onPress }) => (
         <MaterialIcons
             name={item.icon}
             size={24}
-            color={isSelected ? '#fff' : '#2C3E50'}
+            color={isSelected ? '#fff' : '#4CAF50'}
         />
         <Text style={[
             styles.categoryText,
@@ -64,7 +66,7 @@ const AttractionCard = memo(({ item, onPress }) => (
             />
         ) : (
             <View style={styles.placeholderImage}>
-                <MaterialIcons name="photo" size={40} color="#ddd" />
+                <MaterialIcons name="photo" size={40} color="#4CAF50" />
             </View>
         )}
 
@@ -82,7 +84,7 @@ const AttractionCard = memo(({ item, onPress }) => (
                     <View style={styles.ratingContainer}>
                         <MaterialIcons name="star" size={16} color="#FFD700" />
                         <Text style={styles.rating}>
-                            {item.rating} ({item.totalRatings})
+                            {item.rating} ({item.totalRatings || 0})
                         </Text>
                     </View>
                 )}
@@ -91,6 +93,15 @@ const AttractionCard = memo(({ item, onPress }) => (
                     <Text style={styles.distance}>{item.distance} km</Text>
                 </View>
             </View>
+
+            {/* Web sitesi butonu */}
+            <TouchableOpacity
+                style={styles.websiteButton}
+                onPress={() => Linking.openURL(`https://www.google.com/search?q=${encodeURIComponent(item.name)}`)}
+            >
+                <MaterialIcons name="search" size={16} color="#FFF" />
+                <Text style={styles.websiteButtonText}>{translate('attraction_search_web')}</Text>
+            </TouchableOpacity>
         </View>
     </TouchableOpacity>
 ));
@@ -111,9 +122,9 @@ const NearbyAttractions = () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    'İzin Gerekli',
-                    'Yakındaki yerleri görebilmek için konum izni gerekiyor.',
-                    [{ text: 'Tamam' }]
+                    translate('attractions_permission_title'),
+                    translate('attractions_permission_message'),
+                    [{ text: translate('attractions_ok') }]
                 );
                 setLoading(false);
                 return;
@@ -151,11 +162,16 @@ const NearbyAttractions = () => {
                 }));
 
                 setAttractions(formattedAttractions);
+            } else {
+                // Gerçek veri alınamadı, boş liste ile devam et
+                setAttractions([]);
             }
+            
             setLoading(false);
         } catch (error) {
-            console.error(error);
-            Alert.alert('Hata', 'Yerler yüklenirken bir hata oluştu.');
+            console.error(translate('attractions_loading_error'), error);
+            // Hata durumunda boş liste göster
+            setAttractions([]);
             setLoading(false);
         }
     };
@@ -169,11 +185,27 @@ const NearbyAttractions = () => {
             Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return (R * c).toFixed(1);
+        const distance = R * c;
+        return distance.toFixed(1);
     };
 
     const deg2rad = (deg) => {
         return deg * (Math.PI / 180);
+    };
+
+    const openMaps = (item) => {
+        const scheme = Platform.select({
+            ios: 'maps:0,0?q=',
+            android: 'geo:0,0?q='
+        });
+        const latLng = `${item.latitude},${item.longitude}`;
+        const label = item.name;
+        const url = Platform.select({
+            ios: `${scheme}${label}@${latLng}`,
+            android: `${scheme}${latLng}(${label})`
+        });
+
+        Linking.openURL(url);
     };
 
     const renderCategoryItem = useCallback(({ item }) => (
@@ -187,7 +219,7 @@ const NearbyAttractions = () => {
     const renderAttractionItem = useCallback(({ item }) => (
         <AttractionCard
             item={item}
-            onPress={() => {/* detay sayfasına yönlendirme */ }}
+            onPress={openMaps}
         />
     ), []);
 
@@ -205,7 +237,7 @@ const NearbyAttractions = () => {
                     onPress={() => navigation.goBack()}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="#2C3E50" />
-                    <Text style={styles.headerTitle}>Gezilecek Yerler</Text>
+                    <Text style={styles.headerTitle}>{translate('attractions_title')}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -224,7 +256,7 @@ const NearbyAttractions = () => {
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#4CAF50" />
                 </View>
-            ) : (
+            ) : attractions.length > 0 ? (
                 <FlatList
                     data={attractions}
                     renderItem={renderAttractionItem}
@@ -237,6 +269,12 @@ const NearbyAttractions = () => {
                     windowSize={10}
                     initialNumToRender={8}
                 />
+            ) : (
+                <View style={styles.emptyContainer}>
+                    <MaterialIcons name="sentiment-dissatisfied" size={64} color="#BDBDBD" />
+                    <Text style={styles.emptyText}>{translate('attractions_empty')}</Text>
+                    <Text style={styles.emptySubText}>{translate('attractions_empty_subtitle')}</Text>
+                </View>
             )}
         </View>
     );
@@ -261,9 +299,9 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
         color: '#2C3E50',
-        marginLeft: 12,
+        marginLeft: 8,
     },
     categoriesContainer: {
         backgroundColor: '#fff',
@@ -277,18 +315,21 @@ const styles = StyleSheet.create({
     categoryButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F1F8E9',
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
         marginRight: 12,
+        borderWidth: 1,
+        borderColor: '#4CAF50',
     },
     categoryButtonActive: {
         backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
     },
     categoryText: {
         marginLeft: 8,
-        color: '#2C3E50',
+        color: '#4CAF50',
         fontWeight: '600',
     },
     categoryTextActive: {
@@ -299,29 +340,48 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    emptyText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#2C3E50',
+        marginTop: 16,
+    },
+    emptySubText: {
+        fontSize: 14,
+        color: '#7F8C8D',
+        textAlign: 'center',
+        marginTop: 8,
+    },
     listContainer: {
         padding: 16,
+        paddingBottom: 100,
     },
     attractionCard: {
         backgroundColor: '#fff',
-        borderRadius: 20,
+        borderRadius: 12,
         marginBottom: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowRadius: 4,
         elevation: 3,
         overflow: 'hidden',
     },
     attractionImage: {
         width: '100%',
-        height: 200,
+        height: 180,
         backgroundColor: '#f5f5f5',
     },
     placeholderImage: {
         width: '100%',
-        height: 200,
-        backgroundColor: '#f5f5f5',
+        height: 180,
+        backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -344,6 +404,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 12,
     },
     ratingContainer: {
         flexDirection: 'row',
@@ -370,6 +431,22 @@ const styles = StyleSheet.create({
         marginLeft: 4,
         fontSize: 14,
         color: '#7F8C8D',
+    },
+    websiteButton: {
+        backgroundColor: '#4CAF50',
+        borderRadius: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'flex-start',
+    },
+    websiteButtonText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '600',
+        marginLeft: 4,
     }
 });
 

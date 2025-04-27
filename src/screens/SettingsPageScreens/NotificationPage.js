@@ -4,10 +4,9 @@ import { useSelector } from 'react-redux';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { lightTheme, darkTheme } from '../../themes';
 import { useNotifications } from '../../Notifications/useNotifications';
-import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../firebaseConfig';
+import { translate } from '../../i18n/i18n';
 
 const NotificationsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -36,7 +35,7 @@ const NotificationsPage = ({ navigation }) => {
 
             toggleNotificationSetting(settingName, value);
         } catch (error) {
-            console.error('Bildirim ayarları güncellenirken hata:', error);
+            console.error(translate('notification_error') + ':', error);
         }
     };
 
@@ -62,14 +61,14 @@ const NotificationsPage = ({ navigation }) => {
                     />
                 </TouchableOpacity>
                 <Text style={[styles.header, { color: currentTheme.text }]}>
-                    Bildirimler
+                    {translate('notifications')}
                 </Text>
             </View>
 
             <View style={styles.section}>
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Tüm Bildirimler
+                        {translate('all_notifications')}
                     </Text>
                     <Switch
                         value={settings.allNotifications}
@@ -80,7 +79,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Yeni Arkadaş İstekleri
+                        {translate('new_friend_requests')}
                     </Text>
                     <Switch
                         value={settings.newFriends}
@@ -92,7 +91,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Mesajlar
+                        {translate('messages')}
                     </Text>
                     <Switch
                         value={settings.messages}
@@ -104,7 +103,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Aktivite Güncellemeleri
+                        {translate('activity_updates')}
                     </Text>
                     <Switch
                         value={settings.activityUpdates}
@@ -116,7 +115,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Beğeni Bildirimleri
+                        {translate('like_notifications')}
                     </Text>
                     <Switch
                         value={settings.likeNotifications}
@@ -128,7 +127,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        Yorum Bildirimleri
+                        {translate('comment_notifications')}
                     </Text>
                     <Switch
                         value={settings.commentNotifications}
@@ -140,7 +139,7 @@ const NotificationsPage = ({ navigation }) => {
 
                 <View style={styles.settingItem}>
                     <Text style={[styles.settingTitle, { color: currentTheme.text }]}>
-                        E-posta Bildirimleri
+                        {translate('email_notifications')}
                     </Text>
                     <Switch
                         value={settings.emailNotifications}
@@ -153,7 +152,7 @@ const NotificationsPage = ({ navigation }) => {
 
             {error && (
                 <Text style={styles.errorText}>
-                    {error}
+                    {translate('notification_error')}
                 </Text>
             )}
 
@@ -165,7 +164,7 @@ const NotificationsPage = ({ navigation }) => {
                     style={styles.infoIcon}
                 />
                 <Text style={[styles.warningText, { color: currentTheme.text }]}>
-                    Bildirimleri kapatmak bazı önemli güncellemeleri kaçırmanıza neden olabilir.
+                    {translate('notification_warning')}
                 </Text>
             </View>
         </View>

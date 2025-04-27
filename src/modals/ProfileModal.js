@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from '../../firebaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -15,6 +15,7 @@ import FriendProfileModal from './friendProfileModal';
 import VerificationBadge from '../components/VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
 import { sendVerificationSMS, verifyPhoneNumber, isPhoneNumberVerified } from '../utils/phoneVerificationUtils';
+import { translate } from '../i18n/i18n';
 
 const showToast = (type, text1, text2) => {
     Toast.show({
@@ -74,7 +75,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     }
                 } catch (error) {
                     console.error('Kullanıcı verileri alınırken hata:', error);
-                    showToast('error', 'Hata', 'Kullanıcı verileri alınamadı');
+                    showToast('error', translate('error'), translate('loading_user_data_error'));
                 }
             };
             getUserData();
@@ -117,7 +118,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 setUserData({ email: user.email, contact: {}, friendsCount: 0 });
             }
         } catch (error) {
-            showToast('error', 'Hata', 'Kullanıcı verileri alınamadı.');
+            showToast('error', translate('error'), translate('loading_user_data_error'));
         }
     };
 
@@ -149,7 +150,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
 
     const handleAddPhoneNumber = async () => {
         if (!userInfo.phoneNumber || !userInfo.phoneNumber.match(/^\d{10,}$/)) {
-            showToast('error', 'Hata', 'Geçerli bir telefon numarası girin.');
+            showToast('error', translate('error'), translate('invalid_phone'));
             return;
         }
 
@@ -160,7 +161,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 const isVerified = await isPhoneNumberVerified(userInfo.phoneNumber);
 
                 if (!isVerified) {
-                    showToast('error', 'Hata', 'Bu telefon numarası doğrulanmamış. Lütfen önce doğrulama işlemini tamamlayın.');
+                    showToast('error', translate('error'), translate('phone_not_verified'));
                     return;
                 }
 
@@ -176,11 +177,11 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 }));
 
                 setPhoneModalVisible(false);
-                showToast('success', 'Başarılı', 'Telefon numarası güncellendi.');
+                showToast('success', translate('success'), translate('phone_updated'));
             }
         } catch (error) {
             console.error("Telefon numarası ekleme hatası:", error);
-            showToast('error', 'Hata', 'Telefon numarası güncellenirken bir hata oluştu.');
+            showToast('error', translate('error'), translate('loading_user_data_error'));
         }
     };
 
@@ -195,10 +196,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     insta: userInfo.insta,
                 }));
                 setInstaModalVisible(false);
-                showToast('success', 'Başarılı', 'Instagram hesabı güncellendi.');
+                showToast('success', translate('success'), translate('instagram_updated'));
             }
         } catch (error) {
-            showToast('error', 'Hata', 'Instagram hesabı güncellenirken bir hata oluştu.');
+            showToast('error', translate('error'), translate('loading_user_data_error'));
         }
     };
 
@@ -213,17 +214,17 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     bio: userInfo.bio,
                 }));
                 setBioModalVisible(false);
-                showToast('success', 'Başarılı', 'Biyografi güncellendi.');
+                showToast('success', translate('success'), translate('bio_updated'));
             }
         } catch (error) {
-            showToast('error', 'Hata', 'Biyografi güncellenirken bir hata oluştu.');
+            showToast('error', translate('error'), translate('loading_user_data_error'));
         }
     };
 
     const handleChangeProfilePicture = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            showToast('error', 'İzin Gerekli', 'Bu özelliği kullanmak için medya kütüphanesi erişim izni vermelisiniz.');
+            showToast('error', translate('permission_required'), translate('media_permission_message'));
             return;
         }
 
@@ -259,7 +260,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             setProgress(prog);
                         },
                         (error) => {
-                            showToast('error', 'Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
+                            showToast('error', translate('error'), translate('upload_error'));
                             setUploading(false);
                         },
                         async () => {
@@ -271,16 +272,16 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                     ...prevData,
                                     profilePicture: downloadURL,
                                 }));
-                                showToast('success', 'Başarılı', 'Profil fotoğrafınız güncellendi.');
+                                showToast('success', translate('success'), translate('profile_picture_updated'));
                             } catch (error) {
-                                showToast('error', 'Hata', 'Profil fotoğrafı güncellenirken bir hata oluştu.');
+                                showToast('error', translate('error'), translate('profile_picture_update_error'));
                             } finally {
                                 setUploading(false);
                             }
                         }
                     );
                 } catch (error) {
-                    showToast('error', 'Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
+                    showToast('error', translate('error'), translate('upload_error'));
                     setUploading(false);
                 }
             }
@@ -341,7 +342,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
 
     const handleSendVerificationCode = async () => {
         if (!userInfo.phoneNumber || userInfo.phoneNumber.length !== 10 || !userInfo.phoneNumber.startsWith('5')) {
-            showToast('error', 'Hata', 'Lütfen 5 ile başlayan 10 haneli geçerli bir telefon numarası girin.');
+            showToast('error', translate('error'), translate('invalid_phone'));
             return;
         }
 
@@ -352,19 +353,19 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 setVerificationStep('verify');
                 setIsTimerActive(true);
                 setTimer(60);
-                showToast('success', 'Başarılı', 'Doğrulama kodu gönderildi');
+                showToast('success', translate('success'), translate('verification_code_sent'));
             } else {
-                showToast('error', 'Hata', response.message || 'Doğrulama kodu gönderilemedi');
+                showToast('error', translate('error'), response.message || translate('verification_code_error'));
             }
         } catch (error) {
             console.error("Doğrulama kodu gönderme hatası:", error);
-            showToast('error', 'Hata', 'Doğrulama kodu gönderilemedi, lütfen daha sonra tekrar deneyin.');
+            showToast('error', translate('error'), translate('verification_error'));
         }
     };
 
     const handleVerifyCode = async () => {
         if (!verificationCode || verificationCode.length !== 6) {
-            showToast('error', 'Hata', 'Lütfen 6 haneli doğrulama kodunu girin');
+            showToast('error', translate('error'), translate('enter_valid_code'));
             return;
         }
 
@@ -376,13 +377,13 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                 setVerificationStep('input');
                 setVerificationCode('');
                 setPhoneModalVisible(false);
-                showToast('success', 'Başarılı', 'Telefon numarası doğrulandı ve eklendi');
+                showToast('success', translate('success'), translate('phone_verified'));
             } else {
-                showToast('error', 'Hata', response.message || 'Doğrulama kodu hatalı');
+                showToast('error', translate('error'), response.message || translate('invalid_code'));
             }
         } catch (error) {
             console.error("Doğrulama hatası:", error);
-            showToast('error', 'Hata', 'Doğrulama işlemi başarısız oldu, lütfen daha sonra tekrar deneyin.');
+            showToast('error', translate('error'), translate('verification_failed'));
         }
     };
 
@@ -441,7 +442,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             </TouchableOpacity>
 
                             <View style={styles.userNameContainer}>
-                                <Text style={styles.userName}>{userData?.name || 'İsimsiz Kullanıcı'}</Text>
+                                <Text style={styles.userName}>{userData?.name || translate('unauthorized_user')}</Text>
                                 <VerificationBadge
                                     hasBlueTick={verificationStatus.hasBlueTick}
                                     hasGreenTick={verificationStatus.hasGreenTick}
@@ -450,7 +451,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                     showTooltip={false}
                                 />
                             </View>
-                            <Text style={styles.userBio}>{userInfo?.bio || 'Biyografi ekleyin'}</Text>
+                            <Text style={styles.userBio}>{userInfo?.bio || translate('add_bio')}</Text>
                         </View>
 
                         <View style={styles.statsContainer}>
@@ -459,12 +460,12 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 onPress={handleNavigateToFriendsPage}
                             >
                                 <Text style={styles.statNumber}>{userData?.friendsCount || 0}</Text>
-                                <Text style={styles.statLabel}>Arkadaş</Text>
+                                <Text style={styles.statLabel}>{translate('friend')}</Text>
                             </TouchableOpacity>
                             <View style={styles.statDivider} />
                             <View style={styles.statItem}>
                                 <Text style={styles.statNumber}>10</Text>
-                                <Text style={styles.statLabel}>Favori</Text>
+                                <Text style={styles.statLabel}>{translate('capsule')}</Text>
                             </View>
                         </View>
 
@@ -482,7 +483,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             >
                                 <View style={styles.detailedProfileContent}>
                                     <MaterialCommunityIcons name="account-details" size={20} color="#fff" />
-                                    <Text style={styles.detailedProfileText}>Detaylı Profil Görünümü</Text>
+                                    <Text style={styles.detailedProfileText}>{translate('detailed_profile_view')}</Text>
                                     <MaterialCommunityIcons name="chevron-right" size={24} color="#fff" />
                                 </View>
                             </LinearGradient>
@@ -491,12 +492,12 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
 
                     {/* Info Cards Section */}
                     <View style={styles.infoSection}>
-                        <Text style={styles.sectionTitle}>İletişim Bilgileri</Text>
+                        <Text style={styles.sectionTitle}>{translate('contact_info')}</Text>
 
                         <TouchableOpacity style={styles.infoCard}>
                             <MaterialCommunityIcons name="email-outline" size={24} color="#4CAF50" />
                             <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>E-posta</Text>
+                                <Text style={styles.infoLabel}>{translate('email')}</Text>
                                 <Text style={styles.infoValue}>
                                     {userData?.email || auth.currentUser?.email || ''}
                                 </Text>
@@ -509,15 +510,15 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         >
                             <MaterialCommunityIcons name="phone-outline" size={24} color="#4CAF50" />
                             <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>Telefon</Text>
+                                <Text style={styles.infoLabel}>{translate('phone')}</Text>
                                 <View style={styles.phoneInfoContainer}>
                                     <Text style={styles.infoValue}>
-                                        {userInfo?.phoneNumber || 'Telefon numarası ekle'}
+                                        {userInfo?.phoneNumber || translate('add_phone_number')}
                                     </Text>
                                     {userInfo?.phoneNumber && userData?.isPhoneVerified && (
                                         <View style={styles.verifiedBadge}>
                                             <MaterialCommunityIcons name="check-circle" size={16} color="#4CAF50" />
-                                            <Text style={styles.verifiedText}>Doğrulanmış</Text>
+                                            <Text style={styles.verifiedText}>{translate('verified')}</Text>
                                         </View>
                                     )}
                                 </View>
@@ -531,9 +532,9 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         >
                             <MaterialCommunityIcons name="instagram" size={24} color="#4CAF50" />
                             <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>Instagram</Text>
+                                <Text style={styles.infoLabel}>{translate('instagram')}</Text>
                                 <Text style={styles.infoValue}>
-                                    {'@' + userInfo?.insta || 'Instagram hesabı ekle'}
+                                    {'@' + userInfo?.insta || translate('add_instagram')}
                                 </Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
@@ -545,9 +546,9 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         >
                             <MaterialCommunityIcons name="text" size={24} color="#4CAF50" />
                             <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>Biyografi</Text>
+                                <Text style={styles.infoLabel}>{translate('bio')}</Text>
                                 <Text style={styles.infoValue}>
-                                    {userInfo?.bio || 'Biyografi ekle'}
+                                    {userInfo?.bio || translate('add_bio_action')}
                                 </Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
@@ -574,7 +575,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     >
                         <View style={styles.subModalHeader}>
                             <Text style={styles.subModalTitle}>
-                                {verificationStep === 'input' ? 'Telefon Numarası' : 'Doğrulama Kodu'}
+                                {verificationStep === 'input' ? translate('phone_number') : translate('verification_code')}
                             </Text>
                             <TouchableOpacity
                                 style={styles.subModalCloseButton}
@@ -612,11 +613,11 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                     </View>
                                 </View>
                                 <Text style={styles.phoneInstructions}>
-                                    Lütfen 10 haneli telefon numaranızı başında 0 olmadan girin.
+                                    {translate('phone_instruction')}
                                 </Text>
 
                                 <View style={styles.phoneExample}>
-                                    <Text style={styles.phoneExampleText}>Örnek: 5XX XXX XX XX</Text>
+                                    <Text style={styles.phoneExampleText}>{translate('phone_example')}</Text>
                                 </View>
 
                                 <TouchableOpacity
@@ -627,7 +628,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                         colors={['#4CAF50', '#45a049']}
                                         style={styles.saveButtonGradient}
                                     >
-                                        <Text style={styles.saveButtonText}>Doğrulama Kodu Gönder</Text>
+                                        <Text style={styles.saveButtonText}>{translate('send_verification_code')}</Text>
                                     </LinearGradient>
                                 </TouchableOpacity>
                             </>
@@ -635,7 +636,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                             <>
                                 <View style={styles.verificationContainer}>
                                     <Text style={styles.verificationText}>
-                                        <Text style={styles.boldText}>+90 {userInfo.phoneNumber}</Text> numarasına gönderilen 6 haneli doğrulama kodunu girin
+                                        <Text style={styles.boldText}>+90 {userInfo.phoneNumber}</Text> {translate('enter_verification_code')}
                                     </Text>
 
                                     <View style={styles.verificationCodeContainer}>
@@ -658,7 +659,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                     <View style={styles.verificationTip}>
                                         <MaterialCommunityIcons name="information-outline" size={16} color="#666" />
                                         <Text style={styles.verificationTipText}>
-                                            Size SMS ile gönderilen 6 haneli kodu girin
+                                            {translate('verification_tip')}
                                         </Text>
                                     </View>
 
@@ -666,7 +667,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                         <View style={styles.timerContainer}>
                                             <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
                                             <Text style={styles.timerText}>
-                                                Kalan süre: {timer} saniye
+                                                {translate('remaining_time', { time: timer })}
                                             </Text>
                                         </View>
                                     )}
@@ -677,7 +678,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                             onPress={handleSendVerificationCode}
                                         >
                                             <MaterialCommunityIcons name="refresh" size={16} color="#4CAF50" />
-                                            <Text style={styles.resendButtonText}>Kodu Tekrar Gönder</Text>
+                                            <Text style={styles.resendButtonText}>{translate('resend_code')}</Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>
@@ -690,7 +691,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                         colors={['#4CAF50', '#45a049']}
                                         style={styles.saveButtonGradient}
                                     >
-                                        <Text style={styles.saveButtonText}>Doğrula</Text>
+                                        <Text style={styles.saveButtonText}>{translate('verify')}</Text>
                                     </LinearGradient>
                                 </TouchableOpacity>
                             </>
@@ -712,7 +713,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         style={styles.subModalContent}
                     >
                         <View style={styles.subModalHeader}>
-                            <Text style={styles.subModalTitle}>Instagram Hesabı</Text>
+                            <Text style={styles.subModalTitle}>{translate('instagram_account')}</Text>
                             <TouchableOpacity
                                 style={styles.subModalCloseButton}
                                 onPress={() => setInstaModalVisible(false)}
@@ -727,7 +728,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 style={styles.input}
                                 value={userInfo.insta}
                                 onChangeText={handleInstaAccountChange}
-                                placeholder="Instagram kullanıcı adınızı girin"
+                                placeholder={translate('enter_instagram')}
                                 placeholderTextColor="#999"
                             />
                         </View>
@@ -740,7 +741,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 colors={['#4CAF50', '#45a049']}
                                 style={styles.saveButtonGradient}
                             >
-                                <Text style={styles.saveButtonText}>Kaydet</Text>
+                                <Text style={styles.saveButtonText}>{translate('save')}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </Animated.View>
@@ -760,7 +761,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         style={styles.subModalContent}
                     >
                         <View style={styles.subModalHeader}>
-                            <Text style={styles.subModalTitle}>Biyografi</Text>
+                            <Text style={styles.subModalTitle}>{translate('bio_title')}</Text>
                             <TouchableOpacity
                                 style={styles.subModalCloseButton}
                                 onPress={() => setBioModalVisible(false)}
@@ -775,7 +776,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 style={[styles.input, styles.bioInput]}
                                 value={userInfo.bio}
                                 onChangeText={handleBioChange}
-                                placeholder="Kendinizden bahsedin"
+                                placeholder={translate('bio_placeholder')}
                                 placeholderTextColor="#999"
                                 multiline
                                 maxLength={50}
@@ -795,7 +796,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 colors={['#4CAF50', '#45a049']}
                                 style={styles.saveButtonGradient}
                             >
-                                <Text style={styles.saveButtonText}>Kaydet</Text>
+                                <Text style={styles.saveButtonText}>{translate('save')}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </Animated.View>
@@ -821,7 +822,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                         {/* Yükleme Durumu */}
                         {uploading && (
                             <View style={styles.uploadingContainer}>
-                                <Text style={styles.uploadingText}>Yükleniyor... {Math.round(progress)}%</Text>
+                                <Text style={styles.uploadingText}>{translate('uploading', { progress: Math.round(progress) })}</Text>
                                 <View style={styles.progressBar}>
                                     <View
                                         style={[styles.progress, { width: `${progress}%` }]} // İlerlemeyi gösteriyoruz
@@ -843,7 +844,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     bio: userData?.bio || userInfo?.bio,
                     friends: userData?.friends || [],
                     informations: {
-                        name: userData?.name || userInfo?.name || 'İsimsiz Kullanıcı',
+                        name: userData?.name || userInfo?.name || translate('unauthorized_user'),
                         username: userData?.username || userInfo?.username,
                         email: userData?.email || user?.email
                     },

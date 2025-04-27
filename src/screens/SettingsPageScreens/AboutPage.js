@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { version } from '../../../package.json'; // Uygulama versiyonunu package.json'dan alıyoruz
+import { translate } from '../../i18n/i18n'; // translate fonksiyonunu import et
 
 const AboutPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -12,19 +13,19 @@ const AboutPage = ({ navigation }) => {
     const legalLinks = [
         {
             id: 1,
-            title: 'Kullanım Koşulları',
+            title: translate('terms_of_use'),
             icon: 'document-text-outline',
             action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/kullan%C4%B1m-ko%C5%9Fullar%C4%B1')
         },
         {
             id: 2,
-            title: 'Gizlilik Politikası',
+            title: translate('privacy_policy'), // Mevcut anahtarı kullanıyoruz
             icon: 'shield-checkmark-outline',
             action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/gizlilik-politikas%C4%B1')
         },
         {
             id: 3,
-            title: 'Lisans Bilgileri',
+            title: translate('license_info'),
             icon: 'information-circle-outline',
             action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/lisans-bilgileri')
         }
@@ -33,19 +34,19 @@ const AboutPage = ({ navigation }) => {
     const socialLinks = [
         {
             id: 1,
-            title: 'Instagram',
+            title: translate('instagram'),
             icon: 'logo-instagram',
             action: () => Linking.openURL('https://www.instagram.com/ugurrucr/')
         },
         {
             id: 2,
-            title: 'LinkedIn',
+            title: translate('linkedin'),
             icon: 'logo-linkedin',
             action: () => Linking.openURL('https://www.linkedin.com/in/u%C4%9Fur-can-u%C3%A7ar-210061227/')
         },
         {
             id: 3,
-            title: 'Web Sitesi',
+            title: translate('website'),
             icon: 'globe-outline',
             action: () => Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/kullan%C4%B1m-ko%C5%9Fullar%C4%B1')
         }
@@ -65,29 +66,29 @@ const AboutPage = ({ navigation }) => {
                     />
                 </TouchableOpacity>
                 <Text style={[styles.header, { color: currentTheme.text }]}>
-                    Hakkında
+                    {translate('about_page_title')}
                 </Text>
             </View>
 
             <View style={styles.appInfoSection}>
                 <Image
-                    source={require('../../../assets/images/logo.png')} // Uygulama ikonunuzu ekleyin
+                    source={require('../../../assets/images/logo.png')}
                     style={styles.appIcon}
                 />
                 <Text style={[styles.appName, { color: currentTheme.text }]}>
                     STeaPP
                 </Text>
                 <Text style={[styles.version, { color: currentTheme.text }]}>
-                    Versiyon {version}
+                    {translate('version')} {version}
                 </Text>
                 <Text style={styles.description}>
-                    Bu uygulama arkadaşlarınızla iletişim kurmanız ve paylaşımda bulunmanız için tasarlanmıştır.
+                    {translate('app_description')}
                 </Text>
             </View>
 
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                    Yasal
+                    {translate('legal')}
                 </Text>
                 {legalLinks.map((item) => (
                     <TouchableOpacity
@@ -106,7 +107,7 @@ const AboutPage = ({ navigation }) => {
 
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
-                    Bizi Takip Edin
+                    {translate('follow_us')}
                 </Text>
                 <View style={styles.socialLinksContainer}>
                     {socialLinks.map((item) => (
@@ -126,10 +127,10 @@ const AboutPage = ({ navigation }) => {
 
             <View style={styles.creditsSection}>
                 <Text style={[styles.credits, { color: currentTheme.text }]}>
-                    © 2025 STeaPP. Tüm hakları saklıdır.
+                    {translate('copyright')}
                 </Text>
                 <Text style={styles.madeWith}>
-                    Uğur Can UÇAR tarafından Türkiye'de geliştirildi.
+                    {translate('developed_by')}
                 </Text>
                 <Text style={styles.madeWith}>
                     ❤️🇹🇷

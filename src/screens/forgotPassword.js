@@ -10,11 +10,14 @@ import {
     KeyboardAvoidingView,
     ScrollView,
     Platform,
+    Linking,
+    Alert,
 } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { sendPasswordResetEmail } from '../redux/userSlice';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
+import { translate } from '../i18n/i18n';
 
 const ForgotPassword = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -33,19 +36,19 @@ const ForgotPassword = ({ navigation }) => {
                 Toast.show({
                     type: 'success',
                     position: 'top',
-                    text1: 'Başarılı',
-                    text2: 'Şifre sıfırlama e-postası gönderildi.',
+                    text1: translate('success'),
+                    text2: translate('forgot_password_email_sent'),
                     visibilityTime: 2000,
                     autoHide: true,
                 });
-                navigation.navigate("Giriş Yap");
+                navigation.navigate(translate('login'));
             })
             .catch((error) => {
                 Toast.show({
                     type: 'error',
                     position: 'top',
-                    text1: 'Hata',
-                    text2: 'Şifre sıfırlama e-postası gönderilemedi.',
+                    text1: translate('error'),
+                    text2: translate('forgot_password_email_error'),
                     visibilityTime: 2000,
                     autoHide: true,
                 });
@@ -66,16 +69,16 @@ const ForgotPassword = ({ navigation }) => {
                 >
                     <View style={styles.mainContent}>
                         <View style={styles.header}>
-                            <Text style={styles.title}>Şifremi Unuttum</Text>
+                            <Text style={styles.title}>{translate('forgot_password_title')}</Text>
                             <Text style={styles.subtitle}>
-                                E-posta adresinizi girin, size şifre sıfırlama bağlantısı gönderelim
+                                {translate('forgot_password_subtitle')}
                             </Text>
                         </View>
 
                         <View style={styles.formContainer}>
                             <TextInput
                                 style={styles.input}
-                                placeholder="E-posta adresinizi girin"
+                                placeholder={translate('forgot_password_email_placeholder')}
                                 value={email}
                                 onChangeText={setEmail}
                                 keyboardType="email-address"
@@ -88,7 +91,7 @@ const ForgotPassword = ({ navigation }) => {
                                 onPress={handlePasswordReset}
                             >
                                 <Text style={styles.resetButtonText}>
-                                    SIFIRLA
+                                    {translate('forgot_password_reset_button')}
                                 </Text>
                             </TouchableOpacity>
 
@@ -97,44 +100,50 @@ const ForgotPassword = ({ navigation }) => {
                                 onPress={() => navigation.goBack()}
                             >
                                 <Text style={styles.backButtonText}>
-                                    Giriş Sayfasına Dön
+                                    {translate('forgot_password_back_to_login')}
                                 </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
                     <View style={styles.infoSection}>
-                        <Text style={styles.infoTitle}>Yardımcı Bilgiler</Text>
+                        <Text style={styles.infoTitle}>{translate('forgot_password_helpful_info')}</Text>
 
                         <View style={styles.infoContainer}>
                             <Ionicons name="mail-outline" size={24} color="#FF6B6B" />
                             <Text style={styles.infoText}>
-                                Şifre sıfırlama bağlantısı e-posta adresinize gönderilecektir.
+                                {translate('forgot_password_info_email')}
                             </Text>
                         </View>
 
                         <View style={styles.infoContainer}>
                             <Ionicons name="time-outline" size={24} color="#4ECDC4" />
                             <Text style={styles.infoText}>
-                                Bağlantı 24 saat boyunca geçerli olacaktır.
+                                {translate('forgot_password_info_expiry')}
                             </Text>
                         </View>
 
                         <View style={styles.infoContainer}>
                             <Ionicons name="shield-checkmark-outline" size={24} color="#82C596" />
                             <Text style={styles.infoText}>
-                                Güvenliğiniz için yeni şifreniz eskisinden farklı olmalıdır.
+                                {translate('forgot_password_info_security')}
                             </Text>
                         </View>
 
                         <View style={styles.helpSection}>
-                            <Text style={styles.helpTitle}>Hala sorun mu yaşıyorsunuz?</Text>
+                            <Text style={styles.helpTitle}>{translate('forgot_password_still_issues')}</Text>
                             <TouchableOpacity
                                 style={styles.helpButton}
-                                onPress={() => {/* Destek sayfasına yönlendirme */ }}
+                                onPress={() => {
+                                    Linking.openURL('https://sites.google.com/view/steapp-privacy-policy/destek-ekibi')
+                                        .catch((err) => {
+                                            console.error('Bağlantı açılamadı:', err);
+                                            Alert.alert(translate('error'), translate('forgot_password_support_error'));
+                                        });
+                                }}
                             >
                                 <Ionicons name="help-circle-outline" size={20} color="#666666" />
-                                <Text style={styles.helpButtonText}>Destek Ekibine Ulaşın</Text>
+                                <Text style={styles.helpButtonText}>{translate('forgot_password_contact_support')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

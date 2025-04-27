@@ -164,6 +164,16 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
         }
     }, [searchQuery, friendsList]);
 
+    // Bildirimden gelen selectedPostId'yi kontrol et
+    useEffect(() => {
+        if (friend?.selectedPostId && posts.length > 0) {
+            const postToShow = posts.find(post => post.id === friend.selectedPostId);
+            if (postToShow) {
+                setSelectedPost(postToShow);
+            }
+        }
+    }, [friend?.selectedPostId, posts]);
+
     const checkProfileVisibility = async () => {
         if (!friend?.id) return;
 

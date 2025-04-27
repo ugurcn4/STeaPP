@@ -11,7 +11,9 @@ import {
     SafeAreaView,
     ActivityIndicator,
     ScrollView,
-    Image
+    Image,
+    Modal,
+    FlatList
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { login, socialLogin } from '../redux/userSlice';
@@ -24,6 +26,37 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Facebook from 'expo-auth-session/providers/facebook';
 import { ResponseType } from 'expo-auth-session';
 import { useGoogleAuth, handleGoogleLogin } from '../services/googleAuthService';
+import { translate, loadI18nLanguage } from '../i18n/i18n';
+import { changeLanguage } from '../redux/slices/languageSlice';
+import { BlurView } from 'expo-blur';
+
+// Dil seçenekleri
+const languageOptions = [
+    {
+        id: 'tr',
+        name: 'Türkçe',
+        nativeName: 'Türkçe',
+        flag: '🇹🇷',
+    },
+    {
+        id: 'en',
+        name: 'İngilizce',
+        nativeName: 'English',
+        flag: '🇬🇧',
+    },
+    {
+        id: 'de',
+        name: 'Almanca',
+        nativeName: 'Deutsch',
+        flag: '🇩🇪',
+    },
+    {
+        id: 'es',
+        name: 'İspanyolca',
+        nativeName: 'Español',
+        flag: '🇪🇸',
+    }
+];
 
 // WebBrowser'ın auth session'ını kurulumu
 WebBrowser.maybeCompleteAuthSession();
@@ -33,7 +66,9 @@ const LoginPage = ({ navigation }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [languageModalVisible, setLanguageModalVisible] = useState(false);
     const loginStatus = useSelector((state) => state.user.status);
+    const currentLanguage = useSelector((state) => state.language.language) || 'tr';
     const dispatch = useDispatch();
 
     // Google kimlik doğrulama hook'u
@@ -46,6 +81,9 @@ const LoginPage = ({ navigation }) => {
         responseType: ResponseType.Token,
         redirectUri: 'https://auth.expo.io/@ugurrucr/steapp'
     });
+
+    // Ekranı tekrar render etmek için state
+    const [forceRender, setForceRender] = useState(false);
 
     useEffect(() => {
         setLoading(loginStatus === 'loading');
@@ -77,8 +115,8 @@ const LoginPage = ({ navigation }) => {
                     console.error('Google yanıtında token bilgisi bulunamadı');
                     Toast.show({
                         type: 'error',
-                        text1: 'Giriş Hatası',
-                        text2: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
+                        text1: translate('login_error'),
+                        text2: translate('login_google_incomplete'),
                         position: 'top',
                     });
                 }
@@ -86,8 +124,8 @@ const LoginPage = ({ navigation }) => {
                 console.error('Google yanıt işleme hatası:', error);
                 Toast.show({
                     type: 'error',
-                    text1: 'Giriş Hatası',
-                    text2: 'Google ile giriş yapılırken hata oluştu',
+                    text1: translate('login_failed'),
+                    text2: translate('login_google_error'),
                     position: 'top',
                 });
             }
@@ -95,8 +133,8 @@ const LoginPage = ({ navigation }) => {
             console.error('Google giriş hatası:', googleAuth.response.error);
             Toast.show({
                 type: 'error',
-                text1: 'Giriş Hatası',
-                text2: 'Google ile giriş yapılamadı',
+                text1: translate('login_failed'),
+                text2: translate('login_google_failed'),
                 position: 'top',
             });
         }
@@ -115,8 +153,8 @@ const LoginPage = ({ navigation }) => {
         if (!email || !password) {
             Toast.show({
                 type: 'error',
-                text1: 'Hata',
-                text2: 'E-posta ve şifre alanları boş bırakılamaz',
+                text1: translate('login_error'),
+                text2: translate('login_error_empty_fields'),
                 position: 'top',
             });
             return;
@@ -129,8 +167,8 @@ const LoginPage = ({ navigation }) => {
             console.error('Giriş hatası:', error);
             Toast.show({
                 type: 'error',
-                text1: 'Giriş Başarısız',
-                text2: error || 'Lütfen bilgilerinizi kontrol edin',
+                text1: translate('login_failed'),
+                text2: error || translate('login_error_check_credentials'),
                 position: 'top',
             });
         } finally {
@@ -162,16 +200,16 @@ const LoginPage = ({ navigation }) => {
 
             Toast.show({
                 type: 'success',
-                text1: 'Başarılı',
-                text2: 'Facebook hesabınız ile giriş yapıldı',
+                text1: translate('login_success'),
+                text2: translate('login_facebook_success'),
                 position: 'top',
             });
         } catch (error) {
             console.error('Facebook giriş hatası:', error);
             Toast.show({
                 type: 'error',
-                text1: 'Giriş Başarısız',
-                text2: 'Facebook ile giriş yapılırken bir hata oluştu',
+                text1: translate('login_failed'),
+                text2: translate('login_facebook_error'),
                 position: 'top',
             });
         }
@@ -195,8 +233,8 @@ const LoginPage = ({ navigation }) => {
                 console.error('Google giriş başlatma hatası:', error);
                 Toast.show({
                     type: 'error',
-                    text1: 'Giriş Hatası',
-                    text2: 'Google girişi başlatılamadı',
+                    text1: translate('login_failed'),
+                    text2: translate('login_google_start_error'),
                     position: 'top',
                 });
             }
@@ -204,8 +242,8 @@ const LoginPage = ({ navigation }) => {
             // Facebook ile giriş için yakında bilgisi gösterilecek
             Toast.show({
                 type: 'info',
-                text1: 'Bilgi',
-                text2: 'Facebook ile giriş yakında kullanılacaktır',
+                text1: translate('login_info'),
+                text2: translate('login_facebook_coming_soon'),
                 position: 'top',
                 visibilityTime: 3000,
             });
@@ -251,8 +289,8 @@ const LoginPage = ({ navigation }) => {
 
                 Toast.show({
                     type: 'success',
-                    text1: 'Başarılı',
-                    text2: 'Apple hesabınız ile giriş yapıldı',
+                    text1: translate('login_success'),
+                    text2: translate('login_apple_success'),
                     position: 'top',
                 });
 
@@ -260,17 +298,102 @@ const LoginPage = ({ navigation }) => {
                 console.error('Apple giriş hatası:', error);
                 Toast.show({
                     type: 'error',
-                    text1: 'Giriş Başarısız',
-                    text2: 'Apple ile giriş yapılırken bir hata oluştu. ' + error.message,
+                    text1: translate('login_failed'),
+                    text2: translate('login_apple_error') + error.message,
                     position: 'top',
                 });
             }
         }
     };
 
+    // Dil değiştirme fonksiyonu
+    const handleLanguageSelect = (langId) => {
+        dispatch(changeLanguage(langId))
+            .unwrap()
+            .then(() => {
+                // Dil değiştikten sonra i18n'i güncelleyelim
+                loadI18nLanguage(langId);
+                // Şimdi modal'ı kapatalım
+                setLanguageModalVisible(false);
+                // Ekranı zorla tekrar render edelim
+                setForceRender(prev => !prev);
+            })
+            .catch(error => {
+                console.error('Dil değiştirme hatası:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: translate('error'),
+                    text2: translate('language_change_error'),
+                    position: 'top',
+                });
+            });
+    };
+
+    // Mevcut dil bilgisini al
+    const getCurrentLanguageName = () => {
+        const lang = languageOptions.find(lang => lang.id === currentLanguage);
+        return lang ? lang.flag : '🇹🇷';
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" />
+            
+            {/* Dil değiştirme butonu */}
+            <TouchableOpacity 
+                style={styles.languageButton}
+                onPress={() => setLanguageModalVisible(true)}
+            >
+                <Text style={styles.languageButtonText}>{getCurrentLanguageName()}</Text>
+                <Ionicons name="chevron-down" size={16} color="#666" />
+            </TouchableOpacity>
+
+            {/* Dil seçim modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={languageModalVisible}
+                onRequestClose={() => setLanguageModalVisible(false)}
+            >
+                <TouchableOpacity 
+                    style={styles.modalOverlay} 
+                    activeOpacity={1}
+                    onPress={() => setLanguageModalVisible(false)}
+                >
+                    <BlurView intensity={15} style={StyleSheet.absoluteFill} />
+                    <View style={styles.languageModalContainer}>
+                        <View style={styles.languageModalHeader}>
+                            <Text style={styles.languageModalTitle}>{translate('select_language')}</Text>
+                            <TouchableOpacity onPress={() => setLanguageModalVisible(false)}>
+                                <Ionicons name="close-circle" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={languageOptions}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.languageItem,
+                                        currentLanguage === item.id && styles.selectedLanguageItem
+                                    ]}
+                                    onPress={() => handleLanguageSelect(item.id)}
+                                >
+                                    <Text style={styles.languageFlag}>{item.flag}</Text>
+                                    <View style={styles.languageTextContainer}>
+                                        <Text style={styles.languageName}>{item.name}</Text>
+                                        <Text style={styles.languageNativeName}>{item.nativeName}</Text>
+                                    </View>
+                                    {currentLanguage === item.id && (
+                                        <Ionicons name="checkmark-circle" size={22} color="#4CAF50" />
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+            
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.keyboardView}
@@ -289,14 +412,14 @@ const LoginPage = ({ navigation }) => {
                 >
                     <View style={styles.mainContent}>
                         <View style={styles.header}>
-                            <Text style={styles.title}>Hoş Geldiniz</Text>
-                            <Text style={styles.subtitle}>Yerli konum tabanlı sosyal medya 🇹🇷</Text>
+                            <Text style={styles.title}>{translate('login_welcome')}</Text>
+                            <Text style={styles.subtitle}>{translate('login_subtitle')}</Text>
                         </View>
 
                         <View style={styles.formContainer}>
                             <TextInput
                                 style={styles.input}
-                                placeholder="E-posta adresinizi girin"
+                                placeholder={translate('login_email_placeholder')}
                                 value={email}
                                 onChangeText={setEmail}
                                 keyboardType="email-address"
@@ -307,7 +430,7 @@ const LoginPage = ({ navigation }) => {
                             <View style={styles.passwordContainer}>
                                 <TextInput
                                     style={[styles.input, styles.passwordInput]}
-                                    placeholder="Şifrenizi girin"
+                                    placeholder={translate('login_password_placeholder')}
                                     value={password}
                                     onChangeText={setPassword}
                                     secureTextEntry={!showPassword}
@@ -329,7 +452,7 @@ const LoginPage = ({ navigation }) => {
                                 style={styles.forgotPassword}
                                 onPress={() => navigation.navigate('ForgotPassword')}
                             >
-                                <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>
+                                <Text style={styles.forgotPasswordText}>{translate('login_forgot_password')}</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -340,13 +463,13 @@ const LoginPage = ({ navigation }) => {
                                 {loading ? (
                                     <ActivityIndicator color="#FFF" />
                                 ) : (
-                                    <Text style={styles.signInButtonText}>GİRİŞ YAP</Text>
+                                    <Text style={styles.signInButtonText}>{translate('login_button')}</Text>
                                 )}
                             </TouchableOpacity>
 
                             <View style={styles.dividerContainer}>
                                 <View style={styles.divider} />
-                                <Text style={styles.dividerText}>veya</Text>
+                                <Text style={styles.dividerText}>{translate('login_or')}</Text>
                                 <View style={styles.divider} />
                             </View>
 
@@ -382,9 +505,9 @@ const LoginPage = ({ navigation }) => {
                             </View>
 
                             <View style={styles.registerContainer}>
-                                <Text style={styles.registerText}>Hesabınız yok mu? </Text>
+                                <Text style={styles.registerText}>{translate('login_no_account')} </Text>
                                 <TouchableOpacity onPress={() => navigation.navigate('Kayıt Ol')}>
-                                    <Text style={styles.registerLink}>Kayıt Ol</Text>
+                                    <Text style={styles.registerLink}>{translate('login_register')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -395,37 +518,37 @@ const LoginPage = ({ navigation }) => {
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#FF6B6B' }]}>
                                         <Ionicons name="location-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Anlık Konum</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_location')}</Text>
                                 </View>
                                 <View style={styles.featureItem}>
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#4ECDC4' }]}>
                                         <Ionicons name="time-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Geçmiş Konumlar</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_history')}</Text>
                                 </View>
                                 <View style={styles.featureItem}>
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#45B7D1' }]}>
                                         <Ionicons name="people-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Grup Takibi</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_group')}</Text>
                                 </View>
                                 <View style={styles.featureItem}>
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#82C596' }]}>
                                         <Ionicons name="shield-checkmark-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Güvenli Paylaşım</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_secure')}</Text>
                                 </View>
                                 <View style={styles.featureItem}>
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#FFD93D' }]}>
                                         <Ionicons name="notifications-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Anlık Bildirimler</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_notifications')}</Text>
                                 </View>
                                 <View style={styles.featureItem}>
                                     <View style={[styles.featureIconContainer, { backgroundColor: '#FF8C94' }]}>
                                         <Ionicons name="analytics-outline" size={24} color="#FFF" />
                                     </View>
-                                    <Text style={styles.featureText}>Konum Analizi</Text>
+                                    <Text style={styles.featureText}>{translate('login_feature_analytics')}</Text>
                                 </View>
                             </View>
                         </View>
@@ -616,6 +739,95 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 4,
         elevation: 6,
+    },
+    // Dil buton stilleri
+    languageButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 50 : 30,
+        right: 20,
+        zIndex: 99,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 4,
+    },
+    languageButtonText: {
+        fontSize: 18,
+        marginRight: 4,
+    },
+    // Modal stilleri
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    languageModalContainer: {
+        width: '80%',
+        maxHeight: '70%',
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 12,
+    },
+    languageModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    languageModalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    languageItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+        marginVertical: 4,
+    },
+    selectedLanguageItem: {
+        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    },
+    languageFlag: {
+        fontSize: 24,
+        marginRight: 12,
+    },
+    languageTextContainer: {
+        flex: 1,
+    },
+    languageName: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#1A1A1A',
+    },
+    languageNativeName: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 2,
     },
 });
 

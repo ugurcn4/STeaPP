@@ -9,17 +9,45 @@ import {
     Alert,
     Linking,
     Platform,
-    Image
+    Image,
+    ScrollView
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../../i18n/i18n';
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyCRuie7ba6LQGd4R-RP2-7GRINossjXCr8';
 
 const getPhotoUrl = (photoReference) => {
     return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
 };
+
+// Filtre butonları için bileşen
+const FilterButton = memo(({ title, active, onPress, icon }) => (
+    <TouchableOpacity
+        style={[
+            styles.filterButton,
+            active && styles.filterButtonActive
+        ]}
+        onPress={onPress}
+    >
+        <MaterialIcons
+            name={icon}
+            size={18}
+            color={active ? '#FFFFFF' : '#4CAF50'}
+            style={styles.filterIcon}
+        />
+        <Text
+            style={[
+                styles.filterButtonText,
+                active && styles.filterButtonTextActive
+            ]}
+        >
+            {title}
+        </Text>
+    </TouchableOpacity>
+));
 
 const ToiletCard = memo(({ item, onPress }) => (
     <TouchableOpacity
@@ -33,7 +61,7 @@ const ToiletCard = memo(({ item, onPress }) => (
             />
         ) : (
             <View style={styles.placeholderImage}>
-                <MaterialIcons name="wc" size={40} color="#ddd" />
+                <MaterialIcons name="wc" size={40} color="#4CAF50" />
             </View>
         )}
 
@@ -72,7 +100,7 @@ const ToiletCard = memo(({ item, onPress }) => (
                             color={item.isDisabledAccessible ? "#4CAF50" : "#BDBDBD"}
                         />
                         <Text style={styles.accessibilityText}>
-                            {item.isDisabledAccessible ? 'Engelli erişimine uygun' : 'Engelli erişimi yok'}
+                            {item.isDisabledAccessible ? translate('toilet_accessible') : translate('toilet_not_accessible')}
                         </Text>
                     </View>
                 )}
@@ -87,10 +115,19 @@ const ToiletCard = memo(({ item, onPress }) => (
                         styles.statusText,
                         { color: item.isPaid ? '#FF5252' : '#4CAF50' }
                     ]}>
-                        {item.isPaid ? 'Ücretli' : 'Ücretsiz'}
+                        {item.isPaid ? translate('toilet_paid') : translate('toilet_free')}
                     </Text>
                 </View>
             )}
+
+            {/* Yol tarifi butonu */}
+            <TouchableOpacity
+                style={styles.directionsButton}
+                onPress={() => onPress(item)}
+            >
+                <MaterialIcons name="directions" size={16} color="#FFF" />
+                <Text style={styles.directionsButtonText}>{translate('toilet_directions')}</Text>
+            </TouchableOpacity>
         </View>
     </TouchableOpacity>
 ));
@@ -98,20 +135,39 @@ const ToiletCard = memo(({ item, onPress }) => (
 const NearbyToilets = () => {
     const navigation = useNavigation();
     const [toilets, setToilets] = useState([]);
+    const [filteredToilets, setFilteredToilets] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'nearest', 'rating'
 
     useEffect(() => {
         getLocationAndToilets();
     }, []);
+
+    // Aktif filtreye göre tuvaletleri filtrele
+    useEffect(() => {
+        if (toilets.length === 0) return;
+
+        let filtered = [...toilets];
+
+        if (activeFilter === 'nearest') {
+            // Mesafeye göre sırala (en yakından en uzağa)
+            filtered.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+        } else if (activeFilter === 'rating') {
+            // Puana göre sırala (en yüksekten en düşüğe)
+            filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        }
+
+        setFilteredToilets(filtered);
+    }, [activeFilter, toilets]);
 
     const getLocationAndToilets = async () => {
         try {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    'İzin Gerekli',
-                    'Yakındaki tuvaletleri görebilmek için konum izni gerekiyor.',
-                    [{ text: 'Tamam' }]
+                    translate('toilets_permission_title'),
+                    translate('toilets_permission_message'),
+                    [{ text: translate('toilets_ok') }]
                 );
                 setLoading(false);
                 return;
@@ -137,7 +193,7 @@ const NearbyToilets = () => {
 
                     return {
                         id: place.place_id,
-                        name: place.name || 'Tuvalet',
+                        name: place.name || translate('toilet_default_name'),
                         address: place.vicinity,
                         rating: place.rating,
                         totalRatings: place.user_ratings_total,
@@ -154,18 +210,20 @@ const NearbyToilets = () => {
                 });
 
                 setToilets(formattedToilets);
+                setFilteredToilets(formattedToilets);
             } else {
                 // API'den 'OK' durumu gelmezse boş liste ata
                 setToilets([]);
+                setFilteredToilets([]);
                 console.warn('Google Places API isteği başarılı olmadı:', data.status, data.error_message);
             }
 
             setLoading(false);
         } catch (error) {
-            console.error('Tuvalet verileri alınırken hata:', error);
-            // Hata durumunda kullanıcıya bilgi ver ve boş liste ata
+            console.error(translate('toilets_loading_error'), error);
+            // Hata durumunda boş liste ata
             setToilets([]);
-            Alert.alert('Hata', 'Tuvalet verileri alınırken bir hata oluştu. Lütfen internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.');
+            setFilteredToilets([]);
             setLoading(false);
         }
     };
@@ -215,10 +273,40 @@ const NearbyToilets = () => {
         index,
     }), []);
 
+    // Filtre butonlarını render etme fonksiyonu
+    const renderFilterButtons = () => (
+        <View style={styles.filterContainer}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScrollContent}
+            >
+                <FilterButton
+                    title={translate('filter_all')}
+                    icon="format-list-bulleted"
+                    active={activeFilter === 'all'}
+                    onPress={() => setActiveFilter('all')}
+                />
+                <FilterButton
+                    title={translate('filter_nearest')}
+                    icon="near-me"
+                    active={activeFilter === 'nearest'}
+                    onPress={() => setActiveFilter('nearest')}
+                />
+                <FilterButton
+                    title={translate('filter_rating')}
+                    icon="star"
+                    active={activeFilter === 'rating'}
+                    onPress={() => setActiveFilter('rating')}
+                />
+            </ScrollView>
+        </View>
+    );
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0288D1" />
+                <ActivityIndicator size="large" color="#4CAF50" />
             </View>
         );
     }
@@ -231,13 +319,15 @@ const NearbyToilets = () => {
                     onPress={() => navigation.goBack()}
                 >
                     <MaterialIcons name="arrow-back" size={24} color="#2C3E50" />
-                    <Text style={styles.headerTitle}>Yakındaki Tuvaletler</Text>
+                    <Text style={styles.headerTitle}>{translate('toilets_title')}</Text>
                 </TouchableOpacity>
             </View>
 
-            {toilets.length > 0 ? (
+            {renderFilterButtons()}
+
+            {filteredToilets.length > 0 ? (
                 <FlatList
-                    data={toilets}
+                    data={filteredToilets}
                     renderItem={renderToilet}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.listContainer}
@@ -251,8 +341,8 @@ const NearbyToilets = () => {
             ) : (
                 <View style={styles.emptyContainer}>
                     <MaterialIcons name="sentiment-dissatisfied" size={64} color="#BDBDBD" />
-                    <Text style={styles.emptyText}>Yakında tuvalet bulunamadı</Text>
-                    <Text style={styles.emptySubText}>Farklı bir konumda tekrar deneyin</Text>
+                    <Text style={styles.emptyText}>{translate('toilets_empty')}</Text>
+                    <Text style={styles.emptySubText}>{translate('toilets_empty_subtitle')}</Text>
                 </View>
             )}
         </View>
@@ -306,6 +396,41 @@ const styles = StyleSheet.create({
         color: '#2C3E50',
         marginLeft: 8,
     },
+    filterContainer: {
+        backgroundColor: '#fff',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    filterScrollContent: {
+        paddingHorizontal: 16,
+    },
+    filterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: '#F1F8E9',
+        borderRadius: 20,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#4CAF50',
+    },
+    filterButtonActive: {
+        backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
+    },
+    filterButtonText: {
+        color: '#4CAF50',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    filterButtonTextActive: {
+        color: '#FFFFFF',
+    },
+    filterIcon: {
+        marginRight: 4,
+    },
     listContainer: {
         padding: 16,
         paddingBottom: 100,
@@ -330,7 +455,7 @@ const styles = StyleSheet.create({
     placeholderImage: {
         width: 110,
         height: 140,
-        backgroundColor: '#F0F0F0',
+        backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -379,6 +504,10 @@ const styles = StyleSheet.create({
     ratingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#FFF8E1',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
     rating: {
         fontSize: 14,
@@ -406,11 +535,28 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 4,
         marginTop: 4,
+        marginBottom: 8,
     },
     statusText: {
         fontSize: 12,
         fontWeight: '600',
     },
+    directionsButton: {
+        backgroundColor: '#4CAF50',
+        borderRadius: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'flex-start',
+    },
+    directionsButtonText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '600',
+        marginLeft: 4,
+    }
 });
 
 export default NearbyToilets; 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable, ScrollView, TouchableWithoutFeedback, Dimensions } from 'react-native';
-import MapView, { Polyline, Marker, Callout } from 'react-native-maps';
+import MapView, { Polyline, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
     collection,
@@ -32,19 +32,17 @@ import {
 import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
 import FastImage from 'react-native-fast-image';
 import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
-import { ref, set, remove, get, onValue, off } from 'firebase/database';
+import { ref, remove, onValue, off } from 'firebase/database';
 import { rtdb } from '../../firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import Animated, {
-    useAnimatedGestureHandler,
-    useAnimatedStyle,
+import {
     useSharedValue,
-    withTiming,
-    runOnJS
 } from 'react-native-reanimated';
 import LineStyleModal from '../modals/LineStyleModal';
 import DurationModal from '../modals/DurationModal';
+import { translate } from '../i18n/i18n';
+import CapsuleButton from '../components/CapsuleButton';
+import CapsuleModal from '../modals/CapsuleModal';
 
 // Yol renk ve stilleri
 const PATH_STYLES = {
@@ -134,49 +132,12 @@ const MapPage = ({ navigation, route }) => {
         width: PATH_STYLES.width,
         pattern: 'solid'
     });
+    const [showCapsuleModal, setShowCapsuleModal] = useState(false);
 
-    // Süre seçenekleri
-    const durationOptions = [
-        { id: '30min', label: '30 Dakika', value: 30 },
-        { id: '1hour', label: '1 Saat', value: 60 },
-        { id: '2hours', label: '2 Saat', value: 120 },
-        { id: '4hours', label: '4 Saat', value: 240 },
-        { id: '8hours', label: '8 Saat', value: 480 },
-        { id: 'unlimited', label: 'Sınırsız', value: -1 }
-    ];
 
     // Animasyon değerleri
     const translateY = useSharedValue(0);
 
-    // Gesture handler fonksiyonları
-    const onGestureEvent = useAnimatedGestureHandler({
-        onStart: (_, ctx) => {
-            ctx.startY = translateY.value;
-        },
-        onActive: (event, ctx) => {
-            // Sadece aşağı doğru sürüklemeye izin ver
-            if (event.translationY > 0) {
-                translateY.value = ctx.startY + event.translationY;
-            }
-        },
-        onEnd: (event) => {
-            // Eğer yeterince aşağı sürüklendiyse modalı kapat
-            if (event.translationY > 100) {
-                // Önce modalı kapat, sonra animasyonu tamamla
-                runOnJS(setShowDurationModal)(false);
-            } else {
-                // Yeteri kadar sürüklenmemişse eski konumuna geri getir
-                translateY.value = withTiming(0, { duration: 200 });
-            }
-        },
-    });
-
-    // Animasyon stilini tanımla
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateY: translateY.value }],
-        };
-    });
 
     // Modal kapandığında translateY değerini sıfırla
     useEffect(() => {
@@ -207,7 +168,7 @@ const MapPage = ({ navigation, route }) => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
-                    Alert.alert('Hata', 'Konum izni gerekli');
+                    Alert.alert(translate('error'), translate('location_permission_required'));
                     setLoading(false);
                     return;
                 }
@@ -265,7 +226,7 @@ const MapPage = ({ navigation, route }) => {
 
                 setLocationSubscription(subscription);
             } catch (error) {
-                console.error('Konum takibi başlatılamadı:', error);
+                console.error(translate('location_tracking_error'), error);
                 setLoading(false);
             }
         };
@@ -681,10 +642,10 @@ const MapPage = ({ navigation, route }) => {
     };
 
     const mapTypes = [
-        { id: 'standard', name: 'Standart', icon: 'map-outline' },
-        { id: 'satellite', name: 'Uydu', icon: 'earth' },
-        { id: 'hybrid', name: 'Hibrit', icon: 'globe-outline' },
-        { id: 'terrain', name: 'Arazi', icon: 'layers-outline' }
+        { id: 'standard', name: translate('map_standard'), icon: 'map-outline' },
+        { id: 'satellite', name: translate('map_satellite'), icon: 'earth' },
+        { id: 'hybrid', name: translate('map_hybrid'), icon: 'globe-outline' },
+        { id: 'terrain', name: translate('map_terrain'), icon: 'layers-outline' }
     ];
 
     // Harita etkileşimlerini dinleyen fonksiyon
@@ -729,21 +690,21 @@ const MapPage = ({ navigation, route }) => {
     // Yol silme fonksiyonu
     const deletePath = async (pathId) => {
         if (!userId || !pathId) {
-            Alert.alert('Hata', 'Kullanıcı veya yol bilgisi eksik');
+            Alert.alert(translate('error'), translate('user_or_path_info_missing'));
             return;
         }
 
         // Kullanıcıya silme işlemini onaylatma
         Alert.alert(
-            'Yolu Sil',
-            'Bu yolu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
+            translate('delete_path'),
+            translate('delete_path_confirm'),
             [
                 {
-                    text: 'İptal',
+                    text: translate('cancel'),
                     style: 'cancel'
                 },
                 {
-                    text: 'Sil',
+                    text: translate('delete'),
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -752,13 +713,13 @@ const MapPage = ({ navigation, route }) => {
                             await deleteDoc(pathRef);
 
                             // Başarılı mesajı göster
-                            Alert.alert('Başarılı', 'Yol başarıyla silindi.');
+                            Alert.alert(translate('success'), translate('path_deleted'));
 
                             // Yol detaylarını kapat
                             closePathDetails();
                         } catch (error) {
-                            console.error('Yol silinirken hata:', error);
-                            Alert.alert('Hata', 'Yol silinirken bir hata oluştu: ' + error.message);
+                            console.error(translate('path_delete_error'), error);
+                            Alert.alert(translate('error'), translate('path_delete_error_message') + error.message);
                         }
                     }
                 }
@@ -895,9 +856,9 @@ const MapPage = ({ navigation, route }) => {
                 const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
                 if (newStatus !== 'granted') {
                     Alert.alert(
-                        'İzin Gerekli',
-                        'Konum izni olmadan çizim yapılamaz.',
-                        [{ text: 'Tamam' }]
+                        translate('permission_required'),
+                        translate('location_permission_drawing'),
+                        [{ text: translate('ok') }]
                     );
                     return;
                 }
@@ -909,9 +870,9 @@ const MapPage = ({ navigation, route }) => {
                 const { status: newBgStatus } = await Location.requestBackgroundPermissionsAsync();
                 if (newBgStatus !== 'granted') {
                     Alert.alert(
-                        'Arka Plan İzni Gerekli',
-                        'Arka planda çizim yapabilmek için arka plan konum izni gereklidir.',
-                        [{ text: 'Tamam' }]
+                        translate('background_permission_required'),
+                        translate('background_permission_drawing'),
+                        [{ text: translate('ok') }]
                     );
                     return;
                 }
@@ -948,16 +909,16 @@ const MapPage = ({ navigation, route }) => {
                 setShowDurationModal(false);
 
                 Alert.alert(
-                    'Arka Plan Çizimi Başlatıldı',
+                    translate('background_drawing_started'),
                     durationMinutes > 0
-                        ? `Arka planda çizim ${durationMinutes} dakika boyunca devam edecek.`
-                        : 'Arka planda çizim sınırsız süreyle devam edecek.',
-                    [{ text: 'Tamam' }]
+                        ? translate('background_drawing_duration_minutes', { minutes: durationMinutes })
+                        : translate('background_drawing_unlimited'),
+                    [{ text: translate('ok') }]
                 );
             }
         } catch (error) {
-            console.error('Arka plan çizimi başlatılamadı:', error);
-            Alert.alert('Hata', 'Arka plan çizimi başlatılamadı: ' + error.message);
+            console.error(translate('background_drawing_start_error'), error);
+            Alert.alert(translate('error'), translate('background_drawing_start_error_message') + error.message);
         }
     };
 
@@ -973,15 +934,15 @@ const MapPage = ({ navigation, route }) => {
             setIsBackgroundDrawing(false);
 
             Alert.alert(
-                'Arka Plan Çizimi Durduruldu',
+                translate('background_drawing_stopped'),
                 savedPathsCount > 0
-                    ? `Toplam ${savedPathsCount} yol parçası kaydedildi.`
-                    : 'Kaydedilen yol bulunamadı.',
-                [{ text: 'Tamam' }]
+                    ? translate('saved_paths_count', { count: savedPathsCount })
+                    : translate('no_saved_paths'),
+                [{ text: translate('ok') }]
             );
         } catch (error) {
-            console.error('Arka plan çizimi durdurulamadı:', error);
-            Alert.alert('Hata', 'Arka plan çizimi durdurulamadı.');
+            console.error(translate('background_drawing_stop_error'), error);
+            Alert.alert(translate('error'), translate('background_drawing_stop_error_message'));
         }
     };
 
@@ -1021,12 +982,12 @@ const MapPage = ({ navigation, route }) => {
         try {
             // Paylaşım ve kullanıcı bilgilerini kontrol et
             if (!shareId) {
-                Alert.alert('Hata', 'Paylaşım kimliği alınamadı');
+                Alert.alert(translate('error'), translate('share_id_missing'));
                 return;
             }
 
             if (!userId) {
-                Alert.alert('Hata', 'Kullanıcı kimliği alınamadı');
+                Alert.alert(translate('error'), translate('user_id_missing'));
                 return;
             }
 
@@ -1034,8 +995,8 @@ const MapPage = ({ navigation, route }) => {
             const shareDoc = await getDoc(doc(db, `users/${userId}/receivedShares/${shareId}`));
 
             if (!shareDoc.exists()) {
-                console.error('Paylaşım belgesi bulunamadı');
-                Alert.alert('Hata', 'Paylaşım bilgileri alınamadı');
+                console.error(translate('share_document_not_found'));
+                Alert.alert(translate('error'), translate('share_info_not_found'));
                 return;
             }
 
@@ -1043,8 +1004,8 @@ const MapPage = ({ navigation, route }) => {
             const fromUserId = shareData?.fromUserId;
 
             if (!fromUserId) {
-                console.error('Paylaşan kullanıcı ID bilgisi bulunamadı');
-                Alert.alert('Hata', 'Paylaşım bilgileri alınamadı');
+                console.error(translate('sharer_user_id_not_found'));
+                Alert.alert(translate('error'), translate('share_info_not_found'));
                 return;
             }
 
@@ -1089,10 +1050,10 @@ const MapPage = ({ navigation, route }) => {
             }
 
             closeModal();
-            Alert.alert('Başarılı', 'Paylaşım durduruldu');
+            Alert.alert(translate('success'), translate('share_stopped'));
         } catch (error) {
-            console.error('Paylaşım durdurma hatası:', error);
-            Alert.alert('Hata', 'Paylaşım durdurulamadı: ' + error.message);
+            console.error(translate('stop_sharing_error'), error);
+            Alert.alert(translate('error'), translate('share_stop_error') + error.message);
         }
     };
 
@@ -1100,19 +1061,19 @@ const MapPage = ({ navigation, route }) => {
         try {
             // Kullanıcı ve seçili konum bilgilerini kontrol et
             if (!userId) {
-                Alert.alert('Hata', 'Kullanıcı kimliği alınamadı');
+                Alert.alert(translate('error'), translate('user_id_missing'));
                 return;
             }
 
             if (!selectedLocation || !selectedLocation.senderId) {
-                Alert.alert('Hata', 'Kullanıcı bilgileri alınamadı');
+                Alert.alert(translate('error'), translate('user_info_not_found'));
                 return;
             }
 
             // Konum izinlerini kontrol et
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('İzin Hatası', 'Konum izni verilmedi');
+                Alert.alert(translate('permission_error'), translate('location_permission_denied'));
                 return;
             }
 
@@ -1125,7 +1086,7 @@ const MapPage = ({ navigation, route }) => {
             });
 
             if (!currentLocation || !currentLocation.coords) {
-                Alert.alert('Hata', 'Konum bilgileri alınamadı');
+                Alert.alert(translate('error'), translate('location_info_not_found'));
                 return;
             }
 
@@ -1153,8 +1114,8 @@ const MapPage = ({ navigation, route }) => {
             // Kullanıcı bilgilerini al
             const userDoc = await getDoc(doc(db, 'users', userId));
             if (!userDoc.exists()) {
-                console.error('Kullanıcı belgesi bulunamadı');
-                Alert.alert('Hata', 'Kullanıcı bilgileri alınamadı');
+                console.error(translate('user_document_not_found'));
+                Alert.alert(translate('error'), translate('user_info_not_found'));
                 return;
             }
 
@@ -1182,21 +1143,21 @@ const MapPage = ({ navigation, route }) => {
             const activeShareSnapshot = await getDocs(activeShareQuery);
             if (!activeShareSnapshot.empty) {
                 Alert.alert(
-                    'Bilgi',
-                    'Bu kişiyle zaten aktif bir konum paylaşımınız var. Yine de yeni bir paylaşım başlatmak istiyor musunuz?',
+                    translate('info'),
+                    translate('active_share_exists'),
                     [
                         {
-                            text: 'İptal',
+                            text: translate('cancel'),
                             style: 'cancel'
                         },
                         {
-                            text: 'Devam Et',
+                            text: translate('continue'),
                             onPress: async () => {
                                 try {
                                     await createShare();
                                 } catch (error) {
-                                    console.error('Paylaşım oluşturma hatası:', error);
-                                    Alert.alert('Hata', 'Konum paylaşılamadı: ' + error.message);
+                                    console.error(translate('share_creation_error'), error);
+                                    Alert.alert(translate('error'), translate('location_share_error') + error.message);
                                 }
                             }
                         }
@@ -1246,11 +1207,11 @@ const MapPage = ({ navigation, route }) => {
                 });
 
                 closeModal();
-                Alert.alert('Başarılı', 'Konum paylaşımı başlatıldı');
+                Alert.alert(translate('success'), translate('location_share_started'));
             }
         } catch (error) {
-            console.error('Konum paylaşım hatası:', error);
-            Alert.alert('Hata', 'Konum paylaşılamadı: ' + error.message);
+            console.error(translate('location_sharing_error'), error);
+            Alert.alert(translate('error'), translate('location_share_error') + error.message);
         }
     };
     // Çizgi stili seçildiğinde çağrılacak fonksiyon
@@ -1326,7 +1287,7 @@ const MapPage = ({ navigation, route }) => {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#FDD329" />
-                <Text>Konum bulunuyor...</Text>
+                <Text>{translate('finding_location')}</Text>
             </View>
         );
     }
@@ -1439,7 +1400,7 @@ const MapPage = ({ navigation, route }) => {
                 <View style={styles.statusItem}>
                     <Ionicons name="speedometer-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.speedValue}>{currentSpeed}</Text>
-                    <Text style={styles.speedUnit}>km/sa</Text>
+                    <Text style={styles.speedUnit}>{translate('speed_unit')}</Text>
                 </View>
 
                 {/* GPS Durumu */}
@@ -1454,13 +1415,13 @@ const MapPage = ({ navigation, route }) => {
                     {!isGPSCalibrated ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.statusText}>Kalibrasyon</Text>
+                            <Text style={styles.statusText}>{translate('calibration')}</Text>
                         </View>
                     ) : (
                         <Text style={styles.statusText}>
-                            {gpsQuality === 'OPTIMAL' ? 'Mükemmel' :
-                                gpsQuality === 'GOOD' ? 'İyi' :
-                                    gpsQuality === 'FAIR' ? 'Orta' : 'Zayıf'}
+                            {gpsQuality === 'OPTIMAL' ? translate('gps_optimal') :
+                                gpsQuality === 'GOOD' ? translate('gps_good') :
+                                    gpsQuality === 'FAIR' ? translate('gps_fair') : translate('gps_poor')}
                         </Text>
                     )}
                 </View>
@@ -1473,7 +1434,7 @@ const MapPage = ({ navigation, route }) => {
                         color="#FFFFFF"
                     />
                     <Text style={styles.statusText}>
-                        {isMoving ? "Hareket" : "Durağan"}
+                        {isMoving ? translate('moving') : translate('stationary')}
                     </Text>
                 </View>
             </View>
@@ -1587,11 +1548,11 @@ const MapPage = ({ navigation, route }) => {
                                     ]} />
                                 </View>
                                 <View style={styles.userInfo}>
-                                    <Text style={styles.userName}>{selectedLocation?.senderName || 'İsimsiz'}</Text>
+                                    <Text style={styles.userName}>{selectedLocation?.senderName || translate('unnamed_user')}</Text>
                                     <View style={styles.locationInfoContainer}>
                                         <Ionicons name="location" size={16} color="#666666" />
                                         <Text style={styles.locationInfo}>
-                                            {selectedLocation?.locationInfo?.city || 'Bilinmeyen Şehir'}, {selectedLocation?.locationInfo?.district || 'Bilinmeyen Bölge'}
+                                            {selectedLocation?.locationInfo?.city || translate('unknown_city')}, {selectedLocation?.locationInfo?.district || translate('unknown_district')}
                                         </Text>
                                     </View>
                                     <View style={styles.shareTypeContainer}>
@@ -1604,7 +1565,7 @@ const MapPage = ({ navigation, route }) => {
                                             styles.shareType,
                                             { color: selectedLocation?.type === 'instant' ? '#FF9500' : '#30B0C7' }
                                         ]}>
-                                            {selectedLocation?.type === 'instant' ? 'Anlık Konum' : 'Canlı Konum'}
+                                            {selectedLocation?.type === 'instant' ? translate('instant_location') : translate('live_location')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1616,21 +1577,21 @@ const MapPage = ({ navigation, route }) => {
                                     <View style={[styles.actionIcon, { backgroundColor: '#E8F5E9' }]}>
                                         <Ionicons name="person" size={24} color="#4CAF50" />
                                     </View>
-                                    <Text style={styles.actionText}>Profil</Text>
+                                    <Text style={styles.actionText}>{translate('profile')}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity style={styles.quickActionButton}>
                                     <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
                                         <Ionicons name="navigate" size={24} color="#2196F3" />
                                     </View>
-                                    <Text style={styles.actionText}>Yol Tarifi</Text>
+                                    <Text style={styles.actionText}>{translate('directions')}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity style={styles.quickActionButton}>
                                     <View style={[styles.actionIcon, { backgroundColor: '#FFF3E0' }]}>
                                         <Ionicons name="notifications" size={24} color="#FF9800" />
                                     </View>
-                                    <Text style={styles.actionText}>Bildirim</Text>
+                                    <Text style={styles.actionText}>{translate('notification')}</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -1639,7 +1600,7 @@ const MapPage = ({ navigation, route }) => {
                                 <View style={styles.locationDetailItem}>
                                     <Ionicons name="time-outline" size={20} color="#666666" />
                                     <View style={styles.locationDetailText}>
-                                        <Text style={styles.detailLabel}>Son Güncelleme</Text>
+                                        <Text style={styles.detailLabel}>{translate('last_update')}</Text>
                                         <Text style={styles.detailValue}>{selectedLocation?.lastUpdateText}</Text>
                                     </View>
                                 </View>
@@ -1647,13 +1608,13 @@ const MapPage = ({ navigation, route }) => {
                                 <View style={styles.locationDetailItem}>
                                     <Ionicons name="speedometer-outline" size={20} color="#666666" />
                                     <View style={styles.locationDetailText}>
-                                        <Text style={styles.detailLabel}>Uzaklık</Text>
+                                        <Text style={styles.detailLabel}>{translate('distance')}</Text>
                                         <Text style={styles.detailValue}>
                                             {selectedLocation?.distance !== undefined ? (
                                                 selectedLocation.distance < 1000
-                                                    ? `${Math.round(selectedLocation.distance)} m`
-                                                    : `${(selectedLocation.distance / 1000).toFixed(1)} km`
-                                            ) : 'Hesaplanıyor...'}
+                                                    ? `${Math.round(selectedLocation.distance)} ${translate('distance_meters')}`
+                                                    : `${(selectedLocation.distance / 1000).toFixed(1)} ${translate('distance_km')}`
+                                            ) : translate('calculating')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1665,14 +1626,14 @@ const MapPage = ({ navigation, route }) => {
                                     style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
                                     onPress={handleShareMyLocation}
                                 >
-                                    <Text style={styles.actionButtonText}>Konumumu Paylaş</Text>
+                                    <Text style={styles.actionButtonText}>{translate('share_my_location')}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
                                     onPress={() => selectedLocation?.id && handleStopShare(selectedLocation.id)}
                                 >
-                                    <Text style={styles.actionButtonText}>Paylaşımı Durdur</Text>
+                                    <Text style={styles.actionButtonText}>{translate('stop_sharing')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -1681,10 +1642,10 @@ const MapPage = ({ navigation, route }) => {
             </Modal>
 
             {/* Arka Plan Çizim Butonu ve Etiketi - En üstte olması için en son render edelim */}
-            <View style={{ position: 'absolute', zIndex: 1000 }}>
+            <View style={{ position: 'absolute', zIndex: 1000, left: 16, top: Platform.OS === 'ios' ? 120 : 100 }}>
                 {isBackgroundDrawing && (
                     <View style={styles.backgroundDrawingLabel}>
-                        <Text style={styles.backgroundDrawingLabelText}>AKTİF</Text>
+                        <Text style={styles.backgroundDrawingLabelText}>{translate('active')}</Text>
                     </View>
                 )}
                 <TouchableOpacity
@@ -1712,6 +1673,9 @@ const MapPage = ({ navigation, route }) => {
                         color="#333333"
                     />
                 </TouchableOpacity>
+                
+                {/* Kapsül Butonu */}
+                <CapsuleButton onPress={() => setShowCapsuleModal(true)} />
             </View>
 
             {/* Süre Seçim Modalı - Artık ayrı bir komponent olarak kullanıyoruz */}
@@ -1729,6 +1693,12 @@ const MapPage = ({ navigation, route }) => {
                 onClose={() => setShowLineStyleModal(false)}
                 selectedLineStyle={selectedLineStyle}
                 onSelectLineStyle={handleSelectLineStyle}
+            />
+
+            {/* Kapsül Modalı */}
+            <CapsuleModal
+                visible={showCapsuleModal}
+                onClose={() => setShowCapsuleModal(false)}
             />
 
             {/* Yol Detayları Modalı */}
@@ -1756,17 +1726,17 @@ const MapPage = ({ navigation, route }) => {
                                 </View>
                                 <View style={styles.pathInfo}>
                                     <Text style={styles.pathTitle}>
-                                        {selectedPath?.city || 'Bilinmeyen Konum'}
+                                        {selectedPath?.city || translate('unknown_location')}
                                     </Text>
                                     <Text style={styles.pathSubtitle}>
-                                        {selectedPath?.district || 'Bilinmeyen Bölge'}
+                                        {selectedPath?.district || translate('unknown_district')}
                                     </Text>
                                     <View style={styles.pathDetailRow}>
                                         <Ionicons name="calendar-outline" size={16} color="#666666" />
                                         <Text style={styles.pathDetailText}>
                                             {selectedPath?.firstDiscovery ?
                                                 new Date(selectedPath.firstDiscovery.seconds * 1000).toLocaleDateString('tr-TR') :
-                                                'Bilinmeyen Tarih'}
+                                                translate('unknown_date')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1777,9 +1747,9 @@ const MapPage = ({ navigation, route }) => {
                                 <View style={styles.pathDetailItem}>
                                     <Ionicons name="pin-outline" size={20} color="#666666" />
                                     <View style={styles.pathDetailContent}>
-                                        <Text style={styles.pathDetailLabel}>Nokta Sayısı</Text>
+                                        <Text style={styles.pathDetailLabel}>{translate('points_count')}</Text>
                                         <Text style={styles.pathDetailValue}>
-                                            {selectedPath?.points?.length || 0} nokta
+                                            {selectedPath?.points?.length || 0} {translate('points')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1787,11 +1757,11 @@ const MapPage = ({ navigation, route }) => {
                                 <View style={styles.pathDetailItem}>
                                     <Ionicons name="trending-up-outline" size={20} color="#666666" />
                                     <View style={styles.pathDetailContent}>
-                                        <Text style={styles.pathDetailLabel}>Toplam Mesafe</Text>
+                                        <Text style={styles.pathDetailLabel}>{translate('total_distance')}</Text>
                                         <Text style={styles.pathDetailValue}>
                                             {selectedPath?.points && selectedPath.points.length > 1 ?
-                                                (calculatePathDistance(selectedPath.points) / 1000).toFixed(2) + ' km' :
-                                                'Hesaplanamadı'}
+                                                (calculatePathDistance(selectedPath.points) / 1000).toFixed(2) + ' ' + translate('distance_km') :
+                                                translate('not_calculated')}
                                         </Text>
                                     </View>
                                 </View>
@@ -1799,7 +1769,7 @@ const MapPage = ({ navigation, route }) => {
                                 <View style={styles.pathDetailItem}>
                                     <Ionicons name="repeat-outline" size={20} color="#666666" />
                                     <View style={styles.pathDetailContent}>
-                                        <Text style={styles.pathDetailLabel}>Ziyaret Sayısı</Text>
+                                        <Text style={styles.pathDetailLabel}>{translate('visit_count')}</Text>
                                         <Text style={styles.pathDetailValue}>
                                             {selectedPath?.visitCount || 1}
                                         </Text>
@@ -1825,14 +1795,14 @@ const MapPage = ({ navigation, route }) => {
                                         }
                                     }}
                                 >
-                                    <Text style={styles.actionButtonText}>Haritada Göster</Text>
+                                    <Text style={styles.actionButtonText}>{translate('show_on_map')}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
                                     onPress={() => selectedPath?.id && deletePath(selectedPath.id)}
                                 >
-                                    <Text style={styles.actionButtonText}>Yolu Sil</Text>
+                                    <Text style={styles.actionButtonText}>{translate('delete_path')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -2214,9 +2184,6 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     backgroundDrawingButton: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 120 : 100, // Biraz daha aşağıya taşıdık
-        left: 16,
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -2224,14 +2191,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
         elevation: 5,
-        zIndex: 1000,
+        marginBottom: 8,
     },
     backgroundDrawingActiveButton: {
         backgroundColor: '#4CAF50',
@@ -2253,11 +2217,7 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: 'bold',
     },
-    // Emoji butonu stili (aynı stil çizgi tasarım butonu için de kullanılacak)
     emojiButton: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 190 : 170, // Çizim butonunun altında
-        left: 16,
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -2265,14 +2225,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
         elevation: 5,
-        zIndex: 1000,
+        marginBottom: 8,
     },
     pathInfoContainer: {
         flexDirection: 'row',

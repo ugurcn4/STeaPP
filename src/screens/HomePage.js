@@ -15,15 +15,16 @@ import LottieView from 'lottie-react-native';
 import CityExplorerCard from './HomePageCards/CityExplorerCard';
 import FastImage from 'react-native-fast-image';
 import styles from '../styles/HomePageStyles';
+import { translate } from '../i18n/i18n';
 
 // motivationMessages'ı component dışında tanımlayalım
 const motivationMessages = [
-    "STeaPP ile yürüyüşlerinizi kaydedin, anılarınızı paylaşın!",
-    "Her adım, sağlığınıza bir adım daha yaklaşmanızı sağlar. Hedefinize doğru yürümeye devam edin!",
-    "Her gün en az 10.000 adım atmaya çalışın. Sağlığınız için küçük adımlar, büyük farklar yaratır.",
-    "Yeni yerler keşfetmek, ruhunuzu besler. Bugün bir adım atın ve keşfe çıkın!",
-    "Dünya, keşfedilmeyi bekleyen güzelliklerle dolu.",
-    "Dışarıda harika bir gün! Steapp ile yerlerinizi işaretleyin ve hatıralarınızı oluşturun.",
+    "motivation_message_1",
+    "motivation_message_2",
+    "motivation_message_3",
+    "motivation_message_4",
+    "motivation_message_5",
+    "motivation_message_6",
 ];
 
 const HomePage = ({ navigation }) => {
@@ -128,9 +129,9 @@ const HomePage = ({ navigation }) => {
             const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
             if (locationStatus !== 'granted') {
                 Alert.alert(
-                    "Konum İzni Gerekli",
-                    "Harita özellikleri ve konum tabanlı hizmetler için konum izni gereklidir.",
-                    [{ text: "Tamam" }]
+                    translate('location_permission_title'),
+                    translate('location_permission_message'),
+                    [{ text: translate('ok') }]
                 );
             }
 
@@ -140,14 +141,14 @@ const HomePage = ({ navigation }) => {
                 const { status: newStatus } = await Notifications.requestPermissionsAsync();
                 if (newStatus !== 'granted') {
                     Alert.alert(
-                        "Bildirim İzni",
-                        "Etkinlik bildirimleri ve yeni mesajlar için bildirim izni gereklidir.",
-                        [{ text: "Tamam" }]
+                        translate('notification_permission_title'),
+                        translate('notification_permission_message'),
+                        [{ text: translate('ok') }]
                     );
                 }
             }
         } catch (error) {
-            console.error('İzin isteme hatası:', error);
+            console.error(translate('permission_request_error'), error);
         }
     };
 
@@ -277,7 +278,7 @@ const HomePage = ({ navigation }) => {
                 });
             }
         } catch (error) {
-            console.error('Kullanıcı verileri çekilirken hata:', error);
+            console.error(translate('user_data_fetch_error'), error);
         } finally {
             setIsLoading(false);
         }
@@ -323,7 +324,7 @@ const HomePage = ({ navigation }) => {
                 });
             }
         } catch (error) {
-            console.error('Hava durumu verileri alınırken hata:', error);
+            console.error(translate('weather_data_fetch_error'), error);
         }
     };
 
@@ -462,7 +463,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#E1F5FE' }]}>
                     <MaterialIcons name="wc" size={24} color="#0288D1" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Tuvaletler</Text>
+                <Text style={styles.quickAccessTitle}>{translate('toilets')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -472,7 +473,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#E8F5E9' }]}>
                     <MaterialIcons name="local-gas-station" size={24} color="#4CAF50" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Yakıt İstasyonları</Text>
+                <Text style={styles.quickAccessTitle}>{translate('gas_stations')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -482,7 +483,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#FBE9E7' }]}>
                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#D84315' }}>E</Text>
                 </View>
-                <Text style={styles.quickAccessTitle}>Eczaneler</Text>
+                <Text style={styles.quickAccessTitle}>{translate('pharmacies')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -492,7 +493,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#FFEBEE' }]}>
                     <MaterialIcons name="restaurant" size={24} color="#FF5252" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Restoranlar</Text>
+                <Text style={styles.quickAccessTitle}>{translate('restaurants')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -502,7 +503,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#E8EAF6' }]}>
                     <MaterialIcons name="hotel" size={24} color="#3F51B5" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Oteller</Text>
+                <Text style={styles.quickAccessTitle}>{translate('hotels')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -512,7 +513,7 @@ const HomePage = ({ navigation }) => {
                 <View style={[styles.quickAccessIcon, { backgroundColor: '#E0F2F1' }]}>
                     <MaterialIcons name="place" size={24} color="#009688" />
                 </View>
-                <Text style={styles.quickAccessTitle}>Gezilecek Yerler</Text>
+                <Text style={styles.quickAccessTitle}>{translate('attractions')}</Text>
             </TouchableOpacity>
         </View>
     );
@@ -523,11 +524,11 @@ const HomePage = ({ navigation }) => {
         const [isTyping, setIsTyping] = useState(true);
 
         const messages = [
-            "Size nasıl yardımcı olabilirim?",
-            "Yeni yerler keşfetmek ister misiniz?",
-            "Bugün nereyi gezmek istersiniz?",
-            "Birlikte yeni rotalar oluşturalım!",
-            "Sizin için özel önerilerim var!"
+            translate('ai_help_message'),
+            translate('ai_discover_places'),
+            translate('ai_today_suggestion'),
+            translate('ai_create_routes'),
+            translate('ai_special_recommendations')
         ];
 
         // Yazma animasyonu için
@@ -608,7 +609,7 @@ const HomePage = ({ navigation }) => {
                                 />
                             </View>
                             <View style={styles.aiCardTextContainer}>
-                                <Text style={styles.aiCardTitle}>STeaPPY AI</Text>
+                                <Text style={styles.aiCardTitle}>{translate('ai_assistant_name')}</Text>
                                 <View style={styles.messageContainer}>
                                     <Text
                                         style={styles.aiCardSubtitle}
@@ -657,7 +658,7 @@ const HomePage = ({ navigation }) => {
             ]}
         >
             <Text style={styles.motivationText}>
-                {motivationMessages[currentMessageIndex]}
+                {translate(motivationMessages[currentMessageIndex])}
             </Text>
         </Animated.View>
     );
@@ -669,7 +670,7 @@ const HomePage = ({ navigation }) => {
         >
             <View style={styles.goalHeader}>
                 <View style={styles.goalTitleContainer}>
-                    <Text style={styles.goalTitle}>Günlük Hedef</Text>
+                    <Text style={styles.goalTitle}>{translate('daily_goal')}</Text>
                     <TouchableOpacity
                         onPress={() => setShowInfoTooltip(!showInfoTooltip)}
                         style={styles.infoButton}
@@ -687,7 +688,7 @@ const HomePage = ({ navigation }) => {
                                 <View style={styles.tooltipArrow} />
                                 <View style={styles.tooltipContent}>
                                     <View style={styles.tooltipHeader}>
-                                        <Text style={styles.tooltipTitle}>Nasıl Hesaplanır?</Text>
+                                        <Text style={styles.tooltipTitle}>{translate('how_calculated')}</Text>
                                         <TouchableOpacity
                                             onPress={() => setShowInfoTooltip(false)}
                                             style={styles.closeButton}
@@ -696,17 +697,17 @@ const HomePage = ({ navigation }) => {
                                         </TouchableOpacity>
                                     </View>
                                     <View style={styles.tooltipSection}>
-                                        <Text style={styles.tooltipSubtitle}>Günlük Hedef:</Text>
-                                        <Text style={styles.tooltipText}>• Günlük hedef {DAILY_GOAL_KM}km'dir</Text>
-                                        <Text style={styles.tooltipText}>• Katedilen mesafenin sayılması için haritada işaretlenmesi gerekmektedir</Text>
-                                        <Text style={styles.tooltipText}>• Her gün en az {DAILY_GOAL_KM}km yol kat etmelisiniz</Text>
-                                        <Text style={styles.tooltipText}>• İlerleme çubuğu gün içinde kat ettiğiniz mesafeyi gösterir</Text>
+                                        <Text style={styles.tooltipSubtitle}>{translate('daily_goal_info')}</Text>
+                                        <Text style={styles.tooltipText}>{translate('daily_goal_value', { goal: DAILY_GOAL_KM })}</Text>
+                                        <Text style={styles.tooltipText}>{translate('distance_mark_requirement')}</Text>
+                                        <Text style={styles.tooltipText}>{translate('daily_minimum', { goal: DAILY_GOAL_KM })}</Text>
+                                        <Text style={styles.tooltipText}>{translate('progress_bar_info')}</Text>
                                     </View>
                                     <View style={styles.tooltipSection}>
-                                        <Text style={styles.tooltipSubtitle}>Streak Sistemi:</Text>
-                                        <Text style={styles.tooltipText}>• Her gün hedefinizi tamamladığınızda streak'iniz 1 artar</Text>
-                                        <Text style={styles.tooltipText}>• Bir gün kaçırırsanız streak sıfırlanır</Text>
-                                        <Text style={styles.tooltipText}>• Streak'iniz başarı serinizi gösterir</Text>
+                                        <Text style={styles.tooltipSubtitle}>{translate('streak_system')}</Text>
+                                        <Text style={styles.tooltipText}>{translate('streak_explanation')}</Text>
+                                        <Text style={styles.tooltipText}>{translate('streak_reset')}</Text>
+                                        <Text style={styles.tooltipText}>{translate('streak_info')}</Text>
                                     </View>
                                 </View>
                             </View>
@@ -715,7 +716,7 @@ const HomePage = ({ navigation }) => {
                 </View>
                 <View style={styles.streakContainer}>
                     <Ionicons name="flame" size={20} color="#FF6B6B" />
-                    <Text style={styles.streakText}>{currentStreak} gün</Text>
+                    <Text style={styles.streakText}>{currentStreak} {translate('day')}</Text>
                 </View>
             </View>
 
@@ -735,11 +736,11 @@ const HomePage = ({ navigation }) => {
             <View style={styles.goalStats}>
                 <View style={styles.goalStat}>
                     <Text style={styles.goalStatValue}>{todayStats.distance}km</Text>
-                    <Text style={styles.goalStatLabel}>Bugün</Text>
+                    <Text style={styles.goalStatLabel}>{translate('today')}</Text>
                 </View>
                 <View style={styles.goalStat}>
                     <Text style={styles.goalStatValue}>{DAILY_GOAL_KM}km</Text>
-                    <Text style={styles.goalStatLabel}>Hedef</Text>
+                    <Text style={styles.goalStatLabel}>{translate('goal')}</Text>
                 </View>
             </View>
 
@@ -813,7 +814,7 @@ const HomePage = ({ navigation }) => {
                 setShowConfetti(true);
             }
         } catch (error) {
-            console.error('Streak güncellenirken hata:', error);
+            console.error(translate('streak_update_error'), error);
         }
     };
 
@@ -828,7 +829,7 @@ const HomePage = ({ navigation }) => {
                 // Diğer yenilenecek veriler...
             ]);
         } catch (error) {
-            console.error('Yenileme sırasında hata:', error);
+            console.error(translate('refresh_error'), error);
         } finally {
             setRefreshing(false);
         }
@@ -855,7 +856,7 @@ const HomePage = ({ navigation }) => {
                         ) : (
                             <View>
                                 <View style={styles.welcomeTextContainer}>
-                                    <Text style={[styles.welcomeText, { color: '#666' }]}>Merhaba, </Text>
+                                    <Text style={[styles.welcomeText, { color: '#666' }]}>{translate('welcome_message')}</Text>
                                     <Text style={styles.welcomeText} numberOfLines={1} ellipsizeMode="tail">
                                         {userName ? formatUserName(userName) : ''}
                                     </Text>
@@ -922,21 +923,21 @@ const HomePage = ({ navigation }) => {
                             <Ionicons name="location" size={24} color="#FF6347" />
                         </View>
                         <Text style={styles.statNumber}>{todayStats.places}</Text>
-                        <Text style={styles.statLabel}>Bugün</Text>
+                        <Text style={styles.statLabel}>{translate('today')}</Text>
                     </View>
                     <View style={styles.statCard}>
                         <View style={styles.statIconContainer}>
                             <Ionicons name="walk" size={24} color="#4CAF50" />
                         </View>
                         <Text style={styles.statNumber}>{todayStats.distance}km</Text>
-                        <Text style={styles.statLabel}>Mesafe</Text>
+                        <Text style={styles.statLabel}>{translate('distance')}</Text>
                     </View>
                     <View style={styles.statCard}>
                         <View style={styles.statIconContainer}>
                             <Ionicons name="trophy" size={24} color="#FFD700" />
                         </View>
                         <Text style={styles.statNumber}>{totalStats.places}</Text>
-                        <Text style={styles.statLabel}>Toplam</Text>
+                        <Text style={styles.statLabel}>{translate('total')}</Text>
                     </View>
                 </View>
             </View>

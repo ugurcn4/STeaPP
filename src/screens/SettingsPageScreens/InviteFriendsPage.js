@@ -6,6 +6,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Toast from 'react-native-toast-message';
 import { auth, db } from '../../../firebaseConfig';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { translate } from '../../i18n/i18n';
 
 const InviteFriendsPage = ({ navigation }) => {
     const theme = useSelector((state) => state.theme.theme);
@@ -21,40 +22,40 @@ const InviteFriendsPage = ({ navigation }) => {
     });
     const [rewardsModalVisible, setRewardsModalVisible] = useState(false);
 
-    // Örnek ödül listesi
+    // Örnek ödül listesi (Çeviri anahtarları kullanılarak güncellendi)
     const rewards = [
         {
             id: '1',
-            title: 'Premium 1 Ay',
-            description: '5 arkadaş davet et, 1 ay ücretsiz premium kazan',
+            title: translate('reward_premium_1m_title'),
+            description: translate('reward_premium_1m_desc'),
             pointsRequired: 500,
             icon: 'star'
         },
         {
             id: '2',
-            title: 'Özel Temalar',
-            description: '3 arkadaş davet et, özel temaları kullanma hakkı kazan',
+            title: translate('reward_themes_title'),
+            description: translate('reward_themes_desc'),
             pointsRequired: 300,
             icon: 'color-palette'
         },
         {
             id: '3',
-            title: 'Pro Özellikler',
-            description: '10 arkadaş davet et, pro özellikleri 3 ay ücretsiz kullan',
+            title: translate('reward_pro_features_title'),
+            description: translate('reward_pro_features_desc'),
             pointsRequired: 1000,
             icon: 'diamond'
         },
         {
             id: '4',
-            title: 'Özel Bildirim Sesleri',
-            description: '2 arkadaş davet et, özel bildirim seslerini kullanma hakkı kazan',
+            title: translate('reward_notification_sounds_title'),
+            description: translate('reward_notification_sounds_desc'),
             pointsRequired: 200,
             icon: 'notifications'
         },
         {
             id: '5',
-            title: 'İndirim Kuponu',
-            description: '1 arkadaş davet et, premium üyelikte %20 indirim kuponu kazan',
+            title: translate('reward_discount_coupon_title'),
+            description: translate('reward_discount_coupon_desc'),
             pointsRequired: 100,
             icon: 'pricetag'
         },
@@ -73,7 +74,7 @@ const InviteFriendsPage = ({ navigation }) => {
             const currentUser = auth.currentUser;
 
             if (!currentUser) {
-                showToast('error', 'Kullanıcı bilgisi alınamadı');
+                showToast('error', translate('user_info_error'));
                 setLoading(false);
                 return;
             }
@@ -96,7 +97,7 @@ const InviteFriendsPage = ({ navigation }) => {
             }
         } catch (error) {
             console.error('Davet kodu alınırken hata oluştu:', error);
-            showToast('error', 'Davet kodu alınamadı');
+            showToast('error', translate('invite_code_fetch_error'));
         } finally {
             setLoading(false);
         }
@@ -122,95 +123,56 @@ const InviteFriendsPage = ({ navigation }) => {
     const shareOptions = [
         {
             id: 1,
-            title: 'WhatsApp',
+            title: translate('whatsapp'),
             icon: 'logo-whatsapp',
             color: '#25D366',
-            action: () => shareToWhatsApp()
+            action: () => shareGeneric()
         },
         {
             id: 2,
-            title: 'Instagram',
+            title: translate('instagram'),
             icon: 'logo-instagram',
             color: '#E4405F',
-            action: () => shareToInstagram()
+            action: () => shareGeneric()
         },
         {
             id: 3,
-            title: 'Twitter',
+            title: translate('twitter'),
             icon: 'logo-twitter',
             color: '#1DA1F2',
-            action: () => shareToTwitter()
+            action: () => shareGeneric()
         },
         {
             id: 4,
-            title: 'SMS',
+            title: translate('sms'),
             icon: 'chatbubble-outline',
             color: '#FF9500',
-            action: () => shareViaSMS()
+            action: () => shareGeneric()
         },
         {
             id: 5,
-            title: 'E-posta',
+            title: translate('email'),
             icon: 'mail-outline',
             color: '#4CAF50',
-            action: () => shareViaEmail()
+            action: () => shareGeneric(translate('invite_friends_title'))
         }
     ];
 
-    const shareToWhatsApp = async () => {
+    // Genel paylaşım fonksiyonu
+    const shareGeneric = async (title = undefined) => {
         try {
             await Share.share({
                 message: shareMessage,
+                title: title,
             });
         } catch (error) {
-            showToast('error', 'Paylaşım başarısız oldu');
-        }
-    };
-
-    const shareToInstagram = async () => {
-        try {
-            await Share.share({
-                message: shareMessage,
-            });
-        } catch (error) {
-            showToast('error', 'Paylaşım başarısız oldu');
-        }
-    };
-
-    const shareToTwitter = async () => {
-        try {
-            await Share.share({
-                message: shareMessage,
-            });
-        } catch (error) {
-            showToast('error', 'Paylaşım başarısız oldu');
-        }
-    };
-
-    const shareViaSMS = async () => {
-        try {
-            await Share.share({
-                message: shareMessage,
-            });
-        } catch (error) {
-            showToast('error', 'Paylaşım başarısız oldu');
-        }
-    };
-
-    const shareViaEmail = async () => {
-        try {
-            await Share.share({
-                message: shareMessage,
-                title: 'Arkadaşını Davet Et',
-            });
-        } catch (error) {
-            showToast('error', 'Paylaşım başarısız oldu');
+            showToast('error', translate('share_failed'));
         }
     };
 
     const copyInviteCode = () => {
         Clipboard.setString(inviteCode);
-        showToast('success', 'Davet kodu kopyalandı');
+        showToast('success', translate('invite_code_copied'));
     };
 
     const showToast = (type, message1) => {
@@ -223,13 +185,12 @@ const InviteFriendsPage = ({ navigation }) => {
 
     const submitFriendCode = async () => {
         if (!friendCode.trim()) {
-            showToast('error', 'Lütfen bir davet kodu girin');
+            showToast('error', translate('enter_invite_code_prompt'));
             return;
         }
 
-        // Kendi davet koduyla aynı olup olmadığını kontrol et
         if (friendCode.trim().toUpperCase() === inviteCode) {
-            showToast('error', 'Kendi davet kodunuzu giremezsiniz');
+            showToast('error', translate('cannot_use_own_code'));
             return;
         }
 
@@ -238,7 +199,7 @@ const InviteFriendsPage = ({ navigation }) => {
             const currentUser = auth.currentUser;
 
             if (!currentUser) {
-                showToast('error', 'Kullanıcı bilgisi alınamadı');
+                showToast('error', translate('user_info_error'));
                 return;
             }
 
@@ -246,86 +207,75 @@ const InviteFriendsPage = ({ navigation }) => {
             const userDocRef = doc(db, 'users', userId);
             const userDoc = await getDoc(userDocRef);
 
-            // Kullanıcının daha önce bir kod kullanıp kullanmadığını kontrol et
             if (userDoc.exists() && userDoc.data().usedInviteCode) {
-                showToast('error', 'Daha önce bir davet kodu kullandınız');
+                showToast('error', translate('already_used_code'));
                 return;
             }
 
-            // Davet kodunu veritabanında ara
             const formattedCode = friendCode.trim().toUpperCase();
             const usersRef = collection(db, 'users');
             const inviteCodeQuery = query(usersRef, where('inviteCode', '==', formattedCode));
             const querySnapshot = await getDocs(inviteCodeQuery);
 
-            // Eğer böyle bir davet kodu yoksa
             if (querySnapshot.empty) {
-                showToast('error', 'Geçersiz davet kodu');
+                showToast('error', translate('invalid_invite_code'));
                 return;
             }
 
-            // Davet kodu sahibi kullanıcıyı bul
             const friendDocSnapshot = querySnapshot.docs[0];
             const inviterId = friendDocSnapshot.id;
 
-            // Kendi kodunu giremezsin kontrolü (ekstra güvenlik)
             if (inviterId === userId) {
-                showToast('error', 'Kendi davet kodunuzu giremezsiniz');
+                showToast('error', translate('cannot_use_own_code'));
                 return;
             }
 
-            // Başarılı - kodu kaydet
-            await setDoc(userDocRef, {
-                usedInviteCode: formattedCode,
-                inviteCodeUsedAt: new Date(),
-                invitedBy: inviterId
-            }, { merge: true });
-
-            // Davet eden kullanıcıya bir sayaç ekle
             const inviterRef = doc(db, 'users', inviterId);
             const inviterSnapshot = await getDoc(inviterRef);
             const currentInviteCount = inviterSnapshot.exists() && inviterSnapshot.data().inviteCount ? inviterSnapshot.data().inviteCount : 0;
+            const inviterRewardPoints = 100;
+            const currentInviterPoints = inviterSnapshot.exists() && inviterSnapshot.data().rewardPoints ? inviterSnapshot.data().rewardPoints : 0;
+            const inviteeRewardPoints = 50;
+            const currentUserPoints = userDoc.exists() && userDoc.data().rewardPoints ? userDoc.data().rewardPoints : 0;
 
-            await setDoc(inviterRef, {
-                inviteCount: currentInviteCount + 1,
-                invitedUsers: [...(inviterSnapshot.data().invitedUsers || []), userId]
-            }, { merge: true });
+            // Firestore batch write
+            const batch = writeBatch(db);
 
-            // Davet eden kullanıcıya ödül ver - örneğin puan ekle
-            const inviterRewardPoints = 100; // Her başarılı davet için 100 puan
-            const currentInviterPoints = inviterSnapshot.exists() && inviterSnapshot.data().rewardPoints ?
-                inviterSnapshot.data().rewardPoints : 0;
-
-            await setDoc(inviterRef, {
-                rewardPoints: currentInviterPoints + inviterRewardPoints,
-                rewardHistory: [...(inviterSnapshot.data().rewardHistory || []), {
-                    type: 'invite_reward',
-                    points: inviterRewardPoints,
-                    invitedUser: userId,
-                    date: new Date()
-                }]
-            }, { merge: true });
-
-            // Davet edilen kullanıcıya da ödül ver
-            const inviteeRewardPoints = 50; // Davet edilen kullanıcıya 50 puan
-            const currentUserPoints = userDoc.exists() && userDoc.data().rewardPoints ?
-                userDoc.data().rewardPoints : 0;
-
-            await setDoc(userDocRef, {
+            // Update current user's doc
+            batch.set(userDocRef, {
+                usedInviteCode: formattedCode,
+                inviteCodeUsedAt: new Date(),
+                invitedBy: inviterId,
                 rewardPoints: currentUserPoints + inviteeRewardPoints,
-                rewardHistory: [...(userDoc.data().rewardHistory || []), {
+                rewardHistory: arrayUnion({
                     type: 'invite_bonus',
                     points: inviteeRewardPoints,
                     invitedBy: inviterId,
                     date: new Date()
-                }]
+                })
             }, { merge: true });
 
-            showToast('success', `Davet kodu başarıyla kullanıldı! ${inviteeRewardPoints} puan kazandınız!`);
+            // Update inviter's doc
+            batch.set(inviterRef, {
+                inviteCount: currentInviteCount + 1,
+                invitedUsers: arrayUnion(userId),
+                rewardPoints: currentInviterPoints + inviterRewardPoints,
+                rewardHistory: arrayUnion({
+                    type: 'invite_reward',
+                    points: inviterRewardPoints,
+                    invitedUser: userId,
+                    date: new Date()
+                })
+            }, { merge: true });
+
+            await batch.commit();
+
+            showToast('success', translate('invite_code_success', { points: inviteeRewardPoints }));
             setFriendCode('');
+            fetchInviteStats(); // İstatistikleri anında güncelle
         } catch (error) {
             console.error('Davet kodu kullanılırken hata oluştu:', error);
-            showToast('error', 'Davet kodu kullanılamadı');
+            showToast('error', translate('invite_code_use_error'));
         } finally {
             setSubmitting(false);
         }
@@ -334,10 +284,7 @@ const InviteFriendsPage = ({ navigation }) => {
     const fetchInviteStats = async () => {
         try {
             const currentUser = auth.currentUser;
-
-            if (!currentUser) {
-                return;
-            }
+            if (!currentUser) return;
 
             const userId = currentUser.uid;
             const userDocRef = doc(db, 'users', userId);
@@ -346,22 +293,11 @@ const InviteFriendsPage = ({ navigation }) => {
             if (userDoc.exists()) {
                 const userData = userDoc.data();
                 const inviteCount = userData.inviteCount || 0;
+                const earnedPoints = userData.rewardHistory ? userData.rewardHistory.reduce((total, reward) => total + reward.points, 0) : 0;
+                const spentPoints = userData.claimedRewards ? userData.claimedRewards.reduce((total, reward) => total + reward.pointsUsed, 0) : 0;
+                const currentPoints = Math.max(0, earnedPoints - spentPoints);
 
-                // Kazanılan puanları hesapla
-                const earnedPoints = userData.rewardHistory ?
-                    userData.rewardHistory.reduce((total, reward) => total + reward.points, 0) : 0;
-
-                // Harcanan puanları hesapla
-                const spentPoints = userData.claimedRewards ?
-                    userData.claimedRewards.reduce((total, reward) => total + reward.pointsUsed, 0) : 0;
-
-                // Mevcut puanlar = Kazanılan - Harcanan
-                const currentPoints = earnedPoints - spentPoints;
-
-                setInviteStats({
-                    inviteCount,
-                    totalRewards: currentPoints >= 0 ? currentPoints : 0
-                });
+                setInviteStats({ inviteCount, totalRewards: currentPoints });
             }
         } catch (error) {
             console.error('Davet istatistikleri alınırken hata oluştu:', error);
@@ -369,18 +305,16 @@ const InviteFriendsPage = ({ navigation }) => {
     };
 
     const handleClaimReward = (reward) => {
-        // Burada gerçek uygulamada ödülü talep etme işlemi yapılacak
-        // Örneğin: veritabanına kaydetme, API çağrısı vb.
         Alert.alert(
-            'Ödül Talebi',
-            `"${reward.title}" ödülünü talep etmek istediğinizden emin misiniz? ${reward.pointsRequired} puan kullanılacak.`,
+            translate('reward_claim_title'),
+            translate('reward_claim_confirm', { rewardTitle: reward.title, pointsRequired: reward.pointsRequired }),
             [
                 {
-                    text: 'İptal',
+                    text: translate('cancel'),
                     style: 'cancel'
                 },
                 {
-                    text: 'Talep Et',
+                    text: translate('claim_reward_button'),
                     onPress: () => processRewardClaim(reward)
                 }
             ]
@@ -390,18 +324,33 @@ const InviteFriendsPage = ({ navigation }) => {
     const processRewardClaim = async (reward) => {
         try {
             const currentUser = auth.currentUser;
-
             if (!currentUser) {
-                showToast('error', 'Kullanıcı bilgisi alınamadı');
+                showToast('error', translate('user_info_error'));
                 return;
             }
 
             const userId = currentUser.uid;
             const userDocRef = doc(db, 'users', userId);
 
-            // Örnek olarak, puanları azalt ve talep edilen ödülü kaydet
-            await setDoc(userDocRef, {
-                rewardPoints: inviteStats.totalRewards - reward.pointsRequired,
+            // Firestore batch write
+            const batch = writeBatch(db);
+
+            // Check points again before processing
+            const userDoc = await getDoc(userDocRef);
+            if (!userDoc.exists()) throw new Error("User document doesn't exist");
+            const userData = userDoc.data();
+            const earnedPoints = userData.rewardHistory ? userData.rewardHistory.reduce((total, r) => total + r.points, 0) : 0;
+            const spentPoints = userData.claimedRewards ? userData.claimedRewards.reduce((total, r) => total + r.pointsUsed, 0) : 0;
+            const currentPoints = Math.max(0, earnedPoints - spentPoints);
+
+            if (currentPoints < reward.pointsRequired) {
+                showToast('error', 'Yetersiz puan'); // Add a translation key for this
+                return;
+            }
+
+            // Update user document
+            batch.set(userDocRef, {
+                // rewardPoints field is not directly updated here, calculated from history
                 claimedRewards: arrayUnion({
                     rewardId: reward.id,
                     claimedAt: new Date(),
@@ -410,13 +359,14 @@ const InviteFriendsPage = ({ navigation }) => {
                 })
             }, { merge: true });
 
-            // İstatistikleri güncelle
-            fetchInviteStats();
+            await batch.commit();
 
-            showToast('success', `${reward.title} ödülünüz başarıyla talep edildi!`);
+            fetchInviteStats(); // Update stats immediately
+
+            showToast('success', translate('reward_claim_success', { rewardTitle: reward.title }));
         } catch (error) {
             console.error('Ödül talep edilirken hata oluştu:', error);
-            showToast('error', 'Ödül talep edilemedi');
+            showToast('error', translate('reward_claim_error'));
         }
     };
 
@@ -434,13 +384,13 @@ const InviteFriendsPage = ({ navigation }) => {
                     />
                 </TouchableOpacity>
                 <Text style={[styles.header, { color: currentTheme.text }]}>
-                    Arkadaş Davet Et
+                    {translate('invite_friends_title')}
                 </Text>
             </View>
 
             <View style={styles.inviteCodeSection}>
                 <Text style={[styles.inviteCodeTitle, { color: currentTheme.text }]}>
-                    Davet Kodun
+                    {translate('your_invite_code')}
                 </Text>
                 {loading ? (
                     <ActivityIndicator size="large" color="#4CAF50" />
@@ -454,13 +404,13 @@ const InviteFriendsPage = ({ navigation }) => {
                     </TouchableOpacity>
                 )}
                 <Text style={styles.tapToCopy}>
-                    Kopyalamak için dokun
+                    {translate('tap_to_copy')}
                 </Text>
             </View>
 
             <View style={styles.shareSection}>
                 <Text style={[styles.shareTitle, { color: currentTheme.text }]}>
-                    Arkadaşlarını Davet Et
+                    {translate('invite_your_friends')}
                 </Text>
                 <View style={styles.shareGrid}>
                     {shareOptions.map((option) => (
@@ -482,7 +432,7 @@ const InviteFriendsPage = ({ navigation }) => {
 
             <View style={styles.enterCodeSection}>
                 <Text style={[styles.enterCodeTitle, { color: currentTheme.text }]}>
-                    Davet Kodu Kullan
+                    {translate('use_invite_code')}
                 </Text>
                 <View style={styles.codeInputContainer}>
                     <TextInput
@@ -496,7 +446,7 @@ const InviteFriendsPage = ({ navigation }) => {
                                     : 'rgba(0, 0, 0, 0.03)'
                             }
                         ]}
-                        placeholder="Arkadaşının davet kodunu gir"
+                        placeholder={translate('enter_friend_code_placeholder')}
                         placeholderTextColor={currentTheme === darkTheme ? '#999' : '#666'}
                         value={friendCode}
                         onChangeText={setFriendCode}
@@ -514,35 +464,35 @@ const InviteFriendsPage = ({ navigation }) => {
                         {submitting ? (
                             <ActivityIndicator size="small" color="#fff" />
                         ) : (
-                            <Text style={styles.submitButtonText}>Kullan</Text>
+                            <Text style={styles.submitButtonText}>{translate('use_code_button')}</Text>
                         )}
                     </TouchableOpacity>
                 </View>
                 <Text style={styles.enterCodeDescription}>
-                    Arkadaşının davet kodunu girerek sen ve arkadaşın özel ödüller kazanabilirsiniz.
+                    {translate('enter_code_description')}
                 </Text>
             </View>
 
             <View style={styles.statsSection}>
                 <Text style={[styles.statsTitle, { color: currentTheme.text }]}>
-                    Davet İstatistiklerin
+                    {translate('invite_stats_title')}
                 </Text>
                 <View style={styles.statsContainer}>
                     <View style={styles.statItem}>
                         <Text style={styles.statValue}>{inviteStats.inviteCount}</Text>
-                        <Text style={styles.statLabel}>Toplam Davet</Text>
+                        <Text style={styles.statLabel}>{translate('total_invites')}</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.statItem}>
                         <Text style={styles.statValue}>{inviteStats.totalRewards}</Text>
-                        <Text style={styles.statLabel}>Kazanılan Puan</Text>
+                        <Text style={styles.statLabel}>{translate('earned_points')}</Text>
                     </View>
                 </View>
                 <TouchableOpacity
                     style={styles.viewRewardsButton}
                     onPress={() => setRewardsModalVisible(true)}
                 >
-                    <Text style={styles.viewRewardsButtonText}>Ödülleri Gör</Text>
+                    <Text style={styles.viewRewardsButtonText}>{translate('view_rewards_button')}</Text>
                     <Ionicons name="chevron-forward" size={18} color="#4CAF50" />
                 </TouchableOpacity>
             </View>
@@ -551,10 +501,10 @@ const InviteFriendsPage = ({ navigation }) => {
                 <View style={styles.rewardCard}>
                     <Ionicons name="gift-outline" size={40} color="#4CAF50" />
                     <Text style={[styles.rewardTitle, { color: currentTheme.text }]}>
-                        Arkadaşını Davet Et, Ödül Kazan!
+                        {translate('invite_reward_card_title')}
                     </Text>
                     <Text style={styles.rewardDescription}>
-                        Her başarılı davet için özel ödüller kazanabilirsin.
+                        {translate('invite_reward_card_desc')}
                     </Text>
                 </View>
             </View>
@@ -573,7 +523,7 @@ const InviteFriendsPage = ({ navigation }) => {
                     ]}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
-                                Kazanabileceğin Ödüller
+                                {translate('available_rewards_title')}
                             </Text>
                             <TouchableOpacity
                                 style={styles.closeButton}
@@ -584,7 +534,7 @@ const InviteFriendsPage = ({ navigation }) => {
                         </View>
 
                         <Text style={[styles.modalSubtitle, { color: currentTheme.text }]}>
-                            Arkadaşlarını davet et, puanları topla ve aşağıdaki ödülleri kazan!
+                            {translate('rewards_modal_subtitle')}
                         </Text>
 
                         <FlatList
@@ -607,7 +557,7 @@ const InviteFriendsPage = ({ navigation }) => {
                                         <View style={styles.pointsContainer}>
                                             <Ionicons name="star" size={16} color="#FFD700" />
                                             <Text style={styles.pointsText}>
-                                                {item.pointsRequired} puan gerekli
+                                                {translate('points_required', { points: item.pointsRequired })}
                                             </Text>
                                         </View>
                                     </View>
@@ -620,7 +570,7 @@ const InviteFriendsPage = ({ navigation }) => {
                                         onPress={() => handleClaimReward(item)}
                                     >
                                         <Text style={styles.claimButtonText}>
-                                            {inviteStats.totalRewards >= item.pointsRequired ? 'Talep Et' : 'Kilitli'}
+                                            {inviteStats.totalRewards >= item.pointsRequired ? translate('claim_button') : translate('locked_button')}
                                         </Text>
                                     </TouchableOpacity>
                                 </View>

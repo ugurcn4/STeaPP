@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { translate } from '../../i18n/i18n';
 
 // Hava durumu ikonlarını tanımlayalım
 const weatherIcons = {
@@ -94,14 +95,14 @@ const WeatherCard = ({ weather }) => {
                     <View style={styles.weatherDetailItem}>
                         <Ionicons name="water" size={20} color="#fff" />
                         <Text style={styles.weatherDetailText}>
-                            Nem: {weather.humidity}%
+                            {translate('humidity')}: {weather.humidity}%
                         </Text>
                     </View>
 
                     <View style={styles.weatherDetailItem}>
                         <Ionicons name="speedometer" size={20} color="#fff" />
                         <Text style={styles.weatherDetailText}>
-                            Rüzgar: {weather.windSpeed} m/s
+                            {translate('wind')}: {weather.windSpeed} m/s
                         </Text>
                     </View>
 
@@ -109,7 +110,7 @@ const WeatherCard = ({ weather }) => {
                         <View style={styles.weatherDetailItem}>
                             <Ionicons name="rainy" size={20} color="#fff" />
                             <Text style={styles.weatherDetailText}>
-                                Yağış: {weather.rainProbability}%
+                                {translate('rain')}: {weather.rainProbability}%
                             </Text>
                         </View>
                     )}

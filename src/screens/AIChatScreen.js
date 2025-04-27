@@ -9,42 +9,43 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getAIResponse } from '../services/aiService';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { translate } from '../i18n/i18n';
 
 const SUGGESTED_PROMPTS = [
     {
         id: '1',
-        title: 'Tarihi Yerler',
-        prompt: 'Bölgedeki tarihi yerleri ve müzeleri önerir misin?'
+        title: 'ai_prompt_historical',
+        prompt: 'ai_prompt_historical_text'
     },
     {
         id: '2',
-        title: 'Yemek Rotası',
-        prompt: 'Yerel lezzetleri tadabileceğim bir rota önerir misin?'
+        title: 'ai_prompt_food',
+        prompt: 'ai_prompt_food_text'
     },
     {
         id: '3',
-        title: 'Doğa Yürüyüşü',
-        prompt: 'Yakındaki doğa yürüyüşü rotalarını önerir misin?'
+        title: 'ai_prompt_nature',
+        prompt: 'ai_prompt_nature_text'
     },
     {
         id: '4',
-        title: 'Aile Aktiviteleri',
-        prompt: 'Ailece yapabileceğimiz aktiviteleri önerir misin?'
+        title: 'ai_prompt_family',
+        prompt: 'ai_prompt_family_text'
     },
     {
         id: '5',
-        title: 'Meşhur Şeyler',
-        prompt: 'Bulunduğum bölgede meşhur şeyleri önerir misin?'
+        title: 'ai_prompt_famous',
+        prompt: 'ai_prompt_famous_text'
     },
     {
         id: '6',
-        title: 'Şehir Hikayeleri',
-        prompt: 'Şehir Hikayeleri hakkında bilgi verir misin?'
+        title: 'ai_prompt_stories',
+        prompt: 'ai_prompt_stories_text'
     },
     {
         id: '7',
-        title: 'Kültür',
-        prompt: 'Kültür hakkında bilgi verir misin?'
+        title: 'ai_prompt_culture',
+        prompt: 'ai_prompt_culture_text'
     }
 ];
 
@@ -93,7 +94,7 @@ const AIChatScreen = ({ navigation }) => {
             let dots = '';
             typingAnimation.current = setInterval(() => {
                 dots = dots.length >= 3 ? '' : dots + '.';
-                setTypingText(`Yazıyor${dots}`);
+                setTypingText(`${translate('ai_chat_typing')}${dots}`);
             }, 500);
         } else {
             if (typingAnimation.current) {
@@ -135,7 +136,7 @@ const AIChatScreen = ({ navigation }) => {
                 const recentHistory = [...messages, userMessage].slice(-5);
                 response = await getAIResponse(text, coords, recentHistory);
             } else {
-                response = "Üzgünüm, konumunuza erişemediğim için size özel öneriler sunamıyorum. Lütfen konum izni verdiğinizden emin olun.";
+                response = translate('ai_chat_location_error');
             }
 
             setIsTyping(false);
@@ -155,7 +156,7 @@ const AIChatScreen = ({ navigation }) => {
             // Hata mesajını ekle
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
-                text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
+                text: translate('ai_chat_error'),
                 isUser: false,
                 timestamp: new Date()
             }]);
@@ -178,8 +179,8 @@ const AIChatScreen = ({ navigation }) => {
             } catch (error) {
                 console.error('Sohbet geçmişi yüklenemedi:', error);
                 Alert.alert(
-                    'Hata',
-                    'Sohbet geçmişi yüklenirken bir sorun oluştu.'
+                    translate('error'),
+                    translate('ai_chat_load_error')
                 );
                 // Hata durumunda da yüklendiğini işaretle
                 setMessagesLoaded(true);
@@ -239,15 +240,15 @@ const AIChatScreen = ({ navigation }) => {
     // Sohbeti temizleme fonksiyonu
     const clearChat = async () => {
         Alert.alert(
-            'Sohbeti Temizle',
-            'Tüm sohbet geçmişi silinecek. Emin misiniz?',
+            translate('ai_chat_clear_title'),
+            translate('ai_chat_clear_message'),
             [
                 {
-                    text: 'İptal',
+                    text: translate('ai_chat_clear_cancel'),
                     style: 'cancel'
                 },
                 {
-                    text: 'Temizle',
+                    text: translate('ai_chat_clear_confirm'),
                     onPress: async () => {
                         setMessages([]);
                         await AsyncStorage.removeItem('chatHistory');
@@ -261,9 +262,9 @@ const AIChatScreen = ({ navigation }) => {
     const renderSuggestedPrompt = ({ item }) => (
         <TouchableOpacity
             style={styles.promptChip}
-            onPress={() => sendMessage(item.prompt)}
+            onPress={() => sendMessage(translate(item.prompt))}
         >
-            <Text style={styles.promptChipText}>{item.title}</Text>
+            <Text style={styles.promptChipText}>{translate(item.title)}</Text>
         </TouchableOpacity>
     );
 
@@ -305,7 +306,7 @@ const AIChatScreen = ({ navigation }) => {
                     >
                         <MaterialIcons name="arrow-back" size={24} color="#FFF" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>STeaPPY Asistan</Text>
+                    <Text style={styles.headerTitle}>{translate('ai_chat_title')}</Text>
                 </View>
                 <TouchableOpacity
                     style={styles.menuButton}
@@ -349,7 +350,7 @@ const AIChatScreen = ({ navigation }) => {
 
             {messages.length === 0 && (
                 <View style={styles.suggestedPromptsContainer}>
-                    <Text style={styles.suggestedTitle}>Önerilen Sorular</Text>
+                    <Text style={styles.suggestedTitle}>{translate('ai_chat_suggested_title')}</Text>
                     <FlatList
                         data={SUGGESTED_PROMPTS}
                         renderItem={renderSuggestedPrompt}
@@ -366,7 +367,7 @@ const AIChatScreen = ({ navigation }) => {
                     style={styles.input}
                     value={inputText}
                     onChangeText={setInputText}
-                    placeholder="Mesajınızı yazın..."
+                    placeholder={translate('ai_chat_input_placeholder')}
                     placeholderTextColor="#666"
                     multiline
                 />

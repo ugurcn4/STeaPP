@@ -4,8 +4,7 @@ import {
     Text, 
     StyleSheet, 
     Modal, 
-    TouchableOpacity, 
-    Dimensions 
+    TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PanGestureHandler } from 'react-native-gesture-handler';
@@ -16,15 +15,16 @@ import Animated, {
     withTiming,
     runOnJS
 } from 'react-native-reanimated';
+import { translate } from '../i18n/i18n';
 
 // Süre seçenekleri
 const durationOptions = [
-    { id: '30min', label: '30 Dakika', value: 30 },
-    { id: '1hour', label: '1 Saat', value: 60 },
-    { id: '2hours', label: '2 Saat', value: 120 },
-    { id: '4hours', label: '4 Saat', value: 240 },
-    { id: '8hours', label: '8 Saat', value: 480 },
-    { id: 'unlimited', label: 'Sınırsız', value: -1 }
+    { id: '30min', label: translate('duration_30min'), value: 30 },
+    { id: '1hour', label: translate('duration_1hour'), value: 60 },
+    { id: '2hours', label: translate('duration_2hours'), value: 120 },
+    { id: '4hours', label: translate('duration_4hours'), value: 240 },
+    { id: '8hours', label: translate('duration_8hours'), value: 480 },
+    { id: 'unlimited', label: translate('duration_unlimited'), value: -1 }
 ];
 
 const DurationModal = ({ 
@@ -102,33 +102,33 @@ const DurationModal = ({
                                 <View style={styles.modalHandle} />
 
                                 {/* Mevcut modal içeriği */}
-                                <Text style={styles.durationModalTitle}>Arka Plan Çizim Süresi</Text>
+                                <Text style={styles.durationModalTitle}>{translate('background_drawing_duration')}</Text>
                                 <Text style={styles.durationModalSubtitle}>
-                                    Uygulamayı kapatıp başka işler yaparken bile haritada yollarınızı çizmeye devam edebilirsiniz.
+                                    {translate('background_drawing_description')}
                                 </Text>
 
                                 <View style={styles.featureExplanation}>
                                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={styles.featureIcon} />
                                     <Text style={styles.featureText}>
-                                        Arka planda çalışır, uygulamayı kapatabilirsiniz
+                                        {translate('background_feature_1')}
                                     </Text>
                                 </View>
 
                                 <View style={styles.featureExplanation}>
                                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={styles.featureIcon} />
                                     <Text style={styles.featureText}>
-                                        Gittiğiniz tüm yollar otomatik olarak kaydedilir
+                                        {translate('background_feature_2')}
                                     </Text>
                                 </View>
 
                                 <View style={styles.featureExplanation}>
                                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={styles.featureIcon} />
                                     <Text style={styles.featureText}>
-                                        Belirlediğiniz süre dolduğunda otomatik durur
+                                        {translate('background_feature_3')}
                                     </Text>
                                 </View>
 
-                                <Text style={styles.durationSelectTitle}>Ne kadar süre çizim yapılsın?</Text>
+                                <Text style={styles.durationSelectTitle}>{translate('duration_select_title')}</Text>
 
                                 <View style={styles.durationOptionsContainer}>
                                     {durationOptions.map((option) => (
@@ -155,7 +155,7 @@ const DurationModal = ({
                                         style={styles.durationModalCancelButton}
                                         onPress={onClose}
                                     >
-                                        <Text style={styles.durationModalCancelButtonText}>İptal</Text>
+                                        <Text style={styles.durationModalCancelButtonText}>{translate('cancel')}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity
@@ -171,14 +171,14 @@ const DurationModal = ({
                                             }
                                         }}
                                     >
-                                        <Text style={styles.durationModalStartButtonText}>Başlat</Text>
+                                        <Text style={styles.durationModalStartButtonText}>{translate('start')}</Text>
                                     </TouchableOpacity>
                                 </View>
 
                                 <View style={styles.infoContainer}>
                                     <Ionicons name="warning-outline" size={20} color="#FF9800" />
                                     <Text style={styles.infoText}>
-                                        Arka planda çizim, pil tüketimini artırabilir ve GPS kullanımı nedeniyle telefonunuzun ısınmasına neden olabilir. Gerektiğinde kapatmayı unutmayın.
+                                        {translate('background_drawing_warning')}
                                     </Text>
                                 </View>
                             </View>
