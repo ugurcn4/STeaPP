@@ -18,7 +18,7 @@ import { getWeatherInfo } from '../services/weatherService';
 const AIRecommendationsScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [recommendations, setRecommendations] = useState([]);
-    const [error, setError] = useState(null);
+    const [, setError] = useState(null);
 
     useEffect(() => {
         loadRecommendations();

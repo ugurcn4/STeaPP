@@ -3,7 +3,6 @@ import { doc, getDoc, updateDoc, deleteDoc, collection, addDoc, serverTimestamp,
 import { db } from '../../firebaseConfig';
 import { LocationTypes, ShareStatus } from '../types/locationTypes';
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
 
 export const getPlaceFromCoordinates = async (latitude, longitude) => {
     try {

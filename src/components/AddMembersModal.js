@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUserUid } from '../services/friendFunctions';
-import { getDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { translate } from '../i18n/i18n';
 
 const AddMembersModal = ({ 
   visible, 
@@ -34,7 +35,6 @@ const AddMembersModal = ({
   }, [visible]);
 
   useEffect(() => {
-    // Arama sorgusuna göre arkadaş listesini filtrele
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const filtered = userFriends.filter(friend => 
@@ -52,14 +52,12 @@ const AddMembersModal = ({
       const uid = await getCurrentUserUid();
       if (!uid) return;
 
-      // Kullanıcının arkadaş listesini al
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (!userDoc.exists()) return;
       
       const userData = userDoc.data();
       const friends = userData.friends || [];
       
-      // Detaylı arkadaş bilgilerini al
       if (friends.length > 0) {
         const friendsData = await Promise.all(
           friends.map(async (friendId) => {
@@ -67,9 +65,8 @@ const AddMembersModal = ({
             if (friendDoc.exists()) {
               return {
                 id: friendId,
-                name: friendDoc.data().informations?.name || 'İsimsiz Kullanıcı',
+                name: friendDoc.data().informations?.name || translate('add_members_unnamed_user'),
                 profilePicture: friendDoc.data().profilePicture || null,
-                // Arkadaş zaten gruptaysa (yani currentGroupMembers içindeyse) işaretlenir
                 inGroup: currentGroupMembers.includes(friendId)
               };
             }
@@ -77,7 +74,6 @@ const AddMembersModal = ({
           })
         );
         
-        // Filtreleme: null değerleri kaldır ve grupta olmayanları göster
         const validFriends = friendsData
           .filter(friend => friend !== null)
           .filter(friend => !friend.inGroup);
@@ -86,8 +82,8 @@ const AddMembersModal = ({
         setFilteredFriends(validFriends);
       }
     } catch (error) {
-      console.error('Arkadaşlar yüklenirken hata:', error);
-      Alert.alert('Hata', 'Arkadaş listesi yüklenirken bir sorun oluştu.');
+      console.error(translate('add_members_error_loading'), error);
+      Alert.alert(translate('error'), translate('add_members_error_alert'));
     } finally {
       setLoading(false);
     }
@@ -100,7 +96,6 @@ const AddMembersModal = ({
   };
 
   const renderFriendItem = ({ item }) => {
-    // Profil fotoğrafı yoksa avatar oluştur
     const getInitials = (name) => {
       if (!name) return '?';
       return name.charAt(0).toUpperCase();
@@ -126,7 +121,7 @@ const AddMembersModal = ({
           style={styles.inviteButton}
           onPress={() => handleInvite(item.id)}
         >
-          <Text style={styles.inviteButtonText}>Davet Et</Text>
+          <Text style={styles.inviteButtonText}>{translate('add_members_invite')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -141,31 +136,28 @@ const AddMembersModal = ({
     >
       <View style={styles.centeredView}>
         <View style={styles.modalView}>
-          {/* Modal Header */}
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Arkadaşını Gruba Davet Et</Text>
+            <Text style={styles.modalTitle}>{translate('add_members_title')}</Text>
           </View>
           
-          {/* Arama */}
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#9797A9" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Arkadaş ara..."
+              placeholder={translate('add_members_search')}
               placeholderTextColor="#9797A9"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
           
-          {/* Arkadaş Listesi */}
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#53B4DF" />
-              <Text style={styles.loadingText}>Arkadaşlar yükleniyor...</Text>
+              <Text style={styles.loadingText}>{translate('add_members_loading')}</Text>
             </View>
           ) : filteredFriends.length > 0 ? (
             <FlatList
@@ -180,17 +172,17 @@ const AddMembersModal = ({
                 <>
                   <Ionicons name="search" size={48} color="#9797A9" />
                   <Text style={styles.emptyText}>
-                    "{searchQuery}" için sonuç bulunamadı
+                    "{searchQuery}" {translate('add_members_no_results')}
                   </Text>
                 </>
               ) : (
                 <>
                   <Ionicons name="people" size={48} color="#9797A9" />
                   <Text style={styles.emptyText}>
-                    Davet edilebilecek arkadaşınız bulunmuyor
+                    {translate('add_members_empty')}
                   </Text>
                   <Text style={styles.emptySubText}>
-                    Tüm arkadaşlarınız zaten bu gruba dahil edilmiş veya henüz arkadaşınız yok.
+                    {translate('add_members_empty_subtitle')}
                   </Text>
                 </>
               )}

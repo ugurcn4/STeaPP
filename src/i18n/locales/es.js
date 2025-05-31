@@ -997,8 +997,302 @@ export default {
     'faq_reduce_data_answer': '1. Prefiere compartir ubicación instantánea en lugar de ubicación en vivo\n2. Al seleccionar múltiples amigos, comparte ubicación solo con las personas necesarias\n3. Ajusta la frecuencia de las actualizaciones de ubicación\n4. Usa la aplicación solo cuando estés conectado a Wi-Fi\n5. Termina las comparticiones de ubicación cuando no las estés utilizando activamente',
 
     'faq_delete_history_question': '¿Cómo puedo eliminar el historial de ubicación?',
-    'faq_delete_history_answer': 'Para eliminar tu historial de ubicación:\n1. Ve a Ajustes > Privacidad > Historial de Ubicación\n2. Haz clic en el botón "Limpiar Historial"\n3. Selecciona el rango de fechas que deseas limpiar (Todo, Últimos 7 días, Últimos 30 días)\nNota: Los datos de ubicación eliminados no se pueden recuperar. Este proceso solo elimina los datos de ubicación que has compartido, no afectará los datos en los dispositivos de tus amigos.'
+    'faq_delete_history_answer': 'Para eliminar tu historial de ubicación:\n1. Ve a Ajustes > Privacidad > Historial de Ubicación\n2. Haz clic en el botón "Limpiar Historial"\n3. Selecciona el rango de fechas que deseas limpiar (Todo, Últimos 7 días, Últimos 30 días)\nNota: Los datos de ubicación eliminados no se pueden recuperar. Este proceso solo elimina los datos de ubicación que has compartido, no afectará los datos en los dispositivos de tus amigos.',
 
+    // Textos de FriendsPage
+    'friends_page_title': 'Mis Amigos',
+    'friends_page_social_circle': 'Mi Círculo Social',
+    'friends_page_meetings': 'Mis Reuniones',
+    'friends_page_activities': 'Mis Actividades',
+    'friends_page_groups': 'Mis Grupos',
+    'friends_page_connections': 'Mis Conexiones',
+    'friends_page_social_network': 'Mi Red Social',
+    'friends_page_friend_list': 'Mi Lista de Amigos',
+
+    'friends_page_pending_requests': 'Solicitudes Pendientes',
+    'friends_page_see_all': 'Ver Todo',
+    'friends_page_new_friend_requests': 'nuevas solicitudes de amistad',
+    'friends_page_view_pending_requests': 'Ver y responder a las solicitudes pendientes',
+
+    'friends_page_group_invites': 'Invitaciones de Grupo',
+    'friends_page_new_group_invites': 'nuevas invitaciones de grupo',
+    'friends_page_view_group_invites': 'Ver y responder a las invitaciones de grupo',
+
+    'friends_page_meeting_invites': 'Invitaciones de Reunión',
+    'friends_page_new_meeting_invites': 'nuevas invitaciones de reunión',
+    'friends_page_view_meeting_invites': 'Ver y responder a las invitaciones de reunión',
+
+    'friends_page_quick_access': 'Acceso Rápido',
+    'friends_page_customize': 'Personalizar',
+
+    // Barra de navegación inferior
+    'nav_home': 'Inicio',
+    'nav_friends': 'Amigos',
+    'nav_map': 'Mapa',
+    'nav_events': 'Eventos',
+    'nav_profile': 'Perfil',
+
+    // Mensajes de error
+    'error_friend_requests': 'Error al cargar las solicitudes de amistad:',
+    'error_group_invites': 'Error al cargar las invitaciones de grupo:',
+    'error_meeting_invites': 'Error al cargar las invitaciones de reunión:',
+
+
+    // Textos de QuickOptions
+    'quick_options_add_friend': 'Agregar amigo',
+    'quick_options_groups': 'Grupos',
+    'quick_options_events': 'Eventos',
+    'quick_options_locations': 'Ubicaciones',
+    'quick_options_all_friends': 'Todos los amigos',
+    'quick_options_requests': 'Solicitudes',
+
+    // Mensajes de error
+    'error_loading_friend_requests': 'Error al cargar las solicitudes de amistad:',
+    'error_loading_groups': 'Error al cargar los grupos:',
+    'error_accepting_request': 'Ocurrió un error al aceptar la solicitud.',
+    'error_rejecting_request': 'Ocurrió un error al rechazar la solicitud.',
+
+    // Mensajes de éxito
+    'success_friend_request_accepted': 'Solicitud de amistad aceptada.',
+    'success_friend_request_rejected': 'Solicitud de amistad rechazada.',
+
+    // Textos del modal
+    'modal_friend_requests_title': 'Solicitudes de amistad',
+    'modal_no_pending_requests': 'No hay solicitudes de amistad pendientes.',
+    'modal_unnamed_user': 'Usuario sin nombre',
+
+    // Textos de GroupDetailScreen
+    'group_detail_loading': 'Cargando información del grupo...',
+    'group_detail_title': 'Detalles del Grupo',
+    'group_detail_no_description': 'No hay descripción disponible para este grupo.',
+    'group_detail_members': 'Miembro',
+    'group_detail_events': 'Evento',
+    'group_detail_create_event': 'Crear Evento',
+    'group_detail_invite_member': 'Invitar Miembro',
+    'group_detail_delete_group': 'Eliminar Grupo',
+    'group_detail_leave_group': 'Salir del Grupo',
+    'group_detail_members_title': 'Miembros del Grupo',
+    'group_detail_see_all': 'Ver Todos',
+    'group_detail_upcoming_events': 'Próximos Eventos',
+    'group_detail_no_upcoming_events': 'No hay eventos próximos',
+    'group_detail_create_event_prompt': 'Haz clic en "Crear Evento" para crear uno nuevo',
+    'group_detail_past_events': 'Eventos Pasados',
+
+    // Mensajes de éxito
+    'success_event_created': 'Evento creado con éxito',
+    'success_member_invited': 'Usuario invitado al grupo',
+    'success_left_group': 'Has salido del grupo con éxito',
+    'success_group_deleted': 'Grupo eliminado con éxito',
+
+    // Mensajes de error
+    'error_group_not_found': 'Grupo no encontrado',
+    'error_loading_group': 'Hubo un error al cargar los detalles del grupo',
+    'error_creating_event': 'Hubo un error al crear el evento',
+    'error_inviting_member': 'Hubo un error al invitar al usuario',
+    'error_leaving_group': 'Hubo un error al salir del grupo',
+    'error_deleting_group': 'Hubo un error al eliminar el grupo',
+
+    // Modales de confirmación
+    'modal_leave_group_title': 'Salir del Grupo',
+    'modal_leave_group_message': '¿Estás seguro de que quieres salir del grupo "{groupName}"?',
+    'modal_delete_group_title': 'Eliminar Grupo',
+    'modal_delete_group_message': '¿Estás seguro de que quieres eliminar el grupo "{groupName}"? Esta acción no se puede deshacer y se eliminarán todos los eventos y miembros.',
+    'modal_cancel': 'Cancelar',
+    'modal_leave': 'Salir',
+    'modal_delete': 'Eliminar',
+
+    // Textos de GroupsList
+    'groups_page_title': 'Mis Grupos',
+    'groups_loading': 'Cargando grupos...',
+    'groups_invites': 'Invitaciones de Grupo',
+    'groups_no_groups': 'Aún no eres miembro de ningún grupo',
+    'groups_create_prompt': 'Haz clic en el botón "+" para crear un nuevo grupo',
+
+    // Estados del grupo
+    'group_status_active': 'Activo',
+    'group_status_quiet': 'Tranquilo',
+    'group_status_passive': 'Pasivo',
+
+    // Meta del grupo
+    'group_meta_members': 'miembro',
+    'group_meta_events': 'evento',
+
+    // Mensajes de error
+    'error_loading_groups': 'Hubo un error al cargar los grupos',
+
+
+    // Textos de FriendGroups
+    'friend_groups_title': 'Grupos de Amigos',
+    'friend_groups_see_all': 'Ver Todos',
+    'friend_groups_loading': 'Cargando...',
+    'friend_groups_new_group': 'Nuevo Grupo',
+    'friend_groups_invites': 'Invitaciones de Grupo',
+    'friend_groups_new': 'Nuevo',
+    'friend_groups_invites_count': 'invitación',
+    'friend_groups_invite_text': 'Invitación al grupo',
+    'friend_groups_view': 'Ver',
+    'friend_groups_members_count': 'miembro',
+    'friend_groups_no_members': 'Sin miembros',
+    'friend_groups_empty_title': 'Aún no tienes ningún grupo',
+    'friend_groups_empty_subtitle': 'Haz clic en el botón "Nuevo Grupo" para crear uno',
+
+    // Mensajes de error
+    'error_loading_friends_groups': 'Error al cargar los datos:',
+    'error_unnamed_user': 'Usuario sin nombre',
+
+    // Textos de CreateGroupScreen
+    'create_group_title': 'Crear Nuevo Grupo',
+    'create_group_button': 'Crear',
+    'create_group_name_label': 'Nombre del Grupo',
+    'create_group_name_placeholder': 'Ej.: Amigos Cercanos',
+    'create_group_description_label': 'Descripción (Opcional)',
+    'create_group_description_placeholder': 'Una breve descripción de tu grupo...',
+    'create_group_icon_label': 'Icono del Grupo',
+    'create_group_color_label': 'Color del Grupo',
+    'create_group_preview_name': 'Nombre del Grupo',
+    'create_group_loading': 'Creando grupo...',
+
+    // Mensajes de error
+    'error_empty_group_name': 'Por favor, ingresa un nombre de grupo',
+    'error_user_data': 'No se pudieron obtener tus datos de usuario',
+    'error_creating_group': 'Ocurrió un error al crear el grupo',
+
+    // Mensajes de éxito
+    'success_group_created': 'Grupo creado con éxito',
+    'success_button': 'OK',
+
+
+    // Modal de nueva reunión
+    'meetings_new': 'Nueva Reunión',
+    'meetings_title_label': 'Título',
+    'meetings_title_placeholder': 'Nombre del evento',
+    'meetings_location_label': 'Ubicación',
+    'meetings_location_placeholder': 'Lugar del encuentro',
+    'meetings_date_label': 'Fecha',
+    'meetings_time_label': 'Hora (formato 24 horas)',
+    'meetings_time_hint': 'Ejemplo: 14:30, 08:15, etc.',
+    'meetings_participants_label': 'Participantes',
+    'meetings_participants_info': 'Las personas seleccionadas recibirán una notificación sobre la reunión.',
+    'meetings_no_selected_friends': 'Aún no has seleccionado a nadie',
+    'meetings_friends_label': 'Tus Amigos',
+    'meetings_search_friends': 'Busca a tus amigos...',
+    'meetings_no_search_results': 'No se encontraron resultados para',
+    'meetings_no_friends': 'Tu lista de amigos está vacía.',
+    'meetings_create_button': 'Crear Evento',
+
+    // Mensajes de error
+    'meetings_error_loading': 'Error al cargar los eventos:',
+    'meetings_error_friends_loading': 'Error al cargar los amigos:',
+    'meetings_error_validation': 'Por favor, completa todos los campos y selecciona al menos un amigo.',
+    'meetings_error_time_format': 'Ingresa una hora válida (ej.: 14:30)',
+    'meetings_error_creating': 'Ocurrió un error al crear el evento.',
+    'meetings_unnamed_user': 'Usuario sin nombre',
+
+    // Mensajes de éxito
+    'meetings_success_created': '¡Evento creado con éxito! Los participantes serán notificados.',
+
+    // Calendario
+    'calendar_weekdays': ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+    'calendar_weekdays_short': ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'],
+    'calendar_months': ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+    'calendar_months_short': ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'],
+
+
+    // Textos de AllMeetingsScreen
+    'all_meetings_title': 'Mis Eventos',
+    'all_meetings_loading': 'Cargando eventos...',
+    'all_meetings_empty': 'Aún no tienes ningún evento',
+    'all_meetings_empty_upcoming': 'No hay eventos próximos',
+    'all_meetings_empty_past': 'No hay eventos pasados',
+    'all_meetings_create': 'Crear Nuevo Evento',
+    'all_meetings_details': 'Detalles',
+    'all_meetings_completed': 'Completado',
+
+    // Textos de pestañas
+    'all_meetings_tab_upcoming': 'Próximos',
+    'all_meetings_tab_past': 'Pasados',
+
+    // Mensajes de error
+    'all_meetings_error_loading': 'Error al cargar los eventos:',
+    'all_meetings_unnamed_user': 'Usuario sin nombre',
+
+    // Días y Meses
+    'days_full': ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
+    'months_full': ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+
+    //Meetings.js
+    'meetings_upcoming': 'Eventos Próximos',
+    'meetings_see_all': 'Ver Todo',
+    'meetings_create': 'Crear Evento',
+    'meetings_empty': 'Aún no tienes ningún evento',
+    'meetings_empty_subtitle': 'Haz clic en "Crear Evento" para crear uno nuevo',
+    'meetings_detail': 'Detalles',
+
+    'add_members_title': 'Invitar amigo al grupo',
+    'add_members_search': 'Buscar amigos...',
+    'add_members_loading': 'Cargando amigos...',
+    'add_members_invite': 'Invitar',
+    'add_members_no_results': 'No se encontraron resultados para',
+    'add_members_empty': 'No hay amigos disponibles para invitar',
+    'add_members_empty_subtitle': 'Todos tus amigos ya están en este grupo o aún no tienes amigos.',
+    'add_members_unnamed_user': 'Usuario sin nombre',
+
+    // Mensajes de error
+    'add_members_error_loading': 'Error al cargar amigos:',
+    'add_members_error_alert': 'Ocurrió un problema al cargar tu lista de amigos.',
+    'error': 'Error',
+
+    'user_search_title': 'Buscar Amigos',
+    'user_search_placeholder': 'Buscar por nombre, usuario o correo electrónico...',
+    'user_search_tips_title': 'Consejos de Búsqueda',
+    'user_search_tip_1': '• Puedes buscar por nombre, usuario o correo electrónico',
+    'user_search_tip_2': '• Los resultados se actualizan automáticamente mientras escribes',
+    'user_search_tip_3': '• Los resultados más relevantes aparecen en la parte superior',
+    'user_search_loading': 'Cargando usuarios...',
+    'user_search_searching': 'Buscando usuarios...',
+    'user_search_results_count': 'usuarios encontrados',
+    'user_search_results_limit': 'Mostrando los primeros 10 resultados',
+    'user_search_show_more': 'Mostrar más resultados',
+    'user_search_no_results': 'No se encontraron usuarios',
+    'user_search_try_different': 'Intenta con otro término de búsqueda',
+    'user_search_start_message': 'Para buscar amigos',
+    'user_search_start_submessage': 'puedes usar la barra de búsqueda de arriba',
+
+    // Textos de estado de amistad
+    'friendship_status_friend': 'Tu amigo',
+    'friendship_status_sent': 'Solicitud enviada',
+    'friendship_status_received': 'Aceptar solicitud',
+    'friendship_status_add': 'Agregar amigo',
+    'friendship_action_remove': 'Eliminar amigo',
+    'friendship_action_cancel': 'Cancelar solicitud',
+    'friendship_action_accept_info': 'Visita la página de solicitudes de amistad para aceptar la solicitud',
+
+    // Mensajes de confirmación y error
+    'user_search_remove_title': 'Eliminar amigo',
+    'user_search_remove_message': '¿Estás seguro de que deseas eliminar a esta persona de tu lista de amigos?',
+    'user_search_remove_success': 'Amistad eliminada con éxito.',
+    'user_search_error_loading': 'Error al obtener los detalles del usuario:',
+    'user_search_error_search': 'Ocurrió un error durante la búsqueda de usuarios.',
+    'user_search_error_remove': 'Ocurrió un error al eliminar al amigo.',
+    'user_search_error_request': 'Ocurrió un error al enviar la solicitud de amistad.',
+    'user_search_error_cancel': 'Ocurrió un error al cancelar la solicitud de amistad.',
+    'user_search_unnamed': 'Usuario sin nombre',
+
+    // Textos de botones
+    'cancel': 'Cancelar',
+    'remove': 'Eliminar',
+    'info': 'Información',
+    'error': 'Error',
+    'success': 'Éxito',
+
+    'all_friends_title': 'Todos los Amigos',
+    'all_friends_search': 'Buscar amigos...',
+    'all_friends_loading': 'Error al cargar la lista de amigos:',
+    'all_friends_no_results': 'No se encontraron resultados',
+    'all_friends_empty': 'Aún no tienes amigos',
+    'all_friends_add': 'Agregar Amigo',
+    'all_friends_unnamed': 'Usuario sin nombre',
+    'all_friends_username_prefix': '@',
 
 
 };

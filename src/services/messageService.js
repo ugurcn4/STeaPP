@@ -15,8 +15,6 @@ import {
     setDoc,
     increment,
     writeBatch,
-    arrayUnion,
-    deleteDoc
 } from 'firebase/firestore';
 import { storage } from '../../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';

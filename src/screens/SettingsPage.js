@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform, Image, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Platform, FlatList, Dimensions } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../redux/userSlice';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -210,29 +210,6 @@ const SettingsPage = ({ navigation }) => {
         }
     };
 
-    const renderVerificationBanner = () => (
-        <ShadowWrapper style={[styles.flashBanner, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.flashBannerContent}>
-                <View style={styles.flashIconContainer}>
-                    <Ionicons name="flash" size={24} color="#FFD700" />
-                </View>
-                <View style={styles.flashTextContainer}>
-                    <Text style={[styles.flashTitle, { color: currentTheme.text }]}>
-                        {translate('blue_green_tick')}
-                    </Text>
-                    <Text style={[styles.flashDescription, { color: currentTheme.textSecondary }]}>
-                        {translate('blue_green_tick_desc')}
-                    </Text>
-                </View>
-                <TouchableOpacity
-                    style={styles.flashButton}
-                    onPress={() => handleNavigation('MaviTikSorgulama')}
-                >
-                    <Text style={styles.flashButtonText}>{translate('explore')}</Text>
-                </TouchableOpacity>
-            </View>
-        </ShadowWrapper>
-    );
 
     const renderInviteCardsCarousel = () => {
         const cardWidth = Dimensions.get('window').width - 40; // 20px padding on each side

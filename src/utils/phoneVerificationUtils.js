@@ -1,6 +1,5 @@
-import { collection, addDoc, query, where, getDocs, serverTimestamp, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import { getAuth } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 /**

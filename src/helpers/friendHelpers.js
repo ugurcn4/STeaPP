@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 
 export const getFriendDetails = async (friendId) => {

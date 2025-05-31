@@ -7,7 +7,6 @@ import {
     TouchableOpacity,
     SafeAreaView,
     StatusBar,
-    Platform,
     TextInput,
     Alert,
     Animated

@@ -116,29 +116,6 @@ export const useNotifications = (navigation) => {
         }
     };
 
-    // Bildirim iznini kontrol et ve güncelle
-    const updateNotificationPermissions = async () => {
-        try {
-            const { status: existingStatus } = await Notifications.getPermissionsAsync();
-            let finalStatus = existingStatus;
-
-            if (existingStatus !== 'granted') {
-                const { status } = await Notifications.requestPermissionsAsync();
-                finalStatus = status;
-            }
-
-            if (finalStatus !== 'granted') {
-                dispatch(updateNotificationSetting({
-                    key: 'allNotifications',
-                    value: false
-                }));
-                throw new Error('Bildirim izni verilmedi');
-            }
-        } catch (error) {
-            console.error('Bildirim izni hatası:', error);
-        }
-    };
-
     // Bildirim ayarını değiştir
     const toggleNotificationSetting = async (key, value) => {
         try {

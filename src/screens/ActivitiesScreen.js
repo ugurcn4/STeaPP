@@ -1,33 +1,30 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { getAuth } from 'firebase/auth';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    RefreshControl,
-    SafeAreaView,
-    Text,
-    StatusBar,
-    Platform,
-    TouchableOpacity,
-    Animated,
     ActivityIndicator,
-    FlatList
+    Animated,
+    FlatList,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
+import { SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
+import { useDispatch, useSelector } from 'react-redux';
+import Activity from '../components/Activity';
+import NotificationItem from '../components/NotificationItem';
 import Stories from '../components/Stories';
+import { translate } from '../i18n/i18n';
+import { fetchNotifications, markNotificationAsRead } from '../redux/slices/notificationSlice';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { getFriends } from '../services/friendService';
-import { Ionicons } from '@expo/vector-icons';
+import { getUnreadMessageCount } from '../services/messageService';
+import { addComment, deleteComment, fetchPosts, toggleLikePost } from '../services/postService';
 import { checkAndDeleteExpiredStories } from '../services/storyService';
-import Activity from '../components/Activity';
-import { getRecentChats, getUnreadMessageCount } from '../services/messageService';
-import { useSelector, useDispatch } from 'react-redux';
-import { fetchNotifications, markNotificationAsRead } from '../redux/slices/notificationSlice';
-import NotificationItem from '../components/NotificationItem';
-import { fetchPosts, toggleLikePost, addComment, deleteComment } from '../services/postService';
-import { getAuth } from 'firebase/auth';
-import {  SafeAreaView as SafeAreaViewRN } from 'react-native-safe-area-context';
-import { translate } from '../i18n/i18n';
 
 // Activity bileşenini performans için memoize edelim
 const MemoizedActivity = React.memo(Activity);
@@ -45,9 +42,7 @@ const ActivitiesScreen = ({ navigation, route }) => {
     const dispatch = useDispatch();
     const {
         notifications,
-        loading: notificationsLoading,
-        error: notificationsError
-    } = useSelector(state => state.notifications);
+        loading: notificationsLoading    } = useSelector(state => state.notifications);
     const userId = useSelector(state => state.auth.user?.id);
 
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);

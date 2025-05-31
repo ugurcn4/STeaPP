@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { HomePage, FriendsPage, MapPage, SettingsPage, ActivitiesScreen } from '../screens';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Platform } from 'react-native';
 
 const Tab = createBottomTabNavigator();
 
@@ -19,7 +19,7 @@ const CustomNavBar = () => {
                         iconName = focused ? 'map' : 'map-outline';
                     } else if (route.name === 'Arkadaşlar') {
                         iconName = focused ? 'people' : 'people-outline';
-                    } else if (route.name === 'Etkinlikler') {
+                    } else if (route.name === 'Akış') {
                         iconName = focused ? 'flame' : 'flame-outline';
                     } else if (route.name === 'Ayarlar') {
                         iconName = focused ? 'settings' : 'settings-outline';
@@ -30,7 +30,7 @@ const CustomNavBar = () => {
                             styles.iconContainer,
                             focused ? styles.activeIconContainer : null
                         ]}>
-                            <Ionicons name={iconName} size={focused ? 32 : 26} color={color} />
+                            <Ionicons name={iconName} size={focused ? 24 : 22} color={color} />
                             {route.name === 'Ayarlar' && (
                                 <View style={styles.newBadgeContainer}>
                                     <Text style={styles.newBadgeText}>Yeni</Text>
@@ -39,45 +39,48 @@ const CustomNavBar = () => {
                         </View>
                     );
                 },
-                tabBarActiveTintColor: '#2E64FE',
+                tabBarActiveTintColor: '#000000',
                 tabBarInactiveTintColor: '#9E9E9E',
                 tabBarStyle: {
                     backgroundColor: '#ffffff',
                     position: 'absolute',
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
                     elevation: 8,
-                    borderRadius: 30,
-                    height: 80,
+                    height: Platform.OS === 'ios' ? 85 : 65,
                     shadowColor: '#000',
                     shadowOffset: {
                         width: 0,
-                        height: 6,
+                        height: 2,
                     },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 10,
-                    borderTopWidth: 0,
-                    paddingHorizontal: 10,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    borderTopWidth: 1,
+                    borderTopColor: '#f0f0f0',
+                    paddingHorizontal: 5,
+                    paddingBottom: Platform.OS === 'ios' ? 22 : 8,
+                    paddingTop: 3,
                 },
                 tabBarItemStyle: {
-                    paddingVertical: 12,
-                    height: 60,
+                    paddingVertical: 6,
+                    height: 46,
                     alignItems: 'center',
                     justifyContent: 'center',
                 },
                 tabBarLabelStyle: {
-                    display: 'none',
+                    fontSize: 11,
+                    marginTop: 2,
+                    marginBottom: Platform.OS === 'ios' ? 4 : 2,
                 },
                 headerShown: false,
+                tabBarShowLabel: true,
             })}
         >
             <Tab.Screen name="Ana Sayfa" component={HomePage} />
             <Tab.Screen name="Harita" component={MapPage} />
             <Tab.Screen name="Arkadaşlar" component={FriendsPage} />
-            <Tab.Screen name="Etkinlikler" component={ActivitiesScreen} />
+            <Tab.Screen name="Akış" component={ActivitiesScreen} />
             <Tab.Screen name="Ayarlar" component={SettingsPage} />
         </Tab.Navigator>
     );
@@ -87,21 +90,22 @@ const styles = StyleSheet.create({
     iconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        marginTop: 7,
+        width: 48,
+        height: 30,
+        borderRadius: 15,
+        marginTop: 5,
     },
     activeIconContainer: {
-        backgroundColor: 'rgba(46, 100, 254, 0.15)',
+        backgroundColor: 'rgba(0, 0, 0, 0.1)',
     },
     newBadgeContainer: {
         position: 'absolute',
-        bottom: -3,
+        top: -4,
+        right: -8,
         backgroundColor: 'red',
         borderRadius: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
@@ -109,7 +113,7 @@ const styles = StyleSheet.create({
     },
     newBadgeText: {
         color: 'white',
-        fontSize: 9,
+        fontSize: 8,
         fontWeight: 'bold',
     }
 });

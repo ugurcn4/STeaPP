@@ -12,10 +12,8 @@ import MaviTikSorgulamaPage from '../screens/SettingsPageScreens/MaviTikSorgulam
 import NearbyRestaurants from '../screens/HomePageCards/NearbyRestaurants';
 import NearbyHotels from '../screens/HomePageCards/NearbyHotels';
 import NearbyAttractions from '../screens/HomePageCards/NearbyAttractions';
-import PhotosPage from '../screens/PhotosPage';
 import AIRecommendationsScreen from '../screens/AIRecommendationsScreen';
 import AIChatScreen from '../screens/AIChatScreen';
-import { useSelector } from 'react-redux';
 import StoryView from '../screens/StoryView';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -43,6 +41,9 @@ import GroupDetail from '../screens/GroupDetailScreen';
 import GroupsList from '../components/GroupsList';
 import FriendRequestsScreen from "../screens/FriendRequestsScreen";
 import AllMeetingsScreen from "../screens/AllMeetingsScreen";
+import GroupInvitationsScreen from '../screens/GroupInvitationsScreen';
+import LocationsScreen from '../screens/LocationsScreen';
+import AllFriends from '../screens/AllFriends';
 
 
 const Stack = createNativeStackNavigator();
@@ -79,7 +80,6 @@ const MessagesNavigator = () => {
 };
 
 const MainStack = () => {
-    const theme = useSelector((state) => state.theme.theme);
 
     return (
         <Stack.Navigator
@@ -136,10 +136,6 @@ const MainStack = () => {
             <Stack.Screen
                 name="MaviTikSorgulama"
                 component={MaviTikSorgulamaPage}
-            />
-            <Stack.Screen
-                name="Fotoğraflar"
-                component={PhotosPage}
             />
             <Stack.Screen
                 name="AIRecommendations"
@@ -341,8 +337,32 @@ const MainStack = () => {
                 }}
             />
             <Stack.Screen
+                name="GroupInvitations"
+                component={GroupInvitationsScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
                 name="AllMeetings"
                 component={AllMeetingsScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="Locations"
+                component={LocationsScreen}
+                options={{
+                    headerShown: false,
+                    animation: 'slide_from_right'
+                }}
+            />
+            <Stack.Screen
+                name="AllFriends"
+                component={AllFriends}
                 options={{
                     headerShown: false,
                     animation: 'slide_from_right'

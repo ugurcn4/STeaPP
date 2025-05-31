@@ -1,30 +1,57 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  Modal, 
-  TouchableOpacity, 
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
   ScrollView,
   Image,
-  Dimensions,
   TextInput,
-  Animated,
-  BackHandler
+  BackHandler,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView 
 } from 'react-native';
-import { PanGestureHandler } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { translate } from '../i18n/i18n';
-import LottieView from 'lottie-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as Location from 'expo-location';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import MapView, { Marker, Circle } from 'react-native-maps';
+import { Toast } from 'react-native-toast-message';
+import CustomDatePicker from '../components/CustomDatePicker';
+import RecipientSelector from '../components/RecipientSelector';
 
-// Ekran genişliği için
-const { width, height } = Dimensions.get('window');
+import capsuleService from '../services/CapsuleService';
+
 
 // Tab tipleri
 const TABS = {
   CREATE: 'create',
   MY_CAPSULES: 'myCapsules'
 };
+
+// Kapsül içerik tipleri
+const CONTENT_TYPES = {
+  TEXT: 'text',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  AUDIO: 'audio',
+  FILE: 'file' // Yeni içerik tipi: dosya
+};
+
+// Alıcı tipleri
+const RECIPIENT_TYPES = {
+  SELF: 'self',
+  SPECIFIC: 'specific',
+  PUBLIC: 'public'
+};
+
+
+// İmport kısmına şu satırı ekle (en üstteki import bloğuna):
+import { styles } from '../styles/CapsuleModalStyles';
 
 const CapsuleModal = ({ visible, onClose }) => {
   // Tab durum yönetimi
@@ -33,37 +60,48 @@ const CapsuleModal = ({ visible, onClose }) => {
   // Kapsül oluşturma ekranı için durumlar
   const [capsuleType, setCapsuleType] = useState(null); // 'time' veya 'location'
   
-  // Modal animasyonu için
-  const slideAnim = useRef(new Animated.Value(height)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const [modalVisible, setModalVisible] = useState(false);
+  // Kapsül form verileri
+  const [capsuleTitle, setCapsuleTitle] = useState('');
+  const [capsuleContents, setCapsuleContents] = useState([]);
+  const [selectedTime, setSelectedTime] = useState('1y'); // '1w', '1m', '1y', '5y'
+  const [openDate, setOpenDate] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationRadius, setLocationRadius] = useState(100); // metre cinsinden
+  const [locationHasTimeConstraint, setLocationHasTimeConstraint] = useState(false);
+  const [recipientType, setRecipientType] = useState(RECIPIENT_TYPES.SELF);
+  const [specificRecipients, setSpecificRecipients] = useState([]);
+  
+  // Kapsüllerim ekranı için durumlar
+  const [capsules, setCapsules] = useState([]);
+  const [capsuleFilter, setCapsuleFilter] = useState('all'); // 'all', 'pending', 'opened'
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Modal içi işlemler için durum
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTextInput, setActiveTextInput] = useState('');
+  const [textInputContent, setTextInputContent] = useState('');
+  const [showTextInputModal, setShowTextInputModal] = useState(false);
+  
+  // Kullanıcının mevcut konumu
+  const [userLocation, setUserLocation] = useState(null);
+  
+  // İzinler
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [hasMediaPermission, setHasMediaPermission] = useState(false);
+  
+  const [showRecipientSelector, setShowRecipientSelector] = useState(false);
 
-  // Modal görünürlüğünü takip et
-  useEffect(() => {
-    if (visible) {
-      setModalVisible(true);
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true
-        }),
-        Animated.timing(backdropOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true
-        })
-      ]).start();
-    } else {
-      closeModal();
-    }
-  }, [visible]);
+  // Yeni durum değişkenleri ekleyelim
+  const [resultMessage, setResultMessage] = useState(null);
+  const [resultType, setResultType] = useState(null); // 'success' veya 'error'
 
   // Android geri tuşu için
   useEffect(() => {
     const backAction = () => {
       if (visible) {
-        closeModal();
+        onClose();
         return true;
       }
       return false;
@@ -77,34 +115,487 @@ const CapsuleModal = ({ visible, onClose }) => {
     return () => backHandler.remove();
   }, [visible]);
 
-  // Modal'ı kapat
-  const closeModal = () => {
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: height,
-        duration: 300,
-        useNativeDriver: true
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true
-      })
-    ]).start(() => {
-      setModalVisible(false);
-      onClose();
-    });
+  // Modal açıldığında izinleri kontrol et
+  useEffect(() => {
+    if (visible) {
+      checkPermissions();
+      resetForm();
+      
+      // Kapsüllerim sekmesi açıksa, kapsülleri getir
+      if (activeTab === TABS.MY_CAPSULES) {
+        fetchUserCapsules();
+      }
+    }
+  }, [visible, activeTab]);
+  
+  // Tab değiştirildiğinde
+  useEffect(() => {
+    if (activeTab === TABS.MY_CAPSULES) {
+      fetchUserCapsules();
+    }
+  }, [activeTab, capsuleFilter]);
+  
+  // Seçilen zaman değiştiğinde, açılma tarihini güncelle
+  useEffect(() => {
+    if (selectedTime && !openDate) { // Sadece openDate null ise güncelle
+      const now = new Date();
+      let futureDate = new Date();
+      
+      switch (selectedTime) {
+        case '1w':
+          futureDate.setDate(now.getDate() + 7);
+          break;
+        case '1m':
+          futureDate.setMonth(now.getMonth() + 1);
+          break;
+        case '1y':
+          futureDate.setFullYear(now.getFullYear() + 1);
+          break;
+        case '5y':
+          futureDate.setFullYear(now.getFullYear() + 5);
+          break;
+        case '10y':
+          futureDate.setFullYear(now.getFullYear() + 10);
+          break;
+        default:
+          break;
+      }
+      
+      // Bu sadece arka planda tarih hesaplamak için, UI'da gösterilmiyor
+      setOpenDate(null); // Özel tarih seçilmediğini belirtmek için null yapıyoruz
+    }
+  }, [selectedTime]);
+  
+  // Formu sıfırla
+  const resetForm = () => {
+    setCapsuleType(null);
+    setCapsuleTitle('');
+    setCapsuleContents([]);
+    setSelectedTime('1y');
+    setOpenDate(null);
+    setShowDatePicker(false);
+    setSelectedLocation(null);
+    setShowLocationPicker(false);
+    setLocationRadius(100);
+    setLocationHasTimeConstraint(false);
+    setRecipientType(RECIPIENT_TYPES.SELF);
+    setSpecificRecipients([]);
+    setIsSubmitting(false);
+    // Sonuç mesajını da sıfırlayalım
+    setResultMessage(null);
+    setResultType(null);
+  };
+  
+  // İzinleri kontrol et
+  const checkPermissions = async () => {
+    // Konum izni kontrolü
+    const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+    setHasLocationPermission(locationStatus === 'granted');
+    
+    if (locationStatus === 'granted') {
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced
+        });
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      } catch (error) {
+        console.log('Konum alınamadı:', error);
+      }
+    }
+    
+    // Medya kütüphanesi izni kontrolü
+    const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+    setHasMediaPermission(mediaStatus === 'granted');
   };
 
-  // Tab içeriğini render etme
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case TABS.CREATE:
-        return renderCreateTab();
-      case TABS.MY_CAPSULES:
-        return renderMyCapsules();
-      default:
-        return null;
+  // Kullanıcı detaylarını getiren fonksiyon
+
+  // Kullanıcının kapsüllerini getir
+  const fetchUserCapsules = async () => {
+    try {
+      setIsLoading(true);
+      const userCapsules = await capsuleService.getUserCapsules(capsuleFilter);
+      
+      // Alıcı bilgileri direkt olarak kapsüllerin içinde bulunuyor
+      const processedCapsules = userCapsules.map(capsule => {
+        // Kapsül içindeki recipients alanı artık dizi olarak değil, doğrudan detayları içeren bir array
+        if (Array.isArray(capsule.recipients) && capsule.recipients.length > 0) {
+          // recipients dizisini direkt olarak recipientDetails olarak kullan
+          return {
+            ...capsule,
+            recipientDetails: capsule.recipients.map(recipient => ({
+              id: recipient.id || '',
+              name: recipient.name || '',
+              avatar: recipient.avatar || null,
+              username: recipient.username || ''
+            }))
+          };
+        }
+        return capsule;
+      });
+      
+      setCapsules(processedCapsules);
+    } catch (error) {
+      console.error('Kapsülleri getirirken hata oluştu:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Kapsülleriniz yüklenemedi. Lütfen tekrar deneyin.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Metin içeriği ekle
+  const handleAddTextContent = () => {
+    setActiveTextInput(CONTENT_TYPES.TEXT);
+    setTextInputContent('');
+    setShowTextInputModal(true);
+  };
+  
+  // Resim içeriği ekle
+  const handleAddImageContent = async () => {
+    if (!hasMediaPermission) {
+      Alert.alert(
+        'İzin Gerekli',
+        'Fotoğraf eklemek için galeri erişim izni gereklidir.',
+        [{ text: 'Tamam' }]
+      );
+      return;
+    }
+    
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0];
+        
+        setCapsuleContents(prevContents => [
+          ...prevContents,
+          {
+            id: Date.now().toString(),
+            type: CONTENT_TYPES.IMAGE,
+            uri: selectedImage.uri,
+            preview: selectedImage.uri
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Resim seçilirken hata oluştu:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Resim seçilemedi. Lütfen tekrar deneyin.'
+      });
+    }
+  };
+  
+  // Video içeriği ekle
+  const handleAddVideoContent = async () => {
+    if (!hasMediaPermission) {
+      Alert.alert(
+        'İzin Gerekli',
+        'Video eklemek için galeri erişim izni gereklidir.',
+        [{ text: 'Tamam' }]
+      );
+      return;
+    }
+    
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 60,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedVideo = result.assets[0];
+        
+        setCapsuleContents(prevContents => [
+          ...prevContents,
+          {
+            id: Date.now().toString(),
+            type: CONTENT_TYPES.VIDEO,
+            uri: selectedVideo.uri,
+            preview: selectedVideo.uri
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Video seçilirken hata oluştu:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Video seçilemedi. Lütfen tekrar deneyin.'
+      });
+    }
+  };
+  
+  // Ses içeriği ekle
+  const handleAddAudioContent = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true
+      });
+      
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
+        const selectedAudio = result.assets[0];
+        
+        setCapsuleContents(prevContents => [
+          ...prevContents,
+          {
+            id: Date.now().toString(),
+            type: CONTENT_TYPES.AUDIO,
+            uri: selectedAudio.uri,
+            name: selectedAudio.name,
+            preview: null
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Ses dosyası seçilirken hata oluştu:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Ses dosyası seçilemedi. Lütfen tekrar deneyin.'
+      });
+    }
+  };
+  
+  // Dosya seçme fonksiyonunu ekleyelim
+  const handleAddFileContent = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Tüm dosya tipleri
+        copyToCacheDirectory: true
+      });
+      
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
+        const selectedFile = result.assets[0];
+        
+        // Dosya boyutu kontrolü (2MB = 2 * 1024 * 1024 bytes)
+        if (selectedFile.size > 2 * 1024 * 1024) {
+          Toast.show({
+            type: 'error',
+            text1: 'Dosya çok büyük',
+            text2: 'Dosya boyutu en fazla 2MB olabilir. Premium hesaplar daha büyük dosyalar yükleyebilir.'
+          });
+          return;
+        }
+        
+        setCapsuleContents(prevContents => [
+          ...prevContents,
+          {
+            id: Date.now().toString(),
+            type: CONTENT_TYPES.FILE,
+            uri: selectedFile.uri,
+            name: selectedFile.name,
+            size: selectedFile.size,
+            preview: null
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Dosya seçilirken hata oluştu:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Dosya seçilemedi. Lütfen tekrar deneyin.'
+      });
+    }
+  };
+  
+  // İçerik kaldır
+  const handleRemoveContent = (contentId) => {
+    setCapsuleContents(prevContents => 
+      prevContents.filter(content => content.id !== contentId)
+    );
+  };
+  
+  // Metin giriş modalını onayla
+  const handleConfirmTextInput = () => {
+    if (textInputContent.trim()) {
+      setCapsuleContents(prevContents => [
+        ...prevContents,
+        {
+          id: Date.now().toString(),
+          type: CONTENT_TYPES.TEXT,
+          text: textInputContent.trim()
+        }
+      ]);
+      
+      setShowTextInputModal(false);
+      setTextInputContent('');
+    } else {
+      // Toast kullanımı yerine Alert kullanabiliriz
+      Alert.alert('Boş Mesaj', 'Lütfen bir mesaj girin.');
+    }
+  };
+  
+  // Konum seçimini onayla
+  const handleConfirmLocation = () => {
+    if (selectedLocation) {
+      setShowLocationPicker(false);
+    } else {
+      // Toast kullanımı yerine Alert kullanabiliriz
+      Alert.alert('Konum Seçilmedi', 'Lütfen bir konum seçin.');
+    }
+  };
+  
+  // Tarih seçicisini göster
+  const handleShowDatePicker = () => {
+    // Eğer başka bir hızlı seçim aktifse, onu temizle
+    setSelectedTime(null);
+    
+    // Tarih seçiciyi göster (başlangıç değeri olarak openDate veya şimdiki tarih + 1 yıl)
+    if (!openDate) {
+      const defaultDate = new Date();
+      defaultDate.setFullYear(defaultDate.getFullYear() + 1);
+      setOpenDate(defaultDate);
+    }
+    
+    setShowDatePicker(true);
+  };
+  
+  // Tarih seçimini onayla
+  
+  // Formu kontrol et
+  const validateForm = () => {
+    if (!capsuleTitle.trim()) {
+      setResultMessage('Lütfen kapsüle bir başlık verin.');
+      setResultType('error');
+      return false;
+    }
+    
+    if (capsuleContents.length === 0) {
+      setResultMessage('Lütfen en az bir içerik ekleyin.');
+      setResultType('error');
+      return false;
+    }
+    
+    if (capsuleType === 'time' && !openDate) {
+      setResultMessage('Lütfen kapsülün açılacağı tarihi seçin.');
+      setResultType('error');
+      return false;
+    }
+    
+    if (capsuleType === 'location' && !selectedLocation) {
+      setResultMessage('Lütfen kapsülün açılacağı konumu seçin.');
+      setResultType('error');
+      return false;
+    }
+    
+    return true;
+  };
+  
+  // Kapsül oluştur
+  const handleCreateCapsule = async () => {
+    if (!validateForm()) return;
+    
+    try {
+      setIsSubmitting(true);
+      // Sonuç mesajını temizleyelim
+      setResultMessage(null);
+      setResultType(null);
+      
+      // Kapsül verilerini hazırla
+      const capsuleData = {
+        title: capsuleTitle.trim(),
+        type: capsuleType,
+        contents: []
+      };
+      
+      // Alıcı tipine göre veri ekle
+      if (recipientType === RECIPIENT_TYPES.SPECIFIC) {
+        capsuleData.recipients = specificRecipients.map(r => r.id);
+        capsuleData.recipientDetails = specificRecipients;
+      } else {
+        capsuleData.recipients = recipientType;
+      }
+      
+      // Kapsül tipine göre ek veriler ekle
+      if (capsuleType === 'time') {
+        capsuleData.openDate = openDate;
+      } else if (capsuleType === 'location') {
+        capsuleData.location = {
+          ...selectedLocation,
+          radius: locationRadius
+        };
+        
+        if (locationHasTimeConstraint && openDate) {
+          capsuleData.location.validUntil = openDate;
+        }
+      }
+      
+      // Önce kapsülü oluştur
+      const createdCapsule = await capsuleService.createCapsule(capsuleData);
+      
+      // Sonra içerikleri yükle
+      const contentPromises = capsuleContents.map(async (content) => {
+        if (content.type === CONTENT_TYPES.TEXT) {
+          // Metin içeriği doğrudan eklenebilir
+          return {
+            type: content.type,
+            data: content.text
+          };
+        } else {
+          // Medya içeriği için dosya yükleme
+          try {
+            const downloadUrl = await capsuleService.uploadCapsuleContent(
+              content.uri,
+              content.type,
+              createdCapsule.id
+            );
+            
+            return {
+              type: content.type,
+              data: downloadUrl,
+              ...(content.name ? { name: content.name } : {})
+            };
+          } catch (uploadError) {
+            console.error('İçerik yükleme hatası:', uploadError);
+            throw new Error('İçerik yüklenemedi.');
+          }
+        }
+      });
+      
+      // Tüm içeriklerin yüklenmesini bekle
+      const uploadedContents = await Promise.all(contentPromises);
+      
+      // Kapsülü güncelle
+      await capsuleService.updateCapsuleContents(createdCapsule.id, uploadedContents);
+      
+      // Toast yerine sadece durum değişkenlerini güncelleyelim
+      setResultMessage(`"${capsuleTitle}" kapsülünüz başarıyla oluşturuldu.`);
+      setResultType('success');
+      
+      // 3 saniye sonra kapsüllerim sekmesine geçelim
+      setTimeout(() => {
+        // Formu sıfırla ve kapsülleri yenile
+        resetForm();
+        
+        // Kapsüllerim sekmesine geç
+        setActiveTab(TABS.MY_CAPSULES);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Kapsül oluşturma hatası:', error);
+      
+      // Toast kullanımını kaldırıp durum değişkenlerini güncelleyelim
+      setResultMessage('Kapsül oluşturulamadı. Lütfen tekrar deneyin.');
+      setResultType('error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -112,15 +603,10 @@ const CapsuleModal = ({ visible, onClose }) => {
   const renderCapsuleTypeSelection = () => {
     return (
       <View style={styles.typeSelectionContainer}>
-        {/* Başlık ve Animasyon Bölümü */}
+        {/* Başlık Bölümü */}
         <View style={styles.welcomeContainer}>
-          <View style={styles.bottleAnimationContainer}>
-            <LottieView
-              source={require('../../assets/animations/bottle.json')}
-              autoPlay
-              loop
-              style={styles.bottleAnimation}
-            />
+          <View style={styles.bottleImageContainer}>
+            <Ionicons name="time" size={64} color="#3498db" />
           </View>
           <Text style={styles.welcomeTitle}>Zaman ve Mekan Kapsülleri</Text>
           <Text style={styles.welcomeSubtitle}>Özel mesajlarınızı gelecekte veya özel konumlarda açılmak üzere saklayın</Text>
@@ -208,6 +694,55 @@ const CapsuleModal = ({ visible, onClose }) => {
 
   // Kapsül oluşturma formu
   const renderCapsuleForm = () => {
+    // Sonuç overlay'ini oluşturalım
+    const renderResultOverlay = () => {
+      if (!resultMessage) return null;
+      
+      return (
+        <View style={[
+          styles.resultOverlay,
+          resultType === 'success' ? styles.successOverlay : styles.errorOverlay
+        ]}>
+          <View style={styles.resultIconContainer}>
+            <Ionicons 
+              name={resultType === 'success' ? 'checkmark-circle' : 'close-circle'} 
+              size={60} 
+              color="#fff" 
+            />
+          </View>
+          
+          <Text style={styles.resultMessage}>
+            {resultType === 'success' ? 'Harika!' : 'Üzgünüz!'}
+          </Text>
+          
+          <Text style={styles.resultMessage}>{resultMessage}</Text>
+          
+          {resultType === 'success' && (
+            <View style={{alignItems: 'center'}}>
+              <Text style={styles.resultSubMessage}>
+                Kapsüllerim sayfasına yönlendiriliyorsunuz...
+              </Text>
+              <View style={{marginTop: 20}}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            </View>
+          )}
+          
+          {resultType === 'error' && (
+            <TouchableOpacity 
+              style={styles.resultButton}
+              onPress={() => {
+                setResultMessage(null);
+                setResultType(null);
+              }}
+            >
+              <Text style={styles.resultButtonText}>Tekrar Dene</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    };
+    
     return (
       <View style={styles.capsuleFormContainer}>
         <View style={styles.formHeaderContainer}>
@@ -234,6 +769,8 @@ const CapsuleModal = ({ visible, onClose }) => {
               style={styles.textInput}
               placeholder="Kapsüle bir isim ver"
               placeholderTextColor="#999"
+              value={capsuleTitle}
+              onChangeText={setCapsuleTitle}
             />
           </View>
         </View>
@@ -243,70 +780,186 @@ const CapsuleModal = ({ visible, onClose }) => {
           <Text style={styles.sectionTitle}>İçerik Ekle</Text>
           <Text style={styles.sectionSubtitle}>Kapsülüne eklemek istediğin içerik türünü seç</Text>
           
-          {/* İçerik türü kartları - yatay scroll */}
+          {/* İçerik türlerine dosya tipini ekleyelim */}
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             style={styles.contentTypeScroll}
           >
             {/* Metin Kartı */}
-            <TouchableOpacity style={styles.contentTypeCard}>
+            <TouchableOpacity 
+              style={styles.contentTypeCard}
+              onPress={handleAddTextContent}
+            >
               <View style={[styles.contentTypeIcon, { backgroundColor: 'rgba(52, 152, 219, 0.1)' }]}>
-                <Ionicons name="chatbubble-outline" size={24} color="#3498db" />
+                <Ionicons name="chatbubble-outline" size={24} color="#333" />
               </View>
               <Text style={styles.contentTypeTitle}>Mesaj</Text>
               <Text style={styles.contentTypeSubtitle}>Metin mesajı ekle</Text>
               <View style={styles.addButtonContainer}>
-                <Ionicons name="add-circle" size={26} color="#3498db" />
+                <Ionicons name="add-circle" size={26} color="#333" />
               </View>
             </TouchableOpacity>
             
             {/* Fotoğraf Kartı */}
-            <TouchableOpacity style={styles.contentTypeCard}>
+            <TouchableOpacity 
+              style={styles.contentTypeCard}
+              onPress={handleAddImageContent}
+            >
               <View style={[styles.contentTypeIcon, { backgroundColor: 'rgba(46, 204, 113, 0.1)' }]}>
-                <Ionicons name="image-outline" size={24} color="#2ecc71" />
+                <Ionicons name="image-outline" size={24} color="#333" />
               </View>
               <Text style={styles.contentTypeTitle}>Fotoğraf</Text>
               <Text style={styles.contentTypeSubtitle}>Resim yükle</Text>
               <View style={styles.addButtonContainer}>
-                <Ionicons name="add-circle" size={26} color="#2ecc71" />
+                <Ionicons name="add-circle" size={26} color="#333" />
               </View>
             </TouchableOpacity>
             
             {/* Video Kartı */}
-            <TouchableOpacity style={styles.contentTypeCard}>
+            <TouchableOpacity 
+              style={styles.contentTypeCard}
+              onPress={handleAddVideoContent}
+            >
               <View style={[styles.contentTypeIcon, { backgroundColor: 'rgba(155, 89, 182, 0.1)' }]}>
-                <Ionicons name="videocam-outline" size={24} color="#9b59b6" />
+                <Ionicons name="videocam-outline" size={24} color="#333" />
               </View>
               <Text style={styles.contentTypeTitle}>Video</Text>
               <Text style={styles.contentTypeSubtitle}>Video ekle</Text>
               <View style={styles.addButtonContainer}>
-                <Ionicons name="add-circle" size={26} color="#9b59b6" />
+                <Ionicons name="add-circle" size={26} color="#333" />
               </View>
             </TouchableOpacity>
             
             {/* Ses Kartı */}
-            <TouchableOpacity style={styles.contentTypeCard}>
+            <TouchableOpacity 
+              style={styles.contentTypeCard}
+              onPress={handleAddAudioContent}
+            >
               <View style={[styles.contentTypeIcon, { backgroundColor: 'rgba(231, 76, 60, 0.1)' }]}>
-                <Ionicons name="mic-outline" size={24} color="#e74c3c" />
+                <Ionicons name="mic-outline" size={24} color="#333" />
               </View>
               <Text style={styles.contentTypeTitle}>Ses</Text>
               <Text style={styles.contentTypeSubtitle}>Sesli mesaj kaydet</Text>
               <View style={styles.addButtonContainer}>
-                <Ionicons name="add-circle" size={26} color="#e74c3c" />
+                <Ionicons name="add-circle" size={26} color="#333" />
+              </View>
+            </TouchableOpacity>
+            
+            {/* Dosya Kartı - Yeni */}
+            <TouchableOpacity 
+              style={styles.contentTypeCard}
+              onPress={handleAddFileContent}
+            >
+              <View style={[styles.contentTypeIcon, { backgroundColor: 'rgba(52, 73, 94, 0.1)' }]}>
+                <Ionicons name="document-outline" size={24} color="#333" />
+              </View>
+              <Text style={styles.contentTypeTitle}>Dosya</Text>
+              <Text style={styles.contentTypeSubtitle}>Belge ekle (maks. 2MB)</Text>
+              <View style={styles.premiumNoteContainer}>
+                <Text style={styles.premiumNoteText}>Premium: Sınırsız</Text>
+              </View>
+              <View style={styles.addButtonContainer}>
+                <Ionicons name="add-circle" size={26} color="#333" />
               </View>
             </TouchableOpacity>
           </ScrollView>
         </View>
         
-        {/* İçerik önizleme alanı - henüz boş */}
+        {/* İçerik önizleme alanı */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Eklenen İçerikler</Text>
+          {capsuleContents.length > 0 ? (
+            <View style={styles.contentGrid}>
+              {capsuleContents.map((content) => (
+                <View key={content.id} style={styles.contentGridItem}>
+                  <View style={styles.contentPreviewHeader}>
+                    <View style={styles.contentTypeIndicator}>
+                      <Ionicons 
+                        name={
+                          content.type === CONTENT_TYPES.TEXT 
+                            ? "chatbubble-outline" 
+                            : content.type === CONTENT_TYPES.IMAGE 
+                              ? "image-outline" 
+                              : content.type === CONTENT_TYPES.VIDEO 
+                                ? "videocam-outline" 
+                                : content.type === CONTENT_TYPES.FILE
+                                  ? "document-outline"
+                                  : "musical-note-outline"
+                        } 
+                        size={16} 
+                        color="#fff" 
+                      />
+                    </View>
+                    <Text style={styles.contentPreviewTitle}>
+                      {content.type === CONTENT_TYPES.TEXT 
+                        ? 'Metin'
+                        : content.type === CONTENT_TYPES.IMAGE
+                          ? 'Fotoğraf'
+                          : content.type === CONTENT_TYPES.VIDEO
+                            ? 'Video'
+                            : content.type === CONTENT_TYPES.FILE
+                              ? 'Dosya'
+                              : 'Ses'}
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.contentRemoveButton}
+                      onPress={() => handleRemoveContent(content.id)}
+                    >
+                      <Ionicons name="close-circle" size={22} color="#e74c3c" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.contentPreviewBody}>
+                    {content.type === CONTENT_TYPES.TEXT ? (
+                      <Text style={styles.textPreview} numberOfLines={3}>{content.text}</Text>
+                    ) : content.type === CONTENT_TYPES.IMAGE ? (
+                      <Image 
+                        source={{ uri: content.preview }} 
+                        style={styles.imagePreview} 
+                        resizeMode="cover"
+                      />
+                    ) : content.type === CONTENT_TYPES.VIDEO ? (
+                      <View style={styles.videoPreviewContainer}>
+                        <Image 
+                          source={{ uri: content.preview }} 
+                          style={styles.videoPreview} 
+                          resizeMode="cover"
+                        />
+                        <View style={styles.videoPreviewOverlay}>
+                          <Ionicons name="play" size={24} color="#fff" />
+                        </View>
+                      </View>
+                    ) : content.type === CONTENT_TYPES.FILE ? (
+                      <View style={styles.filePreviewContainer}>
+                        <Ionicons name="document" size={24} color="#34495e" />
+                        <View style={styles.fileInfoContainer}>
+                          <Text style={styles.filePreviewName} numberOfLines={1}>{content.name}</Text>
+                          <Text style={styles.filePreviewSize}>{(content.size / 1024).toFixed(1)} KB</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.audioPreviewContainer}>
+                        <Ionicons name="musical-note" size={24} color="#333" />
+                        <Text style={styles.audioPreviewText} numberOfLines={1}>
+                          {content.name || "Ses dosyası"}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
           <View style={styles.emptyContentPreview}>
             <Ionicons name="albums-outline" size={40} color="#ccc" />
             <Text style={styles.emptyContentText}>Henüz içerik eklenmedi</Text>
           </View>
+          )}
         </View>
+        
+        {/* İşlem sonuç overlay'i */}
+        {renderResultOverlay()}
         
         {/* Kapsül açılma ayarları */}
         <View style={styles.formSection}>
@@ -316,20 +969,52 @@ const CapsuleModal = ({ visible, onClose }) => {
           
           {capsuleType === 'time' ? (
             <View style={styles.timeSelectionContainer}>
-              {/* Hızlı seçenekler */}
               <Text style={styles.timeOptionsLabel}>Hızlı Seçim</Text>
               <View style={styles.quickTimeOptions}>
-                <TouchableOpacity style={styles.quickTimeButton}>
-                  <Text style={styles.quickTimeText}>1 Hafta</Text>
+                <TouchableOpacity 
+                  style={[styles.quickTimeButton, selectedTime === '1w' && styles.quickTimeButtonActive]}
+                  onPress={() => {
+                    setSelectedTime('1w');
+                    setOpenDate(null); // Özel tarih iptal edilir
+                  }}
+                >
+                  <Text style={selectedTime === '1w' ? styles.quickTimeTextActive : styles.quickTimeText}>1 Hafta</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickTimeButton}>
-                  <Text style={styles.quickTimeText}>1 Ay</Text>
+                <TouchableOpacity 
+                  style={[styles.quickTimeButton, selectedTime === '1m' && styles.quickTimeButtonActive]}
+                  onPress={() => {
+                    setSelectedTime('1m');
+                    setOpenDate(null);
+                  }}
+                >
+                  <Text style={selectedTime === '1m' ? styles.quickTimeTextActive : styles.quickTimeText}>1 Ay</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.quickTimeButton, styles.quickTimeButtonActive]}>
-                  <Text style={styles.quickTimeTextActive}>1 Yıl</Text>
+                <TouchableOpacity 
+                  style={[styles.quickTimeButton, selectedTime === '1y' && styles.quickTimeButtonActive]}
+                  onPress={() => {
+                    setSelectedTime('1y');
+                    setOpenDate(null);
+                  }}
+                >
+                  <Text style={selectedTime === '1y' ? styles.quickTimeTextActive : styles.quickTimeText}>1 Yıl</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickTimeButton}>
-                  <Text style={styles.quickTimeText}>5 Yıl</Text>
+                <TouchableOpacity 
+                  style={[styles.quickTimeButton, selectedTime === '5y' && styles.quickTimeButtonActive]}
+                  onPress={() => {
+                    setSelectedTime('5y');
+                    setOpenDate(null);
+                  }}
+                >
+                  <Text style={selectedTime === '5y' ? styles.quickTimeTextActive : styles.quickTimeText}>5 Yıl</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.quickTimeButton, selectedTime === '10y' && styles.quickTimeButtonActive]}
+                  onPress={() => {
+                    setSelectedTime('10y');
+                    setOpenDate(null);
+                  }}
+                >
+                  <Text style={selectedTime === '10y' ? styles.quickTimeTextActive : styles.quickTimeText}>10 Yıl</Text>
                 </TouchableOpacity>
               </View>
               
@@ -338,43 +1023,135 @@ const CapsuleModal = ({ visible, onClose }) => {
                 <View style={styles.dateIconWrapper}>
                   <Ionicons name="calendar-outline" size={22} color="#fff" />
                 </View>
-                <Text style={styles.dateDisplayText}>20 Haziran 2025</Text>
-                <TouchableOpacity style={styles.datePickerButton}>
-                  <Text style={styles.datePickerButtonText}>Değiştir</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#3498db" />
+                <Text style={styles.dateDisplayText}>
+                  {openDate 
+                    ? `${format(openDate, 'd MMMM yyyy', { locale: tr })} (Özel tarih)` 
+                    : selectedTime === '1w' 
+                      ? '1 hafta sonra açılacak'
+                      : selectedTime === '1m'
+                        ? '1 ay sonra açılacak'
+                        : selectedTime === '1y'
+                          ? '1 yıl sonra açılacak'
+                          : selectedTime === '5y'
+                            ? '5 yıl sonra açılacak'
+                            : '10 yıl sonra açılacak'
+                  }
+                </Text>
+                <TouchableOpacity 
+                  style={styles.datePickerButton}
+                  onPress={handleShowDatePicker}
+                >
+                  <Text style={styles.datePickerButtonText}>Özel Tarih</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#333" />
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
             <View style={styles.locationSelectionContainer}>
-              <View style={styles.mapPreviewPlaceholder}>
+              <TouchableOpacity 
+                style={styles.mapPreviewPlaceholder}
+                onPress={() => setShowLocationPicker(true)}
+              >
+                {selectedLocation ? (
+                  <MapView
+                    style={styles.miniMapPreview}
+                    region={{
+                      latitude: selectedLocation.latitude,
+                      longitude: selectedLocation.longitude,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    }}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                    rotateEnabled={false}
+                    pitchEnabled={false}
+                  >
+                    <Marker
+                      coordinate={selectedLocation}
+                    />
+                    <Circle
+                      center={selectedLocation}
+                      radius={locationRadius}
+                      fillColor="rgba(52, 152, 219, 0.2)"
+                      strokeColor="rgba(52, 152, 219, 0.5)"
+                    />
+                  </MapView>
+                ) : (
+                  <>
                 <View style={styles.mapIconWrapper}>
                   <Ionicons name="map-outline" size={32} color="#fff" />
                 </View>
                 <Text style={styles.mapPreviewText}>Konum seçmek için dokun</Text>
-              </View>
+                  </>
+                )}
+              </TouchableOpacity>
               
               {/* Yarıçap seçimi */}
               <Text style={styles.radiusLabel}>Yarıçap Seçimi</Text>
               <View style={styles.radiusOptions}>
-                <TouchableOpacity style={styles.radiusOption}>
-                  <Text style={styles.radiusText}>50m</Text>
+                <TouchableOpacity 
+                  style={[styles.radiusOption, locationRadius === 50 && styles.radiusOptionActive]}
+                  onPress={() => setLocationRadius(50)}
+                >
+                  <Text style={locationRadius === 50 ? styles.radiusTextActive : styles.radiusText}>50m</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.radiusOption, styles.radiusOptionActive]}>
-                  <Text style={styles.radiusTextActive}>100m</Text>
+                <TouchableOpacity 
+                  style={[styles.radiusOption, locationRadius === 100 && styles.radiusOptionActive]}
+                  onPress={() => setLocationRadius(100)}
+                >
+                  <Text style={locationRadius === 100 ? styles.radiusTextActive : styles.radiusText}>100m</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.radiusOption}>
-                  <Text style={styles.radiusText}>250m</Text>
+                <TouchableOpacity 
+                  style={[styles.radiusOption, locationRadius === 250 && styles.radiusOptionActive]}
+                  onPress={() => setLocationRadius(250)}
+                >
+                  <Text style={locationRadius === 250 ? styles.radiusTextActive : styles.radiusText}>250m</Text>
                 </TouchableOpacity>
               </View>
               
               {/* Konum + Zaman seçeneği */}
-              <TouchableOpacity style={styles.addTimeToLocationButton}>
-                <View style={styles.addTimeIconWrapper}>
+              <TouchableOpacity 
+                style={[
+                  styles.addTimeToLocationButton,
+                  locationHasTimeConstraint && { backgroundColor: '#e1f0fd', borderColor: '#3498db' }
+                ]}
+                onPress={() => setLocationHasTimeConstraint(!locationHasTimeConstraint)}
+              >
+                <View style={[
+                  styles.addTimeIconWrapper,
+                  locationHasTimeConstraint && { backgroundColor: '#2980b9' }
+                ]}>
                   <Ionicons name="time-outline" size={18} color="#fff" />
                 </View>
-                <Text style={styles.addTimeToLocationText}>Zaman koşulu ekle</Text>
+                <Text style={[
+                  styles.addTimeToLocationText,
+                  locationHasTimeConstraint && { color: '#2980b9', fontWeight: '600' }
+                ]}>
+                  {locationHasTimeConstraint ? 'Zaman koşulu eklendi' : 'Zaman koşulu ekle'}
+                </Text>
               </TouchableOpacity>
+              
+              {/* Eğer zaman koşulu eklenirse, tarih seçim bölümünü göster */}
+              {locationHasTimeConstraint && (
+                <View style={styles.timeConstraintContainer}>
+                  <Text style={styles.timeConstraintLabel}>Kapsül bu tarihten sonra geçersiz olacak:</Text>
+                  <View style={styles.dateDisplayContainer}>
+                    <View style={styles.dateIconWrapper}>
+                      <Ionicons name="calendar-outline" size={22} color="#fff" />
+                    </View>
+                    <Text style={styles.dateDisplayText}>
+                      {openDate ? format(openDate, 'd MMMM yyyy', { locale: tr }) : 'Tarih seçilmedi'}
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.datePickerButton}
+                      onPress={handleShowDatePicker}
+                    >
+                      <Text style={styles.datePickerButtonText}>Değiştir</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#3498db" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -383,37 +1160,100 @@ const CapsuleModal = ({ visible, onClose }) => {
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Kim Açabilsin?</Text>
           <View style={styles.recipientOptionsContainer}>
-            <TouchableOpacity style={[styles.recipientOption, styles.recipientOptionActive]}>
-              <View style={[styles.recipientIconWrapper, styles.recipientIconWrapperActive]}>
-                <Ionicons name="person-outline" size={22} color="#fff" />
+            <TouchableOpacity 
+              style={[styles.recipientOption, recipientType === RECIPIENT_TYPES.SELF && styles.recipientOptionActive]}
+              onPress={() => setRecipientType(RECIPIENT_TYPES.SELF)}
+            >
+              <View style={[styles.recipientIconWrapper, recipientType === RECIPIENT_TYPES.SELF && styles.recipientIconWrapperActive]}>
+                <Ionicons name="person-outline" size={22} color={recipientType === RECIPIENT_TYPES.SELF ? "#fff" : "#333"} />
               </View>
-              <Text style={[styles.recipientText, styles.recipientTextActive]}>Sadece Ben</Text>
+              <Text style={[styles.recipientText, recipientType === RECIPIENT_TYPES.SELF && styles.recipientTextActive]}>Sadece Ben</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.recipientOption}>
-              <View style={styles.recipientIconWrapper}>
-                <Ionicons name="people-outline" size={22} color="#3498db" />
+            <TouchableOpacity 
+              style={[styles.recipientOption, recipientType === RECIPIENT_TYPES.SPECIFIC && styles.recipientOptionActive]}
+              onPress={() => {
+                setRecipientType(RECIPIENT_TYPES.SPECIFIC);
+                setShowRecipientSelector(true);
+              }}
+            >
+              <View style={[styles.recipientIconWrapper, recipientType === RECIPIENT_TYPES.SPECIFIC && styles.recipientIconWrapperActive]}>
+                <Ionicons name="people-outline" size={22} color={recipientType === RECIPIENT_TYPES.SPECIFIC ? "#fff" : "#333"} />
               </View>
-              <Text style={styles.recipientText}>Belirli Kişiler</Text>
+              <Text style={[styles.recipientText, recipientType === RECIPIENT_TYPES.SPECIFIC && styles.recipientTextActive]}>Belirli Kişiler</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.recipientOption}>
-              <View style={styles.recipientIconWrapper}>
-                <Ionicons name="earth-outline" size={22} color="#3498db" />
+            <TouchableOpacity 
+              style={[styles.recipientOption, recipientType === RECIPIENT_TYPES.PUBLIC && styles.recipientOptionActive]}
+              onPress={() => setRecipientType(RECIPIENT_TYPES.PUBLIC)}
+            >
+              <View style={[styles.recipientIconWrapper, recipientType === RECIPIENT_TYPES.PUBLIC && styles.recipientIconWrapperActive]}>
+                <Ionicons name="earth-outline" size={22} color={recipientType === RECIPIENT_TYPES.PUBLIC ? "#fff" : "#333"} />
               </View>
-              <Text style={styles.recipientText}>Herkes</Text>
+              <Text style={[styles.recipientText, recipientType === RECIPIENT_TYPES.PUBLIC && styles.recipientTextActive]}>Herkes</Text>
             </TouchableOpacity>
           </View>
+          
+          {/* Seçilen kişileri göster */}
+          {recipientType === RECIPIENT_TYPES.SPECIFIC && specificRecipients.length > 0 && (
+            <View style={styles.selectedRecipientsContainer}>
+              <Text style={styles.selectedRecipientsTitle}>
+                Seçilen Kişiler ({specificRecipients.length})
+              </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.selectedRecipientsScroll}
+              >
+                {specificRecipients.map((recipient) => (
+                  <View key={recipient.id} style={styles.recipientChip}>
+                    {recipient.avatar ? (
+                      <Image source={{ uri: recipient.avatar }} style={styles.recipientAvatar} />
+                    ) : (
+                      <View style={styles.recipientLetterAvatar}>
+                        <Text style={styles.recipientLetterText}>
+                          {recipient.name?.charAt(0).toUpperCase() || '?'}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.recipientChipName}>{recipient.name}</Text>
+                  </View>
+                ))}
+                <TouchableOpacity 
+                  style={styles.editRecipientsButton}
+                  onPress={() => setShowRecipientSelector(true)}
+                >
+                  <Ionicons name="pencil" size={16} color="#333" />
+                  <Text style={styles.editRecipientsText}>Düzenle</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
         </View>
         
         {/* İşlem butonları */}
         <View style={styles.formActions}>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setCapsuleType(null)}>
+          <TouchableOpacity 
+            style={styles.cancelButton} 
+            onPress={() => setCapsuleType(null)}
+            disabled={isSubmitting || resultMessage}
+          >
             <Text style={styles.cancelButtonText}>Vazgeç</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.createButton}>
+          <TouchableOpacity 
+            style={[
+              styles.createButton, 
+              (isSubmitting || resultMessage) && styles.createButtonDisabled
+            ]}
+            onPress={handleCreateCapsule}
+            disabled={isSubmitting || resultMessage}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
             <Text style={styles.createButtonText}>Kapsülü Oluştur</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -422,70 +1262,435 @@ const CapsuleModal = ({ visible, onClose }) => {
   
   // Kapsüllerim Tab İçeriği
   const renderMyCapsules = () => {
+    // Sonuç overlay'ini oluşturalım (aynı formatı kullanabiliriz)
+    const renderResultMessage = () => {
+      if (!resultMessage) return null;
+      
+      return (
+        <View style={[
+          styles.resultOverlay,
+          resultType === 'success' ? styles.successOverlay : styles.errorOverlay
+        ]}>
+          <View style={styles.resultIconContainer}>
+            <Ionicons 
+              name={resultType === 'success' ? 'checkmark-circle' : 'close-circle'} 
+              size={60} 
+              color="#fff" 
+            />
+          </View>
+          
+          <Text style={styles.resultMessage}>
+            {resultType === 'success' ? 'Başarılı!' : 'Hata!'}
+          </Text>
+          
+          <Text style={styles.resultMessage}>{resultMessage}</Text>
+          
+          {resultType === 'error' && (
+            <TouchableOpacity 
+              style={styles.resultButton}
+              onPress={() => {
+                setResultMessage(null);
+                setResultType(null);
+              }}
+            >
+              <Text style={styles.resultButtonText}>Tamam</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    };
+
     return (
       <View style={styles.myCapsuleContainer}>
         <Text style={styles.myCapsuleTitle}>Kapsüllerim</Text>
         
         {/* Filtreleme alanı */}
         <View style={styles.filterContainer}>
-          <TouchableOpacity style={[styles.filterButton, styles.activeFilterButton]}>
-            <Text style={styles.activeFilterText}>Tümü</Text>
+          <TouchableOpacity 
+            style={[styles.filterButton, capsuleFilter === 'all' && styles.activeFilterButton]}
+            onPress={() => setCapsuleFilter('all')}
+          >
+            <Text style={capsuleFilter === 'all' ? styles.activeFilterText : styles.filterText}>
+              Tümü
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Bekleyenler</Text>
+          <TouchableOpacity 
+            style={[styles.filterButton, capsuleFilter === 'pending' && styles.activeFilterButton]}
+            onPress={() => setCapsuleFilter('pending')}
+          >
+            <Text style={capsuleFilter === 'pending' ? styles.activeFilterText : styles.filterText}>
+              Bekleyenler
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Açılmış</Text>
+          <TouchableOpacity 
+            style={[styles.filterButton, capsuleFilter === 'opened' && styles.activeFilterButton]}
+            onPress={() => setCapsuleFilter('opened')}
+          >
+            <Text style={capsuleFilter === 'opened' ? styles.activeFilterText : styles.filterText}>
+              Açılmış
+            </Text>
           </TouchableOpacity>
         </View>
         
-        {/* Boş durum mesajı */}
+        {/* Sonuç mesajını göster */}
+        {renderResultMessage()}
+        
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3498db" />
+            <Text style={styles.loadingText}>Kapsüller yükleniyor...</Text>
+          </View>
+        ) : capsules.length === 0 ? (
         <View style={styles.emptyCapsuleContainer}>
-          <LottieView
-            source={require('../../assets/animations/bottle.json')}
-            autoPlay
-            loop
-            style={styles.emptyAnimation}
-          />
-          <Text style={styles.emptyTitle}>Henüz Kapsülün Yok</Text>
-          <Text style={styles.emptySubtitle}>İlk kapsülünü oluşturmak için "Yeni Kapsül" sekmesine geç</Text>
+            <Ionicons name="hourglass-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyTitle}>
+              {capsuleFilter === 'all' 
+                ? 'Henüz Kapsülün Yok' 
+                : capsuleFilter === 'pending' 
+                  ? 'Bekleyen Kapsülün Yok' 
+                  : 'Açılmış Kapsülün Yok'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {capsuleFilter === 'all' 
+                ? 'İlk kapsülünü oluşturmak için "Yeni Kapsül" sekmesine geç' 
+                : capsuleFilter === 'pending' 
+                  ? 'Bekleyen kapsül oluşturmak için "Yeni Kapsül" sekmesine geç' 
+                  : 'Henüz kapsül açılmamış. Koşulları sağlayan kapsüller burada görünecek'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.capsulesList}>
+            {capsules.map(capsule => (
+              <TouchableOpacity 
+                key={capsule.id} 
+                style={styles.capsuleCard}
+                onPress={() => handleViewCapsule(capsule)}
+              >
+                <View style={styles.capsuleCardHeader}>
+                  <View style={[
+                    styles.capsuleTypeIndicator, 
+                    capsule.type === 'location' ? styles.locationIndicator : styles.timeIndicator
+                  ]}>
+                    <Ionicons 
+                      name={capsule.type === 'location' ? 'location' : 'time'} 
+                      size={16} 
+                      color="#fff" 
+                    />
         </View>
+                  <Text style={styles.capsuleCardTitle}>{capsule.title}</Text>
+                  
+                  <View style={[
+                    styles.capsuleStatusBadge, 
+                    capsule.status === 'opened' ? styles.openedBadge : styles.pendingBadge
+                  ]}>
+                    <Text style={[
+                      styles.capsuleStatusText,
+                      capsule.status === 'opened' ? styles.openedStatusText : styles.pendingStatusText
+                    ]}>
+                      {capsule.status === 'opened' ? 'Açıldı' : 'Bekliyor'}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.capsuleCardBody}>
+                  {/* İçerik Previews */}
+                  <View style={styles.contentPreviewRow}>
+                    {capsule.contents && capsule.contents.length > 0 ? (
+                      <View style={styles.contentTypeIcons}>
+                        {capsule.contents.slice(0, 4).map((content, index) => (
+                          <View 
+                            key={index} 
+                            style={[
+                              styles.miniContentTypeIndicator,
+                              content.type === 'text' ? { backgroundColor: '#3498db' } :
+                              content.type === 'image' ? { backgroundColor: '#2ecc71' } :
+                              content.type === 'video' ? { backgroundColor: '#9b59b6' } :
+                              { backgroundColor: '#e74c3c' }
+                            ]}
+                          >
+                            <Ionicons 
+                              name={
+                                content.type === 'text' ? 'chatbubble-outline' :
+                                content.type === 'image' ? 'image-outline' :
+                                content.type === 'video' ? 'videocam-outline' :
+                                'musical-note-outline'
+                              } 
+                              size={12} 
+                              color="#fff" 
+                            />
+                          </View>
+                        ))}
+                        {capsule.contents.length > 4 && (
+                          <View style={styles.extraContentIndicator}>
+                            <Text style={styles.extraContentText}>+{capsule.contents.length - 4}</Text>
+                          </View>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.noContentText}>İçerik bilgisi yok</Text>
+                    )}
+                  </View>
+                  
+                  {/* Kapsül Bilgileri */}
+                  <View style={styles.capsuleDetailsRow}>
+                    <View style={styles.capsuleDetailItem}>
+                      <Ionicons 
+                        name={capsule.type === 'location' ? 'navigate-outline' : 'alarm-outline'} 
+                        size={16} 
+                        color="#666" 
+                      />
+                      <Text style={styles.capsuleDetailText}>
+                        {capsule.type === 'location' 
+                          ? 'Konum kapsülü' 
+                          : capsule.openDate && capsule.openDate.toDate
+                            ? `Açılma: ${format(capsule.openDate.toDate(), 'd MMM yyyy', { locale: tr })}`
+                            : 'Açılma tarihi yok'}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.capsuleDetailItem}>
+                      <Ionicons 
+                        name={
+                          capsule.recipients === 'self' 
+                            ? 'person-outline' 
+                            : capsule.recipients === 'public' 
+                              ? 'earth-outline' 
+                              : 'people-outline'
+                        } 
+                        size={16} 
+                        color="#666" 
+                      />
+                      <Text style={styles.capsuleDetailText}>
+                        {capsule.recipients === 'self' 
+                          ? 'Sadece ben' 
+                          : capsule.recipients === 'public' 
+                            ? 'Herkes' 
+                            : capsule.recipientDetails && capsule.recipientDetails.length > 0
+                              ? `${capsule.recipientDetails.length} kişi`
+                              : 'Belirli kişiler'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  {/* Oluşturulma tarihi */}
+                  <View style={styles.capsuleInfoRow}>
+                    <Ionicons name="calendar-outline" size={16} color="#666" />
+                    <Text style={styles.capsuleInfoText}>
+                      {capsule.creationDate && capsule.creationDate.toDate
+                        ? `Oluşturulma: ${format(capsule.creationDate.toDate(), 'd MMM yyyy', { locale: tr })}`
+                        : 'Oluşturulma tarihi bilinmiyor'}
+                    </Text>
+                  </View>
+                  
+                  {/* Belirli kişilerin listesi gösterilsin (eğer varsa) */}
+                  {capsule.recipients !== 'self' && capsule.recipients !== 'public' && 
+                   capsule.recipientDetails && capsule.recipientDetails.length > 0 && (
+                    <View style={styles.recipientsPreviewContainer}>
+                      <Text style={styles.recipientsPreviewLabel}>Alıcılar:</Text>
+                      <View style={styles.recipientsChipContainer}>
+                        {capsule.recipientDetails.slice(0, 3).map((recipient, index) => (
+                          <View key={index} style={styles.miniRecipientChip}>
+                            {recipient.avatar ? (
+                              <Image source={{ uri: recipient.avatar }} style={styles.miniRecipientAvatar} />
+                            ) : (
+                              <View style={styles.miniRecipientLetterAvatar}>
+                                <Text style={styles.miniRecipientLetterText}>
+                                  {recipient.name?.charAt(0).toUpperCase() || '?'}
+                                </Text>
+                              </View>
+                            )}
+                            <Text style={styles.miniRecipientName} numberOfLines={1}>
+                              {recipient.name}
+                            </Text>
+                          </View>
+                        ))}
+                        {capsule.recipientDetails.length > 3 && (
+                          <View style={styles.miniRecipientMore}>
+                            <Text style={styles.miniRecipientMoreText}>+{capsule.recipientDetails.length - 3}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </View>
+                
+                {/* Kapsül kontrolleri (eğer bekleyen kapsül ise) */}
+                {capsule.status === 'pending' && (
+                  <View style={styles.capsuleActions}>
+                    <TouchableOpacity 
+                      style={styles.capsuleActionButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCapsule(capsule);
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+                      <Text style={[styles.capsuleActionText, { color: '#e74c3c' }]}>Sil</Text>
+                    </TouchableOpacity>
+                    
+                    {capsule.type === 'time' && (
+                      <View style={styles.timeRemainingBadge}>
+                        <Ionicons name="time-outline" size={14} color="#3498db" />
+                        <Text style={styles.timeRemainingText}>
+                          {formatRemainingTime(capsule.openDate?.toDate())}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
     );
+  };
+  
+  // Kalan süreyi formatla
+  const formatRemainingTime = (date) => {
+    if (!date) return 'Tarih yok';
+    
+    const now = new Date();
+    const diffMs = date - now;
+    
+    if (diffMs <= 0) return 'Açılma zamanı geldi';
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 365) {
+      const years = Math.floor(diffDays / 365);
+      return `${years} yıl kaldı`;
+    } else if (diffDays > 30) {
+      const months = Math.floor(diffDays / 30);
+      return `${months} ay kaldı`;
+    } else if (diffDays > 0) {
+      return `${diffDays} gün kaldı`;
+    } else {
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      return diffHours > 0 ? `${diffHours} saat kaldı` : 'Çok az kaldı';
+    }
+  };
+  
+  // Kapsül detaylarını görüntüle
+  const handleViewCapsule = (capsule) => {
+    if (capsule.status === 'opened') {
+      // Kapsül açılmışsa, içeriğini göster
+      // Bu kısım için ayrı bir modal veya ekran gerekebilir
+      Alert.alert(
+        `${capsule.title}`,
+        `Bu kapsül açıldı ve içeriği görüntülenebilir.\n\nİçerik: ${capsule.contents?.length || 0} öğe\n`,
+        [{ text: 'Tamam' }]
+      );
+    } else {
+      // Kapsül henüz açılmamışsa, bilgilerini göster
+      const openInfo = capsule.type === 'time'
+        ? `Bu kapsül ${capsule.openDate && capsule.openDate.toDate 
+            ? format(capsule.openDate.toDate(), 'd MMMM yyyy', { locale: tr }) 
+            : 'belirtilen tarihte'} açılacak.`
+        : `Bu kapsül belirtilen konuma ulaşıldığında açılabilecek. Konum yarıçapı: ${capsule.location?.radius || 100}m.`;
+      
+      const recipientsInfo = capsule.recipients === 'self' 
+        ? 'Bu kapsülü sadece siz açabilirsiniz.' 
+        : capsule.recipients === 'public' 
+          ? 'Bu kapsülü herkes açabilir. Koşullar sağlandığında kapsül herkese açık olacak.'
+          : capsule.recipientDetails && capsule.recipientDetails.length > 0
+            ? `Bu kapsülü belirli kişiler açabilir (${capsule.recipientDetails.length} kişi): ${capsule.recipientDetails.slice(0, 3).map(r => r.name).join(', ')}${capsule.recipientDetails.length > 3 ? ` ve ${capsule.recipientDetails.length - 3} kişi daha...` : ''}`
+            : 'Bu kapsülü belirlediğiniz kişiler açabilir.';
+            
+      const notificationInfo = 'Koşullar sağlandığında alıcılar kapsülün açılabilir olduğuna dair bildirim alacaklar.';
+      
+      Alert.alert(
+        capsule.title,
+        `${openInfo}\n\n${recipientsInfo}\n\n${notificationInfo}\n\nİçerik: ${capsule.contents?.length || 0} öğe\nOluşturulma: ${
+          capsule.creationDate && capsule.creationDate.toDate 
+            ? format(capsule.creationDate.toDate(), 'd MMMM yyyy', { locale: tr }) 
+            : 'Tarih bilinmiyor'
+        }`,
+        [{ text: 'Tamam' }]
+      );
+    }
+  };
+  
+  // Kapsül silme
+  const handleDeleteCapsule = (capsule) => {
+    Alert.alert(
+      'Kapsülü Sil',
+      `"${capsule.title}" kapsülünü silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      [
+        { 
+          text: 'İptal', 
+          style: 'cancel' 
+        },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              await capsuleService.deleteCapsule(capsule.id);
+              
+              // Toast yerine durum mesajını kullanalım
+              setResultMessage(`"${capsule.title}" kapsülü başarıyla silindi.`);
+              setResultType('success');
+              
+              // 2 saniye sonra kapsülleri yenile ve mesajı kaldır
+              setTimeout(() => {
+                setResultMessage(null);
+                setResultType(null);
+                // Kapsülleri yeniden yükle
+                fetchUserCapsules();
+              }, 2000);
+            } catch (error) {
+              console.error('Kapsül silme hatası:', error);
+              
+              // Toast yerine durum mesajını kullanalım
+              setResultMessage('Kapsül silinemedi. Lütfen tekrar deneyin.');
+              setResultType('error');
+              
+              // 3 saniye sonra hata mesajını kaldır
+              setTimeout(() => {
+                setResultMessage(null);
+                setResultType(null);
+              }, 3000);
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Tab içeriğini render etme
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case TABS.CREATE:
+        return renderCreateTab();
+      case TABS.MY_CAPSULES:
+        return renderMyCapsules();
+      default:
+        return null;
+    }
   };
 
   return (
     <Modal
       transparent={true}
-      visible={modalVisible}
-      onRequestClose={closeModal}
-      animationType="none"
+      visible={visible}
+      onRequestClose={onClose}
+      animationType="slide"
     >
-      <Animated.View 
-        style={[
-          styles.modalOverlay,
-          {
-            opacity: backdropOpacity
-          }
-        ]}
-      >
+      <View style={styles.modalOverlay}>
         <TouchableOpacity 
           style={styles.modalOverlayTouch}
           activeOpacity={1}
-          onPress={closeModal}
+          onPress={onClose}
         />
         
-        <Animated.View 
-          style={[
-            styles.modalContainer,
-            {
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
+        <View style={styles.modalContainer}>
           {/* Modal Handle */}
           <View style={styles.modalHandleContainer}>
-            <TouchableOpacity onPress={closeModal}>
+            <TouchableOpacity onPress={onClose}>
               <View style={styles.modalHandle} />
             </TouchableOpacity>
           </View>
@@ -520,654 +1725,199 @@ const CapsuleModal = ({ visible, onClose }) => {
           >
             {renderTabContent()}
           </ScrollView>
-        </Animated.View>
-      </Animated.View>
+        </View>
+      </View>
+      
+      {/* Metin Girişi Modalı */}
+      <Modal
+        visible={showTextInputModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTextInputModal(false)}
+      >
+        <View style={styles.textInputModalOverlay}>
+          <View style={styles.textInputModalContainer}>
+            <View style={styles.textInputModalHeader}>
+              <Text style={styles.textInputModalTitle}>Metin Mesajı Ekle</Text>
+              <TouchableOpacity
+                style={styles.textInputModalCloseButton}
+                onPress={() => setShowTextInputModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput
+              style={styles.textInputModalInput}
+              placeholder="Mesajınızı buraya yazın..."
+              placeholderTextColor="#999"
+              multiline
+              value={textInputContent}
+              onChangeText={setTextInputContent}
+              autoFocus
+            />
+            
+            <View style={styles.textInputModalActions}>
+              <TouchableOpacity
+                style={styles.textInputModalCancelButton}
+                onPress={() => setShowTextInputModal(false)}
+              >
+                <Text style={styles.textInputModalCancelText}>İptal</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.textInputModalConfirmButton}
+                onPress={handleConfirmTextInput}
+              >
+                <Text style={styles.textInputModalConfirmText}>Ekle</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+    </Modal>
+      
+      {/* Konum Seçme Modalı */}
+      <Modal
+        visible={showLocationPicker}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowLocationPicker(false)}
+      >
+        <SafeAreaView style={styles.locationPickerContainer}>
+          <View style={styles.locationPickerHeader}>
+            <TouchableOpacity
+              style={styles.locationPickerBackButton}
+              onPress={() => setShowLocationPicker(false)}
+            >
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+            
+            <Text style={styles.locationPickerTitle}>Konum Seç</Text>
+            
+            <TouchableOpacity
+              style={styles.locationPickerConfirmButton}
+              onPress={handleConfirmLocation}
+              disabled={!selectedLocation}
+            >
+              <Text style={[
+                styles.locationPickerConfirmText,
+                !selectedLocation && { color: '#ccc' }
+              ]}>
+                Tamam
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {hasLocationPermission ? (
+            <View style={styles.mapContainer}>
+              <MapView
+                style={styles.mapView}
+                initialRegion={userLocation ? {
+                  latitude: userLocation.latitude,
+                  longitude: userLocation.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                } : {
+                  latitude: 41.0082, // İstanbul
+                  longitude: 28.9784,
+                  latitudeDelta: 0.1,
+                  longitudeDelta: 0.1,
+                }}
+                onPress={(e) => setSelectedLocation(e.nativeEvent.coordinate)}
+              >
+                {selectedLocation && (
+                  <>
+                    <Marker
+                      coordinate={selectedLocation}
+                      draggable
+                      onDragEnd={(e) => setSelectedLocation(e.nativeEvent.coordinate)}
+                    />
+                    <Circle
+                      center={selectedLocation}
+                      radius={locationRadius}
+                      fillColor="rgba(52, 152, 219, 0.2)"
+                      strokeColor="rgba(52, 152, 219, 0.5)"
+                    />
+                  </>
+                )}
+                
+                {userLocation && (
+                  <Marker
+                    coordinate={userLocation}
+                    pinColor="blue"
+                    title="Şu anki konumunuz"
+                  />
+                )}
+              </MapView>
+            </View>
+          ) : (
+            <View style={styles.locationPermissionContainer}>
+              <Ionicons name="location-off" size={64} color="#e74c3c" />
+              <Text style={styles.locationPermissionTitle}>Konum İzni Gerekli</Text>
+              <Text style={styles.locationPermissionText}>
+                Konum kapsülü oluşturmak için cihazınızın konum bilgisine erişim izni vermeniz gerekmektedir.
+              </Text>
+              <TouchableOpacity
+                style={styles.locationPermissionButton}
+                onPress={checkPermissions}
+              >
+                <Text style={styles.locationPermissionButtonText}>İzin Ver</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {hasLocationPermission && (
+            <View style={styles.locationPickerControls}>
+              <Text style={styles.locationPickerHelpText}>
+                {selectedLocation ? 'Konum seçildi. İsterseniz işaretçiyi sürükleyebilirsiniz.' : 'Haritaya dokunarak konum seçin.'}
+              </Text>
+              
+              {userLocation && !selectedLocation && (
+                <TouchableOpacity
+                  style={styles.useCurrentLocationButton}
+                  onPress={() => setSelectedLocation(userLocation)}
+                >
+                  <Ionicons name="locate" size={20} color="#fff" />
+                  <Text style={styles.useCurrentLocationText}>Mevcut Konumumu Kullan</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
+      
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <Modal
+          visible={showDatePicker}
+          transparent={true}
+          animationType="slide"
+        >
+          <View style={styles.datePickerModalOverlay}>
+            <CustomDatePicker
+              selectedDate={openDate || new Date()}
+              onDateChange={(date) => setOpenDate(date)}
+              onConfirm={(date) => {
+                setOpenDate(date);
+                setShowDatePicker(false);
+              }}
+              onCancel={() => setShowDatePicker(false)}
+            />
+          </View>
+        </Modal>
+      )}
+      
+      <RecipientSelector
+        visible={showRecipientSelector}
+        onClose={() => setShowRecipientSelector(false)}
+        onSelectRecipients={(recipients) => {
+          setSpecificRecipients(recipients);
+          setShowRecipientSelector(false);
+        }}
+        initialRecipients={specificRecipients}
+      />
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalOverlayTouch: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  modalContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '80%',
-    width: '100%',
-  },
-  modalHandleContainer: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    marginBottom: 16,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  activeTabButton: {
-    borderBottomWidth: 0,
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#888',
-  },
-  activeTabText: {
-    color: '#3498db',
-    fontWeight: '600',
-  },
-  activeTabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 30,
-    right: 30,
-    height: 3,
-    backgroundColor: '#3498db',
-    borderRadius: 1.5,
-  },
-  scrollContentContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-  },
-  
-  // Type Selection Styles
-  typeSelectionContainer: {
-    paddingBottom: 40,
-  },
-  welcomeContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  bottleAnimationContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  bottleAnimation: {
-    width: 120,
-    height: 120,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  welcomeSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    lineHeight: 22,
-  },
-  securityContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f0fff4',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 10,
-    marginVertical: 20,
-    borderWidth: 1,
-    borderColor: '#d4f5e2',
-    alignItems: 'center',
-  },
-  securityIcon: {
-    marginRight: 10,
-  },
-  securityText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#2f4f4f',
-    lineHeight: 20,
-  },
-  examplesTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    marginHorizontal: 15,
-  },
-  examplesContainer: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    marginHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  exampleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  exampleIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  exampleTextContainer: {
-    flex: 1,
-  },
-  exampleTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#444',
-    marginBottom: 2,
-  },
-  exampleText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  capsuleTypeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    marginHorizontal: 15,
-  },
-  capsuleTypeCards: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-  },
-  capsuleTypeCard: {
-    width: (width - 80) / 2,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  capsuleTypeIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  capsuleTypeDescription: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-  },
-  capsuleTypeCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  // Form Styles
-  capsuleFormContainer: {
-    position: 'relative',
-    paddingTop: 10,
-    paddingBottom: 40,
-  },
-  formHeaderContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    paddingHorizontal: 4,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    flex: 1,
-  },
-  placeholderView: {
-    width: 32,
-    height: 32,
-  },
-  formSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  contentTypeScroll: {
-    marginBottom: 5,
-  },
-  contentTypeCard: {
-    width: 150,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  contentTypeIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  contentTypeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  contentTypeSubtitle: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 10,
-  },
-  addButtonContainer: {
-    alignItems: 'flex-end',
-  },
-  emptyContentPreview: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#ddd',
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyContentText: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 10,
-  },
-  timeSelectionContainer: {
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  timeOptionsLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
-  },
-  quickTimeOptions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  quickTimeButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  quickTimeButtonActive: {
-    backgroundColor: '#3498db',
-    borderColor: '#2980b9',
-  },
-  quickTimeText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  quickTimeTextActive: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  dateDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  dateIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#3498db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  dateDisplayText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  datePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f7fd',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  datePickerButtonText: {
-    fontSize: 14,
-    color: '#3498db',
-    fontWeight: '500',
-    marginRight: 4,
-  },
-  locationSelectionContainer: {
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  mapPreviewPlaceholder: {
-    backgroundColor: '#eef2f5',
-    borderRadius: 16,
-    height: 160,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e0e7ee',
-    overflow: 'hidden',
-  },
-  mapIconWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#3498db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  mapPreviewText: {
-    fontSize: 15,
-    color: '#666',
-    marginTop: 8,
-  },
-  radiusLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
-  },
-  radiusOptions: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  radiusOption: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginHorizontal: 3,
-    borderRadius: 8,
-  },
-  radiusOptionActive: {
-    backgroundColor: '#3498db',
-    borderColor: '#2980b9',
-  },
-  radiusText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-  },
-  radiusTextActive: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  addTimeToLocationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f7fd',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#d5e8f9',
-  },
-  addTimeIconWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#3498db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  addTimeToLocationText: {
-    fontSize: 14,
-    color: '#3498db',
-    fontWeight: '500',
-  },
-  recipientOptionsContainer: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  recipientOption: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    marginHorizontal: 5,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  recipientOptionActive: {
-    backgroundColor: '#f0f7fd',
-    borderColor: '#3498db',
-  },
-  recipientIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f0f7fd',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#d5e8f9',
-  },
-  recipientIconWrapperActive: {
-    backgroundColor: '#3498db',
-    borderColor: '#2980b9',
-  },
-  recipientText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  recipientTextActive: {
-    color: '#3498db',
-    fontWeight: '600',
-  },
-  formActions: {
-    flexDirection: 'row',
-    marginTop: 30,
-    marginBottom: 10,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginRight: 8,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '500',
-  },
-  createButton: {
-    flex: 2,
-    backgroundColor: '#3498db',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginLeft: 8,
-    alignItems: 'center',
-  },
-  createButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  // My Capsules Styles
-  myCapsuleContainer: {
-    paddingBottom: 40,
-  },
-  myCapsuleTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  activeFilterButton: {
-    backgroundColor: '#3498db',
-  },
-  filterText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  activeFilterText: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  emptyCapsuleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 30,
-    paddingBottom: 30,
-  },
-  emptyAnimation: {
-    width: 120,
-    height: 120,
-    opacity: 0.7,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    paddingHorizontal: 30,
-  },
-});
 
 export default CapsuleModal; 

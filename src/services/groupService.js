@@ -1,6 +1,5 @@
-import { collection, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, query, where, getDocs, arrayUnion, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, serverTimestamp, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import { getCurrentUserUid } from './friendFunctions';
 
 // Grup oluştur
 export const createGroup = async (groupData, creatorId) => {

@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { createGroup } from '../services/groupService';
+import { translate } from '../i18n/i18n';
 
 // Grup simgeleri seçenekleri
 const ICON_OPTIONS = [
@@ -37,6 +40,8 @@ const COLOR_OPTIONS = [
   '#607D8B', // Gri Mavi
 ];
 
+const { width } = Dimensions.get('window');
+
 const CreateGroupScreen = ({ navigation, route }) => {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -50,7 +55,7 @@ const CreateGroupScreen = ({ navigation, route }) => {
   const handleCreateGroup = async () => {
     // Doğrulama
     if (!groupName.trim()) {
-      Alert.alert('Hata', 'Lütfen grup adı girin');
+      Alert.alert('Hata', translate('error_empty_group_name'));
       return;
     }
     
@@ -60,7 +65,7 @@ const CreateGroupScreen = ({ navigation, route }) => {
       // Kullanıcı ID'sini al
       const uid = await getCurrentUserUid();
       if (!uid) {
-        Alert.alert('Hata', 'Kullanıcı bilgileriniz alınamadı');
+        Alert.alert('Hata', translate('error_user_data'));
         setLoading(false);
         return;
       }
@@ -78,10 +83,10 @@ const CreateGroupScreen = ({ navigation, route }) => {
       
       // Başarılı mesajı
       Alert.alert(
-        'Başarılı', 
-        'Grup başarıyla oluşturuldu',
+        translate('success'),
+        translate('success_group_created'),
         [{ 
-          text: 'Tamam', 
+          text: translate('success_button'), 
           onPress: () => {
             // Navigation geçmişini temizleyip ana sayfaya dönüş
             navigation.reset({
@@ -92,8 +97,8 @@ const CreateGroupScreen = ({ navigation, route }) => {
         }]
       );
     } catch (error) {
-      console.error('Grup oluşturulurken hata:', error);
-      Alert.alert('Hata', 'Grup oluşturulurken bir sorun oluştu');
+      console.error(translate('error_creating_group'), error);
+      Alert.alert('Hata', translate('error_creating_group'));
     } finally {
       setLoading(false);
     }
@@ -105,15 +110,17 @@ const CreateGroupScreen = ({ navigation, route }) => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
     >
+      <StatusBar barStyle="light-content" backgroundColor="#1A1A25" />
+      
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Yeni Grup Oluştur</Text>
+        <Text style={styles.headerTitle}>{translate('create_group_title')}</Text>
         <TouchableOpacity 
           style={[
             styles.createButton,
@@ -122,18 +129,18 @@ const CreateGroupScreen = ({ navigation, route }) => {
           onPress={handleCreateGroup}
           disabled={!groupName.trim() || loading}
         >
-          <Text style={styles.createButtonText}>Oluştur</Text>
+          <Text style={styles.createButtonText}>{translate('create_group_button')}</Text>
         </TouchableOpacity>
       </View>
       
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Grup Ön İzleme */}
         <View style={styles.previewContainer}>
           <View style={[styles.groupIconPreview, { backgroundColor: selectedColor }]}>
-            <FontAwesome5 name={selectedIcon} size={28} color="#FFFFFF" />
+            <FontAwesome5 name={selectedIcon} size={30} color="#FFFFFF" />
           </View>
           <Text style={styles.previewName}>
-            {groupName || 'Grup Adı'}
+            {groupName || translate('create_group_preview_name')}
           </Text>
           {groupDescription ? (
             <Text style={styles.previewDescription}>{groupDescription}</Text>
@@ -144,36 +151,40 @@ const CreateGroupScreen = ({ navigation, route }) => {
         <View style={styles.formContainer}>
           {/* Grup Adı */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Grup Adı</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Örn: Yakın Arkadaşlar"
-              placeholderTextColor="#9797A9"
-              value={groupName}
-              onChangeText={setGroupName}
-              maxLength={50}
-            />
+            <Text style={styles.inputLabel}>{translate('create_group_name_label')}</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={translate('create_group_name_placeholder')}
+                placeholderTextColor="#9797A9"
+                value={groupName}
+                onChangeText={setGroupName}
+                maxLength={50}
+              />
+            </View>
           </View>
           
           {/* Grup Açıklaması */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Açıklama (İsteğe Bağlı)</Text>
-            <TextInput
-              style={[styles.textInput, styles.textArea]}
-              placeholder="Grubunuz hakkında kısa bir açıklama..."
-              placeholderTextColor="#9797A9"
-              value={groupDescription}
-              onChangeText={setGroupDescription}
-              multiline={true}
-              numberOfLines={4}
-              textAlignVertical="top"
-              maxLength={200}
-            />
+            <Text style={styles.inputLabel}>{translate('create_group_description_label')}</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                placeholder={translate('create_group_description_placeholder')}
+                placeholderTextColor="#9797A9"
+                value={groupDescription}
+                onChangeText={setGroupDescription}
+                multiline={true}
+                numberOfLines={4}
+                textAlignVertical="top"
+                maxLength={200}
+              />
+            </View>
           </View>
           
           {/* Grup Simgesi */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Grup Simgesi</Text>
+            <Text style={styles.inputLabel}>{translate('create_group_icon_label')}</Text>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
@@ -197,15 +208,15 @@ const CreateGroupScreen = ({ navigation, route }) => {
           
           {/* Grup Rengi */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Grup Rengi</Text>
+            <Text style={styles.inputLabel}>{translate('create_group_color_label')}</Text>
             <View style={styles.colorOptionsContainer}>
               {COLOR_OPTIONS.map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[
                     styles.colorOption,
-                    { backgroundColor: color },
-                    selectedColor === color && styles.selectedColorOption
+                    selectedColor === color && styles.selectedColorOption,
+                    { backgroundColor: color }
                   ]}
                   onPress={() => setSelectedColor(color)}
                 />
@@ -213,12 +224,18 @@ const CreateGroupScreen = ({ navigation, route }) => {
             </View>
           </View>
         </View>
+        
+        {/* Alt boşluk */}
+        <View style={styles.bottomPadding} />
       </ScrollView>
       
       {/* Loading Overlay */}
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={selectedColor} />
+            <Text style={styles.loadingText}>{translate('create_group_loading')}</Text>
+          </View>
         </View>
       )}
     </KeyboardAvoidingView>
@@ -228,20 +245,22 @@ const CreateGroupScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#252636',
+    backgroundColor: '#1A1A25',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#32323E',
+    backgroundColor: '#232333',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 16,
     paddingBottom: 16,
-    elevation: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   backButton: {
     padding: 8,
+    borderRadius: 20,
   },
   headerTitle: {
     color: '#FFFFFF',
@@ -255,9 +274,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#53B4DF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   disabledButton: {
-    backgroundColor: 'rgba(83, 180, 223, 0.5)',
+    backgroundColor: 'rgba(83, 180, 223, 0.4)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   createButtonText: {
     color: '#FFFFFF',
@@ -268,86 +294,142 @@ const styles = StyleSheet.create({
   },
   previewContainer: {
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#32323E',
-    marginBottom: 16,
+    padding: 30,
+    backgroundColor: '#232333',
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   groupIconPreview: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   previewName: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 8,
   },
   previewDescription: {
     color: '#CDCDCD',
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
+    lineHeight: 20,
   },
   formContainer: {
     padding: 16,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   inputLabel: {
     color: '#FFFFFF',
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  inputWrapper: {
+    backgroundColor: '#232333',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   textInput: {
-    backgroundColor: '#32323E',
     color: '#FFFFFF',
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
     fontSize: 16,
+    borderRadius: 12,
   },
   textArea: {
-    minHeight: 100,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    paddingTop: 16,
   },
   iconOptionsContainer: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   iconOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   selectedIconOption: {
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFFFFF',
   },
   colorOptionsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginTop: 5,
   },
   colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     marginRight: 12,
     marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    borderWidth: 0,
   },
   selectedColorOption: {
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFFFFF',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(10, 10, 20, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    backgroundColor: '#232333',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    width: width * 0.7,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  bottomPadding: {
+    height: 40,
   },
 });
 

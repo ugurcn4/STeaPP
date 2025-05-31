@@ -1,109 +1,14 @@
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
-import { rtdb, db } from '../../firebaseConfig';
-import { ref, set, get, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
-import { doc, updateDoc, collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-    shouldCollectPoint,
-    isGPSUsable,
-    evaluateGPSQuality
-} from '../helpers/pathTracking';
 import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
 
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 const BACKGROUND_DRAWING_TASK = 'background-drawing-task';
 
-// Konum bilgilerini almak için yardımcı fonksiyon
-const getLocationInfo = async (latitude, longitude) => {
-    try {
-        const response = await Location.reverseGeocodeAsync({
-            latitude,
-            longitude
-        });
-
-        if (response && response.length > 0) {
-            const address = response[0];
-            return {
-                city: address.city || address.region,
-                district: address.district || address.subregion,
-                street: address.street,
-                country: address.country
-            };
-        }
-        return null;
-    } catch (error) {
-        console.error('Konum bilgisi alma hatası:', error);
-        return null;
-    }
-};
-
-// Konum güncellemesi yapan fonksiyon
-const updateLocation = async (location, userId) => {
-    try {
-        // Global değişkenden paylaşım bilgilerini al
-        const shareInfo = global.shareLocationInfo;
-        if (!shareInfo || !shareInfo.shareId) {
-            console.error('Paylaşım bilgileri bulunamadı');
-            return;
-        }
-
-        const { shareId, friendId } = shareInfo;
-
-        // Konum bilgilerini string'den parse et
-        let locationInfo = null;
-        try {
-            if (shareInfo.locationInfo) {
-                locationInfo = JSON.parse(shareInfo.locationInfo);
-            }
-        } catch (e) {
-            console.error('Konum bilgileri parse edilemedi:', e);
-        }
-
-        // Konum bilgilerini güncelle
-        const normalizedLocation = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude
-        };
-
-        // RTDB'yi güncelle
-        const locationRef = ref(rtdb, `locations/${shareId}`);
-        await set(locationRef, {
-            latitude: normalizedLocation.latitude,
-            longitude: normalizedLocation.longitude,
-            accuracy: location.coords.accuracy || 0,
-            heading: location.coords.heading || 0,
-            speed: location.coords.speed || 0,
-            timestamp: serverTimestamp()
-        });
-
-        // Firestore'u güncelle - locationInfo'yu doğrudan kullanma
-        const shareRef = doc(db, `users/${userId}/shares/${shareId}`);
-        await updateDoc(shareRef, {
-            lastUpdate: serverTimestamp(),
-            location: normalizedLocation
-            // locationInfo alanını güncelleme, bu Promise hatası veriyor
-        });
-
-        // Karşı taraftaki paylaşımı da güncelle
-        const receivedSharesRef = collection(db, `users/${friendId}/receivedShares`);
-        const q = query(receivedSharesRef,
-            where('fromUserId', '==', userId),
-            where('status', '==', 'active')
-        );
-        const querySnapshot = await getDocs(q);
-        querySnapshot.forEach(async (doc) => {
-            await updateDoc(doc.ref, {
-                lastUpdate: serverTimestamp(),
-                location: normalizedLocation
-                // locationInfo alanını güncelleme, bu Promise hatası veriyor
-            });
-        });
-    } catch (error) {
-        console.error('Konum güncelleme hatası:', error);
-    }
-};
 
 // Arka plan konum izlemeyi başlat - iyileştirilmiş versiyon
 export const startBackgroundLocationUpdates = async (userId, isDrawing = false) => {

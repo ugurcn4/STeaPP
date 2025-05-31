@@ -8,21 +8,41 @@ import { store } from './src/redux/store';
 import RootPage from './src/navigations/RootPage';
 import { AppState, Platform, Animated } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { auth } from './firebaseConfig';
+import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { updateOnlineStatus } from './src/services/onlineStatusService';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
 import CustomSplashScreen from './src/components/CustomSplashScreen';
+import * as Notifications from 'expo-notifications';
 
-// Splash ekranının otomatik olarak gizlenmesini engelle
-SplashScreen.preventAutoHideAsync();
+// Expo splash screen tamamen devre dışı bırakılacak, bizim CustomSplashScreen kullanılacak
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Eğer splash screen zaten yüklenmemişse veya gizliyse hata atar, bunu görmezden gelebiliriz
+});
+
+// Bildirim işleyicisini yapılandır
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    priority: Platform.OS === 'android' ? Notifications.AndroidNotificationPriority.MAX : undefined,
+    vibrationPattern: Platform.OS === 'android' ? [0, 250, 250, 250] : undefined,
+  }),
+});
 
 // Global bir değişken ile güncelleme durumunu takip edelim
 global.updateDownloaded = false;
 
 const Stack = createNativeStackNavigator();
 const navigationRef = React.createRef();
+
+// Bildirim navigasyonu için helper fonksiyon
+const navigate = (screen, params) => {
+  navigationRef.current?.navigate(screen, params);
+};
 
 const App = () => {
   const [appState, setAppState] = useState(AppState.currentState);
@@ -51,8 +71,27 @@ const App = () => {
     }
   };
 
-  // Splash screen'i gizle
-  const hideSplashScreen = async () => {
+  // Kullanıcı verilerini ön yükleme için fonksiyon
+  const preloadUserData = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        // Kullanıcıyı kontrol et
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        await getDoc(userDocRef);
+
+        // Ek olarak yüklenecek diğer kritik veriler burada yüklenebilir
+        // Örneğin kullanıcının profil bilgileri, ayarları vb.
+      }
+      return true;
+    } catch (error) {
+      console.error('Kullanıcı verileri ön yüklenemedi:', error);
+      return true; // Hata durumunda da devam et
+    }
+  };
+
+  // CustomSplashScreen'i gizle
+  const hideCustomSplashScreen = async () => {
     if (isAppReady) {
       // Fade-out animasyonu başlat
       Animated.timing(fadeAnim, {
@@ -68,16 +107,14 @@ const App = () => {
             await Updates.reloadAsync();
           } catch (error) {
             console.error('Güncelleme yüklenirken hata:', error);
-            // Güncelleme başarısız olursa, splashscreen'i gizle
-            setTimeout(async () => {
-              await SplashScreen.hideAsync();
-            }, 500); // 0.5 saniye beklet
           }
-        } else {
-          // Güncelleme yoksa normal bir şekilde splashscreen'i gizle
-          setTimeout(async () => {
-            await SplashScreen.hideAsync();
-          }, 500); // 0.5 saniye beklet
+        }
+
+        // Expo'nun varsayılan splash screen'ini de gizle
+        try {
+          await SplashScreen.hideAsync();
+        } catch (error) {
+          console.error('Expo splash screen gizlenirken hata:', error);
         }
       });
     }
@@ -89,10 +126,10 @@ const App = () => {
   };
 
   useEffect(() => {
-    // Uygulama hazır olduğunda splash screen'i gizle
+    // Uygulama hazır olduğunda custom splash screen'i gizle
     if (isAppReady) {
       checkUpdateStatus();
-      hideSplashScreen();
+      hideCustomSplashScreen();
     }
   }, [isAppReady, updateReady]);
 
@@ -212,10 +249,65 @@ const App = () => {
     };
   }, [isAuthenticated]);
 
+  // Bildirim tıklama işlemini yönetme fonksiyonu
+  const handleNotificationResponse = (response) => {
+    const { notification } = response;
+    const data = notification.request.content.data;
+
+    if (data && data.screen && data.openScreen) {
+      // Kullanıcı oturum açmışsa yönlendirme yap
+      if (isAuthenticated) {
+        if (data.params) {
+          navigate(data.screen, data.params);
+        } else {
+          navigate(data.screen);
+        }
+      } else {
+        global.pendingNotificationNavigation = {
+          screen: data.screen,
+          params: data.params
+        };
+      }
+    }
+  };
+
+  // Bildirimleri yapılandır
+  useEffect(() => {
+    // Son tıklanan bildirime yönelik tepki dinleyicisi
+    const notificationResponseListener = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationResponse
+    );
+    
+    // Bildirim alındığında dinleyici
+    const notificationListener = Notifications.addNotificationReceivedListener(
+      notification => {
+        // Bildirim alındığında yapılacak işlemler
+        ('Bildirim alındı:', notification);
+      }
+    );
+
+    // Bekleyen yönlendirme varsa ve kullanıcı oturum açmışsa yönlendirme yap
+    if (isAuthenticated && global.pendingNotificationNavigation) {
+      const { screen, params } = global.pendingNotificationNavigation;
+      navigate(screen, params);
+      global.pendingNotificationNavigation = null;
+    }
+
+    return () => {
+      // Dinleyicileri temizle
+      Notifications.removeNotificationSubscription(notificationResponseListener);
+      Notifications.removeNotificationSubscription(notificationListener);
+    };
+  }, [isAuthenticated]); // isAuthenticated değiştiğinde tekrar çalıştır
+
   if (!isAppReady || !isSplashAnimationComplete) {
     return (
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        <CustomSplashScreen />
+        <CustomSplashScreen onDataLoaded={async () => {
+          // Kullanıcı verilerini yükle
+          await preloadUserData();
+          setIsAppReady(true);
+        }} />
       </Animated.View>
     );
   }

@@ -8,7 +8,6 @@ import {
     ScrollView,
     Platform,
     Alert,
-    Image,
     SafeAreaView,
     StatusBar
 } from 'react-native';

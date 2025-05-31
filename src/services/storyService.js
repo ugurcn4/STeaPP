@@ -1,5 +1,5 @@
 import { db, storage } from '../../firebaseConfig';
-import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, deleteDoc, writeBatch, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, deleteDoc, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 // Önbellek için basit bir Map yapısı

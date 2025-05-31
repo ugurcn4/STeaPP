@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
     Modal,
     View,
@@ -27,6 +27,7 @@ const PostDetailModal = ({
 }) => {
     const [postHeights, setPostHeights] = useState({});
     const [initialScrollDone, setInitialScrollDone] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
     const listRef = useRef(null);
 
     const selectedIndex = currentPosts.findIndex(post => post.id === selectedPost?.id);
@@ -35,15 +36,28 @@ const PostDetailModal = ({
     useEffect(() => {
         if (!visible) {
             setInitialScrollDone(false);
+            // Modal tamamen kapandığında isClosing'i sıfırla
+            const timeout = setTimeout(() => {
+                setIsClosing(false);
+            }, 500);
+            return () => clearTimeout(timeout);
         }
     }, [visible]);
 
     // Modal açıldığında scroll işlemini yapalım
     useEffect(() => {
-        if (visible && selectedPost && !initialScrollDone) {
+        if (visible && selectedPost && !initialScrollDone && !isClosing) {
             scrollToSelectedIndex();
         }
-    }, [visible, selectedPost]);
+    }, [visible, selectedPost, isClosing]);
+
+    // Güvenli kapanma işlemi için bir wrapper fonksiyon
+    const handleClose = () => {
+        if (isClosing) return; // Eğer zaten kapanıyorsa tekrar tetiklemeyi önle
+        
+        setIsClosing(true);
+        onClose();
+    };
 
     // Scroll işlemini kontrol eden fonksiyon
     const scrollToSelectedIndex = () => {
@@ -99,15 +113,16 @@ const PostDetailModal = ({
 
     return (
         <Modal
-            visible={visible}
+            visible={visible && !isClosing}
             animationType="slide"
-            onRequestClose={onClose}
+            onRequestClose={handleClose}
         >
             <SafeAreaView style={styles.modalContainer}>
                 <View style={styles.modalHeader}>
                     <TouchableOpacity
-                        onPress={onClose}
+                        onPress={handleClose}
                         style={styles.backButton}
+                        disabled={isClosing}
                     >
                         <Ionicons name="close" size={24} color="#000" />
                     </TouchableOpacity>

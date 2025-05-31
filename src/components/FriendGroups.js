@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { translate } from '../i18n/i18n';
 import styles from '../styles/FriendGroupsStyles';
 import { getCurrentUserUid, getFriendRequests } from '../services/friendFunctions';
 import { getDoc, doc } from 'firebase/firestore';
@@ -15,64 +16,72 @@ const FriendGroups = ({ refreshKey }) => {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingGroupInvites, setPendingGroupInvites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const lastLoadTimeRef = useRef(0); // Son yükleme zamanını saklamak için ref
+  const dataLoadedRef = useRef(false); // Verilerin yüklenip yüklenmediğini takip etmek için
+
+  const loadGroups = useCallback(async (forceReload = false) => {
+    // Son yüklemeden bu yana 1 dakikadan az zaman geçti ve veriler zaten yüklendiyse yükleme işlemini atla
+    const currentTime = Date.now();
+    const timeElapsed = currentTime - lastLoadTimeRef.current;
+    
+    if (!forceReload && dataLoadedRef.current && timeElapsed < 60000) {
+      return; // 1 dakikadan az zaman geçmişse ve zorla yenileme istenmediyse yükleme yapma
+    }
+    
+    setLoading(true);
+    try {
+      const uid = await getCurrentUserUid();
+      if (!uid) return;
+      
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (!userDoc.exists()) return;
+      
+      const userData = userDoc.data();
+      const friends = userData.friends || [];
+      
+      const requests = await getFriendRequests();
+      setPendingRequests(requests);
+      
+      if (friends.length > 0) {
+        const friendDetails = await Promise.all(
+          friends.map(async (friendId) => {
+            const friendDoc = await getDoc(doc(db, 'users', friendId));
+            if (friendDoc.exists()) {
+              return {
+                id: friendId,
+                ...friendDoc.data(),
+                name: friendDoc.data().informations?.name || translate('error_unnamed_user'),
+                profilePicture: friendDoc.data().profilePicture || null,
+              };
+            }
+            return null;
+          })
+        );
+        
+        setUserFriends(friendDetails.filter(friend => friend !== null));
+      }
+
+      const groups = await fetchUserGroups(uid);
+      setUserGroups(groups);
+
+      const groupInvitations = await fetchPendingGroupInvitations(uid);
+      setPendingGroupInvites(groupInvitations);
+      
+      // Yükleme zamanını ve durumunu güncelle
+      lastLoadTimeRef.current = currentTime;
+      dataLoadedRef.current = true;
+    } catch (error) {
+      console.error('Arkadaş grupları yüklenirken hata:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadFriendsAndGroups = async () => {
-      try {
-        setLoading(true);
-        
-        // Mevcut kullanıcının UID'sini al
-        const uid = await getCurrentUserUid();
-        if (!uid) return;
-        
-        // Kullanıcı belgesini çek
-        const userDoc = await getDoc(doc(db, 'users', uid));
-        if (!userDoc.exists()) return;
-        
-        const userData = userDoc.data();
-        const friends = userData.friends || [];
-        
-        // Bekleyen arkadaşlık isteklerini al
-        const requests = await getFriendRequests();
-        setPendingRequests(requests);
-        
-        // Arkadaş detaylarını al
-        if (friends.length > 0) {
-          const friendDetails = await Promise.all(
-            friends.map(async (friendId) => {
-              const friendDoc = await getDoc(doc(db, 'users', friendId));
-              if (friendDoc.exists()) {
-                return {
-                  id: friendId,
-                  ...friendDoc.data(),
-                  name: friendDoc.data().informations?.name || 'İsimsiz Kullanıcı',
-                  profilePicture: friendDoc.data().profilePicture || null,
-                };
-              }
-              return null;
-            })
-          );
-          
-          setUserFriends(friendDetails.filter(friend => friend !== null));
-        }
-
-        // Kullanıcının gruplarını getir
-        const groups = await fetchUserGroups(uid);
-        setUserGroups(groups);
-
-        // Bekleyen grup davetlerini getir
-        const groupInvitations = await fetchPendingGroupInvitations(uid);
-        setPendingGroupInvites(groupInvitations);
-        
-      } catch (error) {
-        console.error('Veriler yüklenirken hata:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadFriendsAndGroups();
-  }, [refreshKey]);
+    // refreshKey değiştiğinde zorla yeniden yükleme yap
+    const forceReload = refreshKey > 0;
+    loadGroups(forceReload);
+  }, [refreshKey, loadGroups]);
 
   const handleCreateGroup = () => {
     navigation.navigate('CreateGroupScreen');
@@ -124,15 +133,53 @@ const FriendGroups = ({ refreshKey }) => {
     );
   };
 
+  const groupCards = useMemo(() => {
+    return userGroups.map((group) => (
+      <TouchableOpacity 
+        key={group.id} 
+        style={[styles.groupCard, {borderLeftColor: group.color}]}
+        onPress={() => handleViewGroup(group.id)}
+      >
+        <View style={[styles.groupIcon, { backgroundColor: group.color }]}>
+          <FontAwesome5 name={group.icon} size={18} color="#FFFFFF" />
+        </View>
+        
+        <Text style={styles.groupName}>{group.name}</Text>
+        
+        <View style={styles.statusPill}>
+          <Ionicons name="people" size={12} color="#AE63E4" />
+          <Text style={styles.statusText}>
+            {group.members.length} {translate('friend_groups_members_count')}
+          </Text>
+        </View>
+        
+        <Text style={styles.groupMembers}>
+          {group.membersData?.length > 0 
+            ? `${group.membersData.length} ${translate('friend_groups_members_count')}` 
+            : translate('friend_groups_no_members')}
+        </Text>
+        
+        <View style={styles.groupDivider} />
+        
+        <View style={styles.groupFooter}>
+          {renderGroupAvatars(group.membersData)}
+          <TouchableOpacity style={styles.viewButton}>
+            <Text style={styles.viewButtonText}>{translate('friend_groups_view')}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    ));
+  }, [userGroups, handleViewGroup, renderGroupAvatars]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerText}>Arkadaş Grupları</Text>
+        <Text style={styles.headerText}>{translate('friend_groups_title')}</Text>
         <TouchableOpacity 
           style={styles.headerButton}
           onPress={() => navigation.navigate('GroupsList')}
         >
-          <Text style={styles.headerButtonText}>Tümünü Gör</Text>
+          <Text style={styles.headerButtonText}>{translate('friend_groups_see_all')}</Text>
           <Ionicons name="chevron-forward" size={14} color="#AE63E4" />
         </TouchableOpacity>
       </View>
@@ -143,10 +190,11 @@ const FriendGroups = ({ refreshKey }) => {
         contentContainerStyle={styles.groupsScrollContainer}
       >
         {loading ? (
-          // Yükleme durumu göstergesi
           <View style={styles.emptyStateCard}>
             <ActivityIndicator size="large" color="#AE63E4" />
-            <Text style={[styles.emptyStateText, {marginTop: 16}]}>Yükleniyor...</Text>
+            <Text style={[styles.emptyStateText, {marginTop: 16}]}>
+              {translate('friend_groups_loading')}
+            </Text>
           </View>
         ) : (
           <>
@@ -160,10 +208,9 @@ const FriendGroups = ({ refreshKey }) => {
                   <Text style={styles.plusBadgeText}>+</Text>
                 </View>
               </View>
-              <Text style={styles.createGroupText}>Yeni Grup</Text>
+              <Text style={styles.createGroupText}>{translate('friend_groups_new_group')}</Text>
             </TouchableOpacity>
             
-            {/* Bekleyen Grup Davetleri */}
             {pendingGroupInvites.length > 0 && (
               <TouchableOpacity 
                 style={[styles.groupCard, {borderLeftColor: '#4CAF50'}]}
@@ -176,65 +223,43 @@ const FriendGroups = ({ refreshKey }) => {
                   </View>
                 </View>
                 
-                <Text style={styles.groupName}>Grup Davetleri</Text>
+                <Text style={styles.groupName}>{translate('friend_groups_invites')}</Text>
                 
                 <View style={[styles.statusPill, { backgroundColor: 'rgba(76, 175, 80, 0.2)' }]}>
                   <Ionicons name="time" size={12} color="#4CAF50" />
-                  <Text style={[styles.statusText, { color: '#4CAF50' }]}>Yeni</Text>
-                </View>
-                
-                <Text style={styles.groupMembers}>{pendingGroupInvites.length} davet</Text>
-                
-                <View style={styles.groupDivider} />
-                
-                <View style={styles.groupFooter}>
-                  <Text style={{ color: '#9797A9', fontSize: 12 }}>Grup daveti</Text>
-                  <TouchableOpacity style={styles.viewButton}>
-                    <Text style={styles.viewButtonText}>Görüntüle</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            )}
-            
-            {/* Kullanıcının Grupları */}
-            {userGroups.map((group) => (
-              <TouchableOpacity 
-                key={group.id} 
-                style={[styles.groupCard, {borderLeftColor: group.color}]}
-                onPress={() => handleViewGroup(group.id)}
-              >
-                <View style={[styles.groupIcon, { backgroundColor: group.color }]}>
-                  <FontAwesome5 name={group.icon} size={18} color="#FFFFFF" />
-                </View>
-                
-                <Text style={styles.groupName}>{group.name}</Text>
-                
-                <View style={styles.statusPill}>
-                  <Ionicons name="people" size={12} color="#AE63E4" />
-                  <Text style={styles.statusText}>{group.members.length} üye</Text>
+                  <Text style={[styles.statusText, { color: '#4CAF50' }]}>
+                    {translate('friend_groups_new')}
+                  </Text>
                 </View>
                 
                 <Text style={styles.groupMembers}>
-                  {group.membersData?.length > 0 ? `${group.membersData.length} üye` : 'Üye yok'}
+                  {pendingGroupInvites.length} {translate('friend_groups_invites_count')}
                 </Text>
                 
                 <View style={styles.groupDivider} />
                 
                 <View style={styles.groupFooter}>
-                  {renderGroupAvatars(group.membersData)}
+                  <Text style={{ color: '#9797A9', fontSize: 12 }}>
+                    {translate('friend_groups_invite_text')}
+                  </Text>
                   <TouchableOpacity style={styles.viewButton}>
-                    <Text style={styles.viewButtonText}>Görüntüle</Text>
+                    <Text style={styles.viewButtonText}>{translate('friend_groups_view')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
-            ))}
+            )}
             
-            {/* Boş Durum Göstergesi - Hiç grup veya bildirim yoksa */}
+            {groupCards}
+            
             {userGroups.length === 0 && pendingGroupInvites.length === 0 && (
               <View style={styles.emptyStateCard}>
                 <Ionicons name="people" size={48} color="#9797A9" />
-                <Text style={styles.emptyStateText}>Henüz bir grubunuz yok</Text>
-                <Text style={styles.emptyStateSubText}>Yeni bir grup oluşturmak için "Yeni Grup" butonuna tıklayın</Text>
+                <Text style={styles.emptyStateText}>
+                  {translate('friend_groups_empty_title')}
+                </Text>
+                <Text style={styles.emptyStateSubText}>
+                  {translate('friend_groups_empty_subtitle')}
+                </Text>
               </View>
             )}
           </>
@@ -244,4 +269,4 @@ const FriendGroups = ({ refreshKey }) => {
   );
 };
 
-export default FriendGroups; 
+export default React.memo(FriendGroups); 

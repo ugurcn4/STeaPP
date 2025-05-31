@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable, ScrollView, TouchableWithoutFeedback, Dimensions } from 'react-native';
-import MapView, { Polyline, Marker } from 'react-native-maps';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Platform, Modal, Image, Pressable } from 'react-native';
+import MapView, { Polyline, Marker, AnimatedRegion } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
     collection,
     addDoc,
     onSnapshot,
     getDoc,
-    updateDoc,
     serverTimestamp,
     query,
     getDocs,
@@ -32,12 +31,13 @@ import {
 import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
 import FastImage from 'react-native-fast-image';
 import { startBackgroundLocationUpdates, stopBackgroundLocationUpdates } from '../services/LocationBackgroundService';
-import { ref, remove, onValue, off } from 'firebase/database';
-import { rtdb } from '../../firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     useSharedValue,
 } from 'react-native-reanimated';
+import { listenToLocationShares, stopLocationSharing } from '../services/LocationSharingService';
+import { ref, onValue, off } from 'firebase/database';
+import { rtdb } from '../../firebaseConfig';
 import LineStyleModal from '../modals/LineStyleModal';
 import DurationModal from '../modals/DurationModal';
 import { translate } from '../i18n/i18n';
@@ -55,35 +55,221 @@ const PATH_STYLES = {
 };
 
 
-const CustomMarker = ({ photo, name }) => {
+// Animasyonlu marker bileşeni
+class AnimatedMarker extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            coordinate: new AnimatedRegion({
+                latitude: props.coordinate.latitude || 0,
+                longitude: props.coordinate.longitude || 0,
+                latitudeDelta: 0.00922,
+                longitudeDelta: 0.00421
+            }),
+            prevCoordinate: props.coordinate,
+            isFirstRender: true
+        };
+        
+        // Marker referansını sakla
+        this.marker = null;
+        
+        // Animasyon işlemini sakla
+        this.animation = null;
+    }
+    
+    // Yeni props geldiğinde
+    static getDerivedStateFromProps(nextProps, prevState) {
+        const { coordinate } = nextProps;
+        const { prevCoordinate, isFirstRender } = prevState;
+        
+        // Koordinatlar geçerli mi kontrol et
+        if (!coordinate || !coordinate.latitude || !coordinate.longitude) {
+            return null;
+        }
+        
+        // İlk render ise veya koordinat değişmediyse güncelleme yapma
+        if (isFirstRender || 
+            (prevCoordinate.latitude === coordinate.latitude && 
+             prevCoordinate.longitude === coordinate.longitude)) {
+            return { isFirstRender: false, prevCoordinate: coordinate };
+        }
+        
+        // Koordinat değiştiğinde state'i güncelle
+        return {
+            prevCoordinate: coordinate,
+            isFirstRender: false
+        };
+    }
+    
+    componentDidMount() {
+        // İlk render'da koordinatı doğrudan ayarla (animasyonsuz)
+        const { coordinate } = this.props;
+        if (coordinate && coordinate.latitude && coordinate.longitude) {
+            this.setCoordinateWithoutAnimation(coordinate);
+        }
+    }
+
+    componentDidUpdate(prevProps) {
+        const { coordinate } = this.props;
+        const { prevCoordinate } = this.state;
+        
+        // Koordinatlar geçerli mi kontrol et
+        if (!coordinate || !coordinate.latitude || !coordinate.longitude) {
+            return;
+        }
+        
+        // Konum değiştiğinde animasyonlu geçiş yap
+        if (prevProps.coordinate.latitude !== coordinate.latitude ||
+            prevProps.coordinate.longitude !== coordinate.longitude) {
+            
+            // Animasyon süresi - mesafeye göre ayarla
+            const distance = this.calculateDistance(
+                prevCoordinate.latitude,
+                prevCoordinate.longitude,
+                coordinate.latitude,
+                coordinate.longitude
+            );
+            
+            // Mesafeye göre animasyon süresini ayarla (minimum 300ms, maksimum 1000ms)
+            const duration = Math.min(Math.max(distance * 500, 300), 1000);
+            
+            // Animasyonu başlat
+            this.animateMarker(coordinate, duration);
+        }
+    }
+    
+    // Animasyonsuz doğrudan koordinat ayarla
+    setCoordinateWithoutAnimation(coordinate) {
+        if (Platform.OS === 'android') {
+            if (this.state.coordinate) {
+                this.state.coordinate.setValue({
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude,
+                    latitudeDelta: 0.00922,
+                    longitudeDelta: 0.00421
+                });
+            }
+        } else {
+            // iOS için
+            const newCoordinate = {
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude,
+                latitudeDelta: 0.00922,
+                longitudeDelta: 0.00421
+            };
+            this.state.coordinate.setValue(newCoordinate);
+        }
+    }
+
+    // İki nokta arasındaki mesafeyi hesapla (km cinsinden)
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+        
+        const R = 6371; // Dünya yarıçapı (km)
+        const dLat = this.deg2rad(lat2 - lat1);
+        const dLon = this.deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Mesafe (km)
+    }
+
+    deg2rad(deg) {
+        return deg * (Math.PI / 180);
+    }
+
+    animateMarker(coordinate, duration = 500) {
+        // Önceki animasyonu iptal et
+        if (this.animation) {
+            this.animation.stop();
+            this.animation = null;
+        }
+        
+        const newCoordinate = {
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            latitudeDelta: 0.00922,
+            longitudeDelta: 0.00421
+        };
+
+        if (Platform.OS === 'android') {
+            if (this.marker && this.marker._component) {
+                try {
+                    this.marker._component.animateMarkerToCoordinate(newCoordinate, duration);
+                } catch (error) {
+                    // Animasyon hatası durumunda doğrudan ayarla
+                    this.setCoordinateWithoutAnimation(newCoordinate);
+                }
+            } else {
+                // Marker referansı yoksa doğrudan ayarla
+                this.setCoordinateWithoutAnimation(newCoordinate);
+            }
+        } else {
+            // iOS için Animated.timing kullan
+            this.animation = this.state.coordinate.timing({
+                ...newCoordinate,
+                duration,
+                useNativeDriver: false // iOS için gerekli
+            });
+            
+            this.animation.start();
+        }
+    }
+    
+    // Component kaldırıldığında animasyonu temizle
+    componentWillUnmount() {
+        if (this.animation) {
+            this.animation.stop();
+            this.animation = null;
+        }
+    }
+
+    render() {
+        const { children, onPress, tracksViewChanges = false } = this.props;
+        return (
+            <Marker.Animated
+                ref={marker => { this.marker = marker; }}
+                coordinate={this.state.coordinate}
+                onPress={onPress}
+                tracksViewChanges={tracksViewChanges}
+            >
+                {children}
+            </Marker.Animated>
+        );
+    }
+}
+
+const CustomMarker = ({ photo, name, isLive = false }) => {
     return (
-        <View>
-            <View style={styles.markerContainer}>
+        <View style={customMarkerStyles.container}>
+            <View style={[customMarkerStyles.bubble, isLive && customMarkerStyles.liveBubble]}>
                 {photo ? (
                     <FastImage
-                        source={{
-                            uri: photo,
-                            priority: FastImage.priority.normal,
-                            cache: FastImage.cacheControl.immutable
-                        }}
-                        style={styles.markerImage}
-                        resizeMode={FastImage.resizeMode.cover}
+                        source={{ uri: photo }}
+                        style={customMarkerStyles.image}
                     />
                 ) : (
-                    <View style={styles.markerDefault}>
-                        <Text style={styles.markerInitial}>
-                            {name?.charAt(0) || '?'}
+                    <View style={[customMarkerStyles.fallbackImage, isLive && customMarkerStyles.liveFallbackImage]}>
+                        <Text style={customMarkerStyles.fallbackText}>
+                            {name ? name.charAt(0).toUpperCase() : '?'}
                         </Text>
                     </View>
                 )}
+                {isLive && (
+                    <View style={customMarkerStyles.liveIndicator}>
+                        <Ionicons name="radio" size={12} color="#FFFFFF" />
+                    </View>
+                )}
             </View>
-            {/* Üçgen işaretçi */}
-            <View style={styles.markerTriangle} />
+            <View style={[customMarkerStyles.arrowBorder, isLive && customMarkerStyles.liveArrowBorder]} />
+            <View style={[customMarkerStyles.arrow, isLive && customMarkerStyles.liveArrow]} />
         </View>
     );
 };
 
-const MapPage = ({ navigation, route }) => {
+const MapPage = ({ route }) => {
     const [MapType, setMapType] = useState('standard');
     const [location, setLocation] = useState(null);
     const [userId, setUserId] = useState(null);
@@ -107,7 +293,6 @@ const MapPage = ({ navigation, route }) => {
     });
     const [savedPaths, setSavedPaths] = useState([]);
     const [selectedPath, setSelectedPath] = useState(null);
-    const [showBottomSheet, setShowBottomSheet] = useState(false);
     const [is3DMode, setIs3DMode] = useState(false);
     const [showMapTypeMenu, setShowMapTypeMenu] = useState(false);
     const [currentSpeed, setCurrentSpeed] = useState(0);
@@ -122,7 +307,6 @@ const MapPage = ({ navigation, route }) => {
     const [locationSubscription, setLocationSubscription] = useState(null);
     const [selectedLocation, setSelectedLocation] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
-    const [activeLocationShares, setActiveLocationShares] = useState({});
     const [isBackgroundDrawing, setIsBackgroundDrawing] = useState(false);
     const [showDurationModal, setShowDurationModal] = useState(false);
     const [selectedDuration, setSelectedDuration] = useState(null);
@@ -134,10 +318,8 @@ const MapPage = ({ navigation, route }) => {
     });
     const [showCapsuleModal, setShowCapsuleModal] = useState(false);
 
-
     // Animasyon değerleri
     const translateY = useSharedValue(0);
-
 
     // Modal kapandığında translateY değerini sıfırla
     useEffect(() => {
@@ -156,12 +338,8 @@ const MapPage = ({ navigation, route }) => {
     }, []);
 
     // Modal açıldığında veya kapandığında handler
-    const onHandlerStateChange = (event) => {
-        // Bu fonksiyonu boş bırakalım, tüm işlemleri onGestureEvent içinde yapacağız
-    };
 
     useEffect(() => {
-        let locationSubscription;
         const auth = getAuth();
 
         const startLocationTracking = async (currentUserId) => {
@@ -313,9 +491,6 @@ const MapPage = ({ navigation, route }) => {
 
         return () => {
             unsubscribe();
-            if (locationSubscription) {
-                locationSubscription.remove();
-            }
         };
     }, []); // followsUserLocation'ı dependency array'den çıkardık
 
@@ -334,90 +509,219 @@ const MapPage = ({ navigation, route }) => {
         return () => unsubscribe();
     }, [userId]);
 
-    // Konum dinleme useEffect'i
+    // RTDB dinleyicileri için referans
+    const rtdbListenersRef = useRef({});
+
+    // Konum dinleme useEffect'i - Yeni LocationSharingService API'si kullanılıyor
     useEffect(() => {
         if (!userId) return;
 
-        // 1. Firestore'dan gelen paylaşımları dinle
-        const receivedSharesRef = collection(db, `users/${userId}/receivedShares`);
-        const activeSharesQuery = query(receivedSharesRef, where('status', '==', 'active'));
-
-        const unsubscribe = onSnapshot(activeSharesQuery, async (snapshot) => {
-            try {
-                const shares = await Promise.all(
-                    snapshot.docs.map(async (doc) => {
-                        const shareData = doc.data();
-
-                        // Paylaşan kullanıcının bilgilerini al
-                        const senderDoc = await getDoc(doc(db, 'users', shareData.fromUserId));
-                        const senderData = senderDoc.data();
-
-                        // Anlık konum paylaşımları için konum bilgisini doğrudan Firestore'dan al
-                        let locationData = null;
-                        if (shareData.type === 'instant' && shareData.location) {
-                            // Eğer konum bilgisi doğrudan paylaşımda varsa kullan
-                            locationData = shareData.location;
-                        }
-
+        // Aktif paylaşımları dinle - Yeni API kullanımı
+        const unsubscribe = listenToLocationShares(
+            userId, 
+            // Anlık konum callback'i
+            (instantLocations) => {
+                // Gelen anlık konumları işle
+                const formattedLocations = instantLocations.map(loc => {
+                    // Gönderilen veya alınan paylaşımlara göre farklı işle
+                    if (loc.isSent) {
+                        // Gönderilen paylaşım
                         return {
-                            id: doc.id,
-                            shareId: shareData.shareId || doc.id,
-                            type: shareData.type,
-                            senderId: shareData.fromUserId,
-                            senderName: shareData.senderName || senderData?.informations?.name || 'İsimsiz',
-                            senderUsername: shareData.senderUsername || senderData?.informations?.username,
-                            senderPhoto: shareData.senderPhoto || senderData?.profilePicture,
-                            startTime: shareData.startTime,
-                            lastUpdate: shareData.lastUpdate,
-                            status: shareData.status,
-                            locationInfo: shareData.locationInfo,
-                            // Anlık konum için konum bilgisini ekle
-                            location: locationData || (shareData.type === 'instant' ? {
-                                latitude: shareData.latitude,
-                                longitude: shareData.longitude
-                            } : null)
+                            id: loc.id,
+                            shareId: loc.id,
+                            type: 'instant',
+                            receiverId: loc.receiverId,
+                            senderName: loc.userName || 'İsimsiz',
+                            senderPhoto: loc.userPhoto,
+                            location: loc.location,
+                            locationInfo: loc.locationInfo,
+                            metadata: loc.metadata,
+                            lastUpdate: loc.metadata?.updatedAt,
+                            startTime: loc.metadata?.createdAt,
+                            isSent: true
                         };
-                    })
-                );
-
-                // Anlık ve canlı konumları ayır
-                const instantLocations = shares.filter(share =>
-                    share.type === 'instant' && share.location
-                );
-                const liveLocations = shares.filter(share => share.type === 'live');
-
-                // Anlık konumları doğrudan set et
-                setReceivedInstantLocations(instantLocations);
-
-                // Canlı konumlar için RTDB dinleyicilerini ayarla
-                liveLocations.forEach(share => {
-                    const locationRef = ref(rtdb, `locations/${share.shareId}`);
-                    onValue(locationRef, (snapshot) => {
-                        const locationData = snapshot.val();
-                        if (locationData) {
+                    } else {
+                        // Alınan paylaşım
+                        return {
+                            id: loc.id,
+                            shareId: loc.id,
+                            type: 'instant',
+                            senderId: loc.senderId,
+                            senderName: loc.senderName || 'İsimsiz',
+                            senderPhoto: loc.senderPhoto,
+                            location: loc.location,
+                            locationInfo: loc.locationInfo,
+                            metadata: loc.metadata,
+                            lastUpdate: loc.metadata?.updatedAt,
+                            startTime: loc.metadata?.createdAt,
+                            isReceived: true
+                        };
+                    }
+                });
+                
+                // Anlık konumları set et
+                setReceivedInstantLocations(formattedLocations);
+            },
+            // Canlı konum callback'i
+            (id, updatedLocation) => {
+                if (id === null) {
+                    // Tüm canlı konumları al
+                    const formattedLocations = updatedLocation.map(loc => {
+                        // Gönderilen veya alınan paylaşımlara göre farklı işle
+                        if (loc.isSent) {
+                            // Gönderilen paylaşım
+                            return {
+                                id: loc.id,
+                                shareId: loc.id,
+                                type: 'live',
+                                receiverId: loc.receiverId,
+                                senderName: loc.userName || 'İsimsiz',
+                                senderPhoto: loc.userPhoto,
+                                startTime: loc.startTime,
+                                endTime: loc.endTime,
+                                metadata: loc.metadata,
+                                lastUpdate: loc.metadata?.updatedAt,
+                                // Konum bilgisini doğrudan erişilebilir hale getir
+                                latitude: loc.location?.latitude,
+                                longitude: loc.location?.longitude,
+                                // Orijinal konum nesnesini de koru
+                                location: loc.location,
+                                isSent: true
+                            };
+                        } else {
+                            // Alınan paylaşım
+                            return {
+                                id: loc.id,
+                                shareId: loc.id,
+                                type: 'live',
+                                senderId: loc.senderId,
+                                senderName: loc.senderName || 'İsimsiz',
+                                senderPhoto: loc.senderPhoto,
+                                startTime: loc.startTime,
+                                endTime: loc.endTime,
+                                metadata: loc.metadata,
+                                lastUpdate: loc.metadata?.updatedAt,
+                                // Konum bilgisini doğrudan erişilebilir hale getir
+                                latitude: loc.location?.latitude,
+                                longitude: loc.location?.longitude,
+                                // Orijinal konum nesnesini de koru
+                                location: loc.location,
+                                isReceived: true
+                            };
+                        }
+                    });
+                    
+                    // Canlı konumları set et
+                    setReceivedLocations(formattedLocations);
+                } else {
+                    // Tek bir canlı konum güncellendi
+                    setReceivedLocations(prev => {
+                        const updatedShares = prev.filter(loc => loc.id !== id);
+                        
+                        // Gönderilen veya alınan paylaşımlara göre farklı işle
+                        let newShare;
+                        if (updatedLocation.isSent) {
+                            // Gönderilen paylaşım
+                            newShare = {
+                                id: id,
+                                shareId: id,
+                                type: 'live',
+                                receiverId: updatedLocation.receiverId,
+                                senderName: updatedLocation.userName || 'İsimsiz',
+                                senderPhoto: updatedLocation.userPhoto,
+                                // Konum bilgisini doğrudan erişilebilir hale getir
+                                latitude: updatedLocation.location?.latitude,
+                                longitude: updatedLocation.location?.longitude,
+                                // Orijinal konum nesnesini de koru
+                                location: updatedLocation.location,
+                                metadata: updatedLocation.metadata,
+                                lastUpdate: updatedLocation.metadata?.updatedAt,
+                                startTime: updatedLocation.startTime,
+                                endTime: updatedLocation.endTime,
+                                isSent: true
+                            };
+                        } else {
+                            // Alınan paylaşım
+                            newShare = {
+                                id: id,
+                                shareId: id,
+                                type: 'live',
+                                senderId: updatedLocation.senderId,
+                                senderName: updatedLocation.senderName || 'İsimsiz',
+                                senderPhoto: updatedLocation.senderPhoto,
+                                // Konum bilgisini doğrudan erişilebilir hale getir
+                                latitude: updatedLocation.location?.latitude,
+                                longitude: updatedLocation.location?.longitude,
+                                // Orijinal konum nesnesini de koru
+                                location: updatedLocation.location,
+                                metadata: updatedLocation.metadata,
+                                lastUpdate: updatedLocation.metadata?.updatedAt,
+                                startTime: updatedLocation.startTime,
+                                endTime: updatedLocation.endTime,
+                                isReceived: true
+                            };
+                        }
+                        
+                        return [...updatedShares, newShare];
+                    });
+                    
+                    // Varsa önceki dinleyiciyi temizle
+                    if (rtdbListenersRef.current[id]) {
+                        rtdbListenersRef.current[id]();
+                        delete rtdbListenersRef.current[id];
+                    }
+                    
+                    // RTDB'den canlı konum güncellemelerini dinle
+                    const rtdbRef = ref(rtdb, `locations/${id}`);
+                    const unsubscribe = onValue(rtdbRef, (snapshot) => {
+                        const rtdbData = snapshot.val();
+                        if (rtdbData) {
+                            // RTDB'den gelen konum verisini kullan
                             setReceivedLocations(prev => {
-                                const filtered = prev.filter(loc => loc.id !== share.id);
-                                return [...filtered, { ...share, location: locationData }];
+                                return prev.map(loc => {
+                                    if (loc.id === id) {
+                                        // Konum bilgilerini güncelle
+                                        return {
+                                            ...loc,
+                                            latitude: rtdbData.latitude,
+                                            longitude: rtdbData.longitude,
+                                            location: {
+                                                ...loc.location,
+                                                latitude: rtdbData.latitude,
+                                                longitude: rtdbData.longitude,
+                                                accuracy: rtdbData.accuracy,
+                                                altitude: rtdbData.altitude,
+                                                heading: rtdbData.heading,
+                                                speed: rtdbData.speed
+                                            },
+                                            lastRtdbUpdate: rtdbData.timestamp
+                                        };
+                                    }
+                                    return loc;
+                                });
                             });
                         }
                     });
-                });
-
-                // Canlı konumları başlangıç değerleriyle set et
-                setReceivedLocations(liveLocations);
-
-            } catch (error) {
-                console.error('Paylaşımları dinlerken hata:', error);
+                    
+                    // Temizleme fonksiyonunu sakla
+                    rtdbListenersRef.current[id] = () => {
+                        off(rtdbRef);
+                    };
+                }
             }
-        });
+        );
 
         return () => {
-            unsubscribe();
+            // Firestore dinleyicisini temizle
+            if (unsubscribe) unsubscribe();
+            
             // RTDB dinleyicilerini temizle
-            receivedLocations.forEach(share => {
-                const locationRef = ref(rtdb, `locations/${share.shareId}`);
-                off(locationRef);
+            Object.values(rtdbListenersRef.current).forEach(cleanupFn => {
+                if (typeof cleanupFn === 'function') {
+                    cleanupFn();
+                }
             });
+            rtdbListenersRef.current = {};
         };
     }, [userId]);
 
@@ -990,65 +1294,17 @@ const MapPage = ({ navigation, route }) => {
                 Alert.alert(translate('error'), translate('user_id_missing'));
                 return;
             }
-
-            // Paylaşımı ve paylaşan kullanıcı bilgilerini al
-            const shareDoc = await getDoc(doc(db, `users/${userId}/receivedShares/${shareId}`));
-
-            if (!shareDoc.exists()) {
-                console.error(translate('share_document_not_found'));
-                Alert.alert(translate('error'), translate('share_info_not_found'));
+            
+            // İlgili paylaşım bilgilerini bul
+            const share = [...receivedInstantLocations, ...receivedLocations].find(s => s.id === shareId);
+            if (!share) {
+                Alert.alert(translate('error'), translate('share_not_found'));
                 return;
             }
-
-            const shareData = shareDoc.data();
-            const fromUserId = shareData?.fromUserId;
-
-            if (!fromUserId) {
-                console.error(translate('sharer_user_id_not_found'));
-                Alert.alert(translate('error'), translate('share_info_not_found'));
-                return;
-            }
-
-            // 1. Paylaşımı alan kullanıcının receivedShares koleksiyonunu güncelle
-            await updateDoc(doc(db, `users/${userId}/receivedShares/${shareId}`), {
-                status: 'ended',
-                endTime: serverTimestamp()
-            });
-
-            // 2. Karşı tarafın shares koleksiyonunu güncelle
-            try {
-                const sentSharesQuery = query(
-                    collection(db, `users/${fromUserId}/shares`),
-                    where('friendId', '==', userId),
-                    where('status', '==', 'active')
-                );
-                const querySnapshot = await getDocs(sentSharesQuery);
-
-                const updatePromises = [];
-                querySnapshot.forEach((doc) => {
-                    updatePromises.push(
-                        updateDoc(doc.ref, {
-                            status: 'ended',
-                            endTime: serverTimestamp()
-                        })
-                    );
-                });
-
-                await Promise.all(updatePromises);
-            } catch (error) {
-                console.error('Karşı taraf paylaşımı durdurma hatası:', error);
-            }
-
-            // 3. Eğer canlı konum paylaşımı ise RTDB'den konum verilerini temizle
-            if (shareData.type === 'live' && shareData.shareId) {
-                try {
-                    const locationRef = ref(rtdb, `locations/${shareData.shareId}`);
-                    await remove(locationRef);
-                } catch (error) {
-                    console.error('RTDB konum silme hatası:', error);
-                }
-            }
-
+            
+            // Paylaşımı durdur - Yeni API kullanımı
+            await stopLocationSharing(userId, shareId, share.type);
+            
             closeModal();
             Alert.alert(translate('success'), translate('share_stopped'));
         } catch (error) {
@@ -1283,6 +1539,80 @@ const MapPage = ({ navigation, route }) => {
         getInitialLocation();
     }, []);
 
+    // FriendsPage'den gelen parametreleri işle
+    useEffect(() => {
+        // Route parametrelerini kontrol et
+        const showActiveShares = route?.params?.showActiveShares || false;
+        const initialSource = route?.params?.initialSource || null;
+        
+        if (showActiveShares && initialSource === 'friendsPage') {
+          // Aktif paylaşımları göster - gerekirse belirli bir bölgeye odaklan
+          if (liveLocations.length > 0 || sharedLocations.length > 0) {
+            // Paylaşımlar varsa haritayı onlara odakla
+            fitMapToShowAllLocations();
+          }
+        }
+    }, [route?.params, liveLocations, sharedLocations]);
+    
+    // Haritayı tüm konumları gösterecek şekilde ayarla
+    const fitMapToShowAllLocations = () => {
+        if (!mapRef.current) return;
+        
+        const allLocations = [...receivedInstantLocations, ...receivedLocations]
+          .filter(share => {
+            // Konum bilgilerini kontrol et
+            if (share.location) {
+              return typeof share.location.latitude === 'number' &&
+                typeof share.location.longitude === 'number';
+            } else if (share.latitude && share.longitude) {
+              // Alternatif konum formatı
+              return typeof share.latitude === 'number' &&
+                typeof share.longitude === 'number';
+            }
+            return false;
+          })
+          .map(share => {
+            // Konum koordinatlarını belirle
+            return share.location ?
+              { 
+                latitude: share.location.latitude, 
+                longitude: share.location.longitude 
+              } : 
+              { 
+                latitude: share.latitude, 
+                longitude: share.longitude 
+              };
+          });
+        
+        // Kullanıcının kendi konumunu da ekle
+        if (location?.coords) {
+          allLocations.push({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          });
+        }
+        
+        // Konum yoksa işlemi sonlandır
+        if (allLocations.length === 0) return;
+        
+        // Tek konum varsa ona odaklan
+        if (allLocations.length === 1) {
+          mapRef.current.animateToRegion({
+            latitude: allLocations[0].latitude,
+            longitude: allLocations[0].longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05
+          }, 1000);
+          return;
+        }
+        
+        // Birden fazla konum varsa hepsini gösterecek şekilde odaklan
+        mapRef.current.fitToCoordinates(allLocations, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true
+        });
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -1359,7 +1689,7 @@ const MapPage = ({ navigation, route }) => {
                     />
                 )}
 
-                {/* Tüm konumlar için tek tip marker */}
+                {/* Tüm konumlar için marker'lar */}
                 {[...receivedInstantLocations, ...receivedLocations]
                     .filter(share => {
                         // Konum bilgilerini kontrol et
@@ -1376,21 +1706,63 @@ const MapPage = ({ navigation, route }) => {
                     .map((share) => {
                         // Konum koordinatlarını belirle
                         const coordinate = share.location ?
-                            { latitude: share.location.latitude, longitude: share.location.longitude } :
-                            { latitude: share.latitude, longitude: share.longitude };
+                            { 
+                                latitude: share.location.latitude, 
+                                longitude: share.location.longitude 
+                            } : 
+                            { 
+                                latitude: share.latitude, 
+                                longitude: share.longitude 
+                            };
+                        
+                        // Marker için kullanılacak isim ve fotoğrafı belirle
+                        let displayName, displayPhoto;
+                        
+                        if (share.isSent) {
+                            // Gönderilen paylaşım - alıcı bilgilerini göster
+                            displayName = share.senderName || 'İsimsiz';
+                            displayPhoto = share.senderPhoto;
+                        } else {
+                            // Alınan paylaşım - gönderici bilgilerini göster
+                            displayName = share.senderName || 'İsimsiz';
+                            displayPhoto = share.senderPhoto;
+                        }
 
-                        return (
-                            <Marker
-                                key={share.id}
-                                coordinate={coordinate}
-                                onPress={() => handleMarkerPress(share)}
-                            >
-                                <CustomMarker
-                                    photo={share.senderPhoto}
-                                    name={share.senderName}
-                                />
-                            </Marker>
+                        // Marker rengi ve stili için paylaşım tipini kontrol et
+                        const isLiveLocation = share.type === 'live';
+                        
+                        // Marker içeriği
+                        const markerContent = (
+                            <CustomMarker
+                                photo={displayPhoto}
+                                name={displayName}
+                                isLive={isLiveLocation}
+                            />
                         );
+                        
+                        // Canlı konum paylaşımları için animasyonlu marker kullan
+                        if (isLiveLocation) {
+                            return (
+                                <AnimatedMarker
+                                    key={`${share.id}-animated`}
+                                    coordinate={coordinate}
+                                    onPress={() => handleMarkerPress(share)}
+                                >
+                                    {markerContent}
+                                </AnimatedMarker>
+                            );
+                        } else {
+                            // Anlık konum paylaşımları için normal marker kullan
+                            return (
+                                <Marker
+                                    key={`${share.id}-${coordinate.latitude}-${coordinate.longitude}`}
+                                    coordinate={coordinate}
+                                    onPress={() => handleMarkerPress(share)}
+                                >
+                                    {markerContent}
+                                </Marker>
+                            );
+                        }
                     })
                 }
             </MapView>
@@ -1673,7 +2045,7 @@ const MapPage = ({ navigation, route }) => {
                         color="#333333"
                     />
                 </TouchableOpacity>
-                
+
                 {/* Kapsül Butonu */}
                 <CapsuleButton onPress={() => setShowCapsuleModal(true)} />
             </View>
@@ -1812,6 +2184,88 @@ const MapPage = ({ navigation, route }) => {
         </View>
     );
 };
+
+const customMarkerStyles = StyleSheet.create({
+    container: {
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+    },
+    bubble: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 4,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        borderColor: '#007AFF',
+        borderWidth: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.22,
+        shadowRadius: 2.22,
+        elevation: 3,
+    },
+    liveBubble: {
+        borderColor: '#30B0C7',  // Canlı konum için farklı renk
+    },
+    image: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+    },
+    fallbackImage: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#007AFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    liveFallbackImage: {
+        backgroundColor: '#30B0C7',  // Canlı konum için farklı renk
+    },
+    fallbackText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    arrow: {
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        borderTopColor: '#FFFFFF',
+        borderWidth: 8,
+        alignSelf: 'center',
+        marginTop: -2,
+        marginBottom: -15,
+    },
+    arrowBorder: {
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        borderTopColor: '#007AFF',
+        borderWidth: 8,
+        alignSelf: 'center',
+        marginTop: -0.5,
+    },
+    liveArrow: {
+        borderTopColor: '#FFFFFF',
+    },
+    liveArrowBorder: {
+        borderTopColor: '#30B0C7',  // Canlı konum için farklı renk
+    },
+    liveIndicator: {
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        backgroundColor: '#30B0C7',
+        borderRadius: 10,
+        width: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FFFFFF',
+    },
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -2323,15 +2777,12 @@ const styles = StyleSheet.create({
     },
     backgroundDrawingLabel: {
         position: 'absolute',
-        top: -20, // Butonun hemen üstüne
-        // left: 0, // Hizalamayı actionButtonWrapper ve alignItems hallediyor
-        // width: 56, // Genişliği otomatik olabilir
+        top: -20,
         backgroundColor: 'rgba(0,0,0,0.7)',
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 10,
-        // alignItems: 'center', // Gerek kalmadı
-        zIndex: 1001, // Butonun üzerinde kalması için
+        zIndex: 1001,
     },
     backgroundDrawingLabelText: {
         color: '#FFFFFF',

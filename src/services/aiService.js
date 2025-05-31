@@ -1,10 +1,10 @@
-import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
-import { getWeatherInfo } from './weatherService';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { getPlaceFromCoordinates } from '../helpers/locationHelpers';
 import { getCurrentLanguage } from '../i18n/i18n';
+import { getWeatherInfo } from './weatherService';
 
 // API anahtarını direkt tanımlayalım
 const genAI = new GoogleGenerativeAI("AIzaSyC_AUToC4TeClkw8amFNLsK63lInLOn4QU");

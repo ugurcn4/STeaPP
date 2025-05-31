@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { 
@@ -11,6 +11,7 @@ import {
   leaveGroup,
   deleteGroup
 } from '../services/groupService';
+import { translate } from '../i18n/i18n';
 import CreateEventModal from '../components/CreateEventModal';
 import GroupEventCard from '../components/GroupEventCard';
 import AddMembersModal from '../components/AddMembersModal';
@@ -41,7 +42,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
         const groupDetail = userGroups.find(g => g.id === groupId);
         
         if (!groupDetail) {
-          Alert.alert('Hata', 'Grup bulunamadı');
+          Alert.alert(translate('error'), translate('error_group_not_found'));
           navigation.goBack();
           return;
         }
@@ -61,8 +62,8 @@ const GroupDetailScreen = ({ route, navigation }) => {
         setEvents(sortedEvents);
         
       } catch (error) {
-        console.error('Grup detayları yüklenirken hata:', error);
-        Alert.alert('Hata', 'Grup detayları yüklenirken bir sorun oluştu');
+        console.error(translate('error_loading_group'), error);
+        Alert.alert(translate('error'), translate('error_loading_group'));
       } finally {
         setLoading(false);
       }
@@ -86,10 +87,10 @@ const GroupDetailScreen = ({ route, navigation }) => {
       // Modalı kapat
       setShowCreateEventModal(false);
       
-      Alert.alert('Başarılı', 'Etkinlik başarıyla oluşturuldu');
+      Alert.alert(translate('success'), translate('success_event_created'));
     } catch (error) {
-      console.error('Etkinlik oluşturulurken hata:', error);
-      Alert.alert('Hata', 'Etkinlik oluşturulurken bir sorun oluştu');
+      console.error(translate('error_creating_event'), error);
+      Alert.alert(translate('error'), translate('error_creating_event'));
     } finally {
       setLoading(false);
     }
@@ -134,13 +135,13 @@ const GroupDetailScreen = ({ route, navigation }) => {
       // Kullanıcıyı gruba davet et
       await inviteToGroup(groupId, userId, currentUserId);
       
-      Alert.alert('Başarılı', 'Kullanıcı gruba davet edildi');
+      Alert.alert(translate('success'), translate('success_member_invited'));
       
       // Modalı kapat
       setShowAddMembersModal(false);
     } catch (error) {
-      console.error('Kullanıcı davet edilirken hata:', error);
-      Alert.alert('Hata', error.message || 'Kullanıcı davet edilirken bir sorun oluştu');
+      console.error(translate('error_inviting_member'), error);
+      Alert.alert(translate('error'), translate('error_inviting_member'));
     } finally {
       setLoading(false);
     }
@@ -156,9 +157,9 @@ const GroupDetailScreen = ({ route, navigation }) => {
       await leaveGroup(groupId, currentUserId);
       
       // Onay mesajı göster
-      Alert.alert('Başarılı', 'Gruptan başarıyla ayrıldınız', [
+      Alert.alert(translate('success'), translate('success_left_group'), [
         { 
-          text: 'Tamam', 
+          text: translate('done'), 
           onPress: () => {
             // Navigation geçmişini temizleyip ana sayfaya dönüş
             navigation.reset({
@@ -169,8 +170,8 @@ const GroupDetailScreen = ({ route, navigation }) => {
         }
       ]);
     } catch (error) {
-      console.error('Gruptan çıkarken hata:', error);
-      Alert.alert('Hata', error.message || 'Gruptan çıkarken bir sorun oluştu');
+      console.error(translate('error_leaving_group'), error);
+      Alert.alert(translate('error'), translate('error_leaving_group'));
     } finally {
       setLoading(false);
       setShowLeaveConfirm(false);
@@ -187,9 +188,9 @@ const GroupDetailScreen = ({ route, navigation }) => {
       await deleteGroup(groupId, currentUserId);
       
       // Onay mesajı göster
-      Alert.alert('Başarılı', 'Grup başarıyla silindi', [
+      Alert.alert(translate('success'), translate('success_group_deleted'), [
         { 
-          text: 'Tamam', 
+          text: translate('done'), 
           onPress: () => {
             // Navigation geçmişini temizleyip ana sayfaya dönüş
             navigation.reset({
@@ -200,8 +201,8 @@ const GroupDetailScreen = ({ route, navigation }) => {
         }
       ]);
     } catch (error) {
-      console.error('Grup silinirken hata:', error);
-      Alert.alert('Hata', error.message || 'Grup silinirken bir sorun oluştu');
+      console.error(translate('error_deleting_group'), error);
+      Alert.alert(translate('error'), translate('error_deleting_group'));
     } finally {
       setLoading(false);
       setShowDeleteConfirm(false);
@@ -212,7 +213,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#53B4DF" />
-        <Text style={styles.loadingText}>Grup bilgileri yükleniyor...</Text>
+        <Text style={styles.loadingText}>{translate('group_detail_loading')}</Text>
       </View>
     );
   }
@@ -246,16 +247,8 @@ const GroupDetailScreen = ({ route, navigation }) => {
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Grup Detayları</Text>
-        
-        {isAdminOrCreator && (
-          <TouchableOpacity 
-            style={styles.editButton}
-            onPress={() => navigation.navigate('EditGroup', { group })}
-          >
-            <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
+        <Text style={styles.headerTitle}>{translate('group_detail_title')}</Text>
+        <View style={styles.backButton} />
       </View>
       
       <ScrollView style={styles.scrollContent}>
@@ -272,17 +265,17 @@ const GroupDetailScreen = ({ route, navigation }) => {
           <View style={styles.groupInfoContent}>
             <Text style={styles.groupName}>{group.name}</Text>
             <Text style={styles.groupDescription}>
-              {group.description || 'Bu grup için açıklama bulunmuyor.'}
+              {group.description || translate('group_detail_no_description')}
             </Text>
             
             <View style={styles.groupMetaInfo}>
               <View style={styles.metaItem}>
                 <Ionicons name="people" size={18} color="#9797A9" />
-                <Text style={styles.metaText}>{group.members?.length || 0} Üye</Text>
+                <Text style={styles.metaText}>{group.members?.length || 0} {translate('group_detail_members')}</Text>
               </View>
               <View style={styles.metaItem}>
                 <Ionicons name="calendar" size={18} color="#9797A9" />
-                <Text style={styles.metaText}>{events.length} Etkinlik</Text>
+                <Text style={styles.metaText}>{events.length} {translate('group_detail_events')}</Text>
               </View>
               <View style={styles.metaItem}>
                 <Ionicons name="time" size={18} color="#9797A9" />
@@ -301,7 +294,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
             onPress={() => setShowCreateEventModal(true)}
           >
             <Ionicons name="calendar" size={22} color="#53B4DF" />
-            <Text style={styles.actionText}>Etkinlik Oluştur</Text>
+            <Text style={styles.actionText}>{translate('group_detail_create_event')}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -309,7 +302,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
             onPress={() => setShowAddMembersModal(true)}
           >
             <Ionicons name="person-add" size={22} color="#53B4DF" />
-            <Text style={styles.actionText}>Üye Davet Et</Text>
+            <Text style={styles.actionText}>{translate('group_detail_invite_member')}</Text>
           </TouchableOpacity>
           
           {isAdminOrCreator ? (
@@ -318,7 +311,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
               onPress={() => setShowDeleteConfirm(true)}
             >
               <Ionicons name="trash" size={22} color="#FF4136" />
-              <Text style={[styles.actionText, styles.dangerText]}>Grubu Sil</Text>
+              <Text style={[styles.actionText, styles.dangerText]}>{translate('group_detail_delete_group')}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity 
@@ -326,7 +319,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
               onPress={() => setShowLeaveConfirm(true)}
             >
               <Ionicons name="exit" size={22} color="#FF4136" />
-              <Text style={[styles.actionText, styles.dangerText]}>Gruptan Ayrıl</Text>
+              <Text style={[styles.actionText, styles.dangerText]}>{translate('group_detail_leave_group')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -334,12 +327,7 @@ const GroupDetailScreen = ({ route, navigation }) => {
         {/* Grup Üyeleri */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Grup Üyeleri</Text>
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('GroupMembers', { group })}
-            >
-              <Text style={styles.seeAllText}>Tümünü Gör</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>{translate('group_detail_members_title')}</Text>
           </View>
           
           <MembersList 
@@ -355,12 +343,12 @@ const GroupDetailScreen = ({ route, navigation }) => {
         {/* Grup Etkinlikleri */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Yaklaşan Etkinlikler</Text>
+            <Text style={styles.sectionTitle}>{translate('group_detail_upcoming_events')}</Text>
             {upcomingEvents.length > 0 && (
               <TouchableOpacity 
                 onPress={() => navigation.navigate('GroupEvents', { groupId, events: upcomingEvents })}
               >
-                <Text style={styles.seeAllText}>Tümünü Gör</Text>
+                <Text style={styles.seeAllText}>{translate('group_detail_see_all')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -383,9 +371,9 @@ const GroupDetailScreen = ({ route, navigation }) => {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={48} color="#9797A9" />
-              <Text style={styles.emptyStateText}>Yaklaşan etkinlik yok</Text>
+              <Text style={styles.emptyStateText}>{translate('group_detail_no_upcoming_events')}</Text>
               <Text style={styles.emptyStateSubText}>
-                Yeni bir etkinlik oluşturmak için "Etkinlik Oluştur" butonuna tıklayın
+                {translate('group_detail_create_event_prompt')}
               </Text>
             </View>
           )}
@@ -395,11 +383,11 @@ const GroupDetailScreen = ({ route, navigation }) => {
         {pastEvents.length > 0 && (
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Geçmiş Etkinlikler</Text>
+              <Text style={styles.sectionTitle}>{translate('group_detail_past_events')}</Text>
               <TouchableOpacity 
                 onPress={() => navigation.navigate('GroupEvents', { groupId, events: pastEvents, isPast: true })}
               >
-                <Text style={styles.seeAllText}>Tümünü Gör</Text>
+                <Text style={styles.seeAllText}>{translate('group_detail_see_all')}</Text>
               </TouchableOpacity>
             </View>
             
@@ -448,22 +436,22 @@ const GroupDetailScreen = ({ route, navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModal}>
             <MaterialIcons name="exit-to-app" size={48} color="#FF4136" />
-            <Text style={styles.confirmTitle}>Gruptan Ayrıl</Text>
+            <Text style={styles.confirmTitle}>{translate('modal_leave_group_title')}</Text>
             <Text style={styles.confirmText}>
-              "{group.name}" grubundan ayrılmak istediğinizden emin misiniz?
+              {translate('modal_leave_group_message', { groupName: group.name })}
             </Text>
             <View style={styles.confirmButtons}>
               <TouchableOpacity 
                 style={styles.cancelButton}
                 onPress={() => setShowLeaveConfirm(false)}
               >
-                <Text style={styles.cancelButtonText}>İptal</Text>
+                <Text style={styles.cancelButtonText}>{translate('modal_cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.confirmButton}
                 onPress={handleLeaveGroup}
               >
-                <Text style={styles.confirmButtonText}>Ayrıl</Text>
+                <Text style={styles.confirmButtonText}>{translate('modal_leave')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -480,22 +468,22 @@ const GroupDetailScreen = ({ route, navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModal}>
             <MaterialIcons name="delete-forever" size={48} color="#FF4136" />
-            <Text style={styles.confirmTitle}>Grubu Sil</Text>
+            <Text style={styles.confirmTitle}>{translate('modal_delete_group_title')}</Text>
             <Text style={styles.confirmText}>
-              "{group.name}" grubunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm etkinlikler ve üyelikler silinecektir.
+              {translate('modal_delete_group_message', { groupName: group.name })}
             </Text>
             <View style={styles.confirmButtons}>
               <TouchableOpacity 
                 style={styles.cancelButton}
                 onPress={() => setShowDeleteConfirm(false)}
               >
-                <Text style={styles.cancelButtonText}>İptal</Text>
+                <Text style={styles.cancelButtonText}>{translate('modal_cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.confirmButton}
                 onPress={handleDeleteGroup}
               >
-                <Text style={styles.confirmButtonText}>Sil</Text>
+                <Text style={styles.confirmButtonText}>{translate('modal_delete')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -529,6 +517,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    width: 40,
   },
   headerTitle: {
     color: '#FFFFFF',
@@ -536,9 +525,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     flex: 1,
     textAlign: 'center',
-  },
-  editButton: {
-    padding: 8,
+    marginHorizontal: 8,
   },
   scrollContent: {
     flex: 1,

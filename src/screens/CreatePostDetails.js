@@ -21,7 +21,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import LocationPicker from '../components/LocationPicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createPost } from '../services/postService';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../../firebaseConfig';
@@ -29,21 +29,19 @@ import * as MediaLibrary from 'expo-media-library';
 import { translate } from '../i18n/i18n';
 
 const { width } = Dimensions.get('window');
-const IMAGE_HEIGHT = width / 2;
 const MAX_INPUT_HEIGHT = 150; // Maksimum açıklama alanı yüksekliği
 const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 const CreatePostDetails = ({ route, navigation }) => {
     const { image } = route.params;
-    const dispatch = useDispatch();
-    const { user, isAuth } = useSelector((state) => state.user);
+    const { isAuth } = useSelector((state) => state.user);
     const [userData, setUserData] = useState(null);
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState(null);
     const [isPublic, setIsPublic] = useState(true);
     const [tags, setTags] = useState([]);
     const [currentTag, setCurrentTag] = useState('');
-    const [inputHeight, setInputHeight] = useState(60);
+    const [, setInputHeight] = useState(60);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -207,14 +205,6 @@ const CreatePostDetails = ({ route, navigation }) => {
             navigation.replace('Auth');
         }
     }, [isAuth, navigation]);
-
-    useEffect(() => {
-        (async () => {
-            const { status } = await MediaLibrary.requestPermissionsAsync();
-            if (status !== 'granted') {
-            }
-        })();
-    }, []);
 
     return (
         <>

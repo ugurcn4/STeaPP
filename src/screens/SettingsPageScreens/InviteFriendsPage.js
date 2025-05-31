@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, ScrollView, Clipboard, ActivityIndicator, TextInput, Alert, Modal, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, ScrollView, Clipboard, ActivityIndicator, TextInput, Alert, Modal, FlatList } from 'react-native';
 import { useSelector } from 'react-redux';
 import { lightTheme, darkTheme } from '../../themes';
 import Ionicons from 'react-native-vector-icons/Ionicons';

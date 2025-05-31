@@ -14,7 +14,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import FastImage from 'react-native-fast-image';
 
 const Stories = ({ friends, navigation }) => {

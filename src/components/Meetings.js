@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Modal, TextInput, FlatList, SectionList, Platform } from 'react-native';
-import { Ionicons, FontAwesome, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { translate } from '../i18n/i18n';
 import styles from '../styles/MeetingsStyles';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -8,7 +9,7 @@ import { db } from '../../firebaseConfig';
 import TimeInput from './TimeInput';
 import MeetingDetailModal from './MeetingDetailModal';
 
-const Meetings = ({ navigation }) => {
+const Meetings = ({ navigation, refreshTrigger = 0 }) => {
   const [userMeetings, setUserMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNewMeetingModal, setShowNewMeetingModal] = useState(false);
@@ -28,7 +29,7 @@ const Meetings = ({ navigation }) => {
   const [showMeetingDetailModal, setShowMeetingDetailModal] = useState(false);
 
   // Haftanın günleri
-  const weekDays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  const weekDays = translate('calendar_weekdays');
   
   // Şu anki tarih
   const today = new Date();
@@ -46,6 +47,12 @@ const Meetings = ({ navigation }) => {
     loadMeetings();
     loadFriends();
   }, []);
+
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      loadMeetings();
+    }
+  }, [refreshTrigger]);
 
   useEffect(() => {
     // Arkadaşları filtrele
@@ -70,13 +77,12 @@ const Meetings = ({ navigation }) => {
       // Kullanıcının katıldığı etkinlikleri çek
       const meetingsQuery = query(
         collection(db, 'meetings'),
-        where('participants', 'array-contains', uid)
+        where('participants', 'array-contains', uid),
+        orderBy('createdAt', 'desc') // En yeni buluşmalar önce gelsin
       );
 
       const meetingsSnapshot = await getDocs(meetingsQuery);
-      const meetingsData = [];
-
-      for (const meetingDoc of meetingsSnapshot.docs) {
+      const meetingsPromises = meetingsSnapshot.docs.map(async (meetingDoc) => {
         const meetingData = meetingDoc.data();
         
         // Her katılımcının bilgilerini al
@@ -86,7 +92,7 @@ const Meetings = ({ navigation }) => {
             if (userDoc.exists()) {
               return {
                 id: participantId,
-                name: userDoc.data().informations?.name || 'İsimsiz Kullanıcı',
+                name: userDoc.data().informations?.name || translate('meetings_unnamed_user'),
                 profilePicture: userDoc.data().profilePicture || null
               };
             }
@@ -96,20 +102,23 @@ const Meetings = ({ navigation }) => {
         
         const validParticipants = participantsData.filter(p => p !== null);
         
-        meetingsData.push({
+        const meetingDate = meetingData.date?.toDate() || new Date();
+        
+        return {
           id: meetingDoc.id,
           ...meetingData,
-          date: meetingData.date?.toDate() || new Date(),
+          date: meetingDate,
           participantsData: validParticipants,
           // Ay adını Türkçeye çevir
-          month: getTurkishMonth(meetingData.date?.toDate() || new Date()),
-          day: (meetingData.date?.toDate() || new Date()).getDate()
-        });
-      }
+          month: translate('calendar_months_short')[meetingDate.getMonth()],
+          day: meetingDate.getDate()
+        };
+      });
       
+      const meetingsData = await Promise.all(meetingsPromises);
       setUserMeetings(meetingsData);
     } catch (error) {
-      console.error('Etkinlikler yüklenirken hata:', error);
+      console.error(translate('meetings_error_loading'), error);
     } finally {
       setLoading(false);
     }
@@ -135,7 +144,7 @@ const Meetings = ({ navigation }) => {
             if (friendDoc.exists()) {
               return {
                 id: friendId,
-                name: friendDoc.data().informations?.name || 'İsimsiz Kullanıcı',
+                name: friendDoc.data().informations?.name || translate('meetings_unnamed_user'),
                 profilePicture: friendDoc.data().profilePicture || null
               };
             }
@@ -146,7 +155,7 @@ const Meetings = ({ navigation }) => {
         setUserFriends(friendDetails.filter(friend => friend !== null));
       }
     } catch (error) {
-      console.error('Arkadaşlar yüklenirken hata:', error);
+      console.error(translate('meetings_error_friends_loading'), error);
     } finally {
       setLoadingFriends(false);
     }
@@ -155,17 +164,19 @@ const Meetings = ({ navigation }) => {
   const createNewMeeting = async () => {
     try {
       if (!meetingTitle.trim() || !meetingLocation.trim() || !meetingTime.trim() || selectedFriends.length === 0) {
-        alert('Lütfen tüm alanları doldurun ve en az bir arkadaş seçin.');
+        alert(translate('meetings_error_validation'));
         return;
       }
 
       // Saat formatı kontrolü (XX:XX)
       const timeRegex = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
       if (!timeRegex.test(meetingTime)) {
-        alert('Lütfen geçerli bir saat formatı girin (örn: 14:30)');
+        alert(translate('meetings_error_time_format'));
         return;
       }
 
+      setLoading(true);
+      
       const uid = await getCurrentUserUid();
       if (!uid) return;
 
@@ -205,13 +216,15 @@ const Meetings = ({ navigation }) => {
       setMeetingTime('');
       setSelectedFriends([]);
 
-      // Etkinlikleri yeniden yükle
+      // Etkinlikleri hemen yeniden yükle
       await loadMeetings();
       
-      alert('Etkinlik başarıyla oluşturuldu! Katılımcılar bilgilendirilecek.');
+      alert(translate('meetings_success_created'));
     } catch (error) {
-      console.error('Etkinlik oluşturulurken hata:', error);
-      alert('Etkinlik oluşturulurken bir hata oluştu.');
+      console.error(translate('meetings_error_creating'), error);
+      alert(translate('meetings_error_creating'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -403,12 +416,12 @@ const Meetings = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerText}>Yaklaşan Etkinlikler</Text>
+        <Text style={styles.headerText}>{translate('meetings_upcoming')}</Text>
         <TouchableOpacity 
           style={styles.filterButton}
           onPress={() => navigation.navigate('AllMeetings')}
         >
-          <Text style={styles.filterButtonText}>Tümünü Gör</Text>
+          <Text style={styles.filterButtonText}>{translate('meetings_see_all')}</Text>
           <Ionicons name="chevron-forward" size={14} color="#FFAC30" />
         </TouchableOpacity>
       </View>
@@ -420,36 +433,53 @@ const Meetings = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.calendarScrollContent}
         >
-          {dates.map((date, index) => (
-            <TouchableOpacity 
-              key={index}
-              style={[
-                styles.dateItem,
-                isSameDay(date, selectedDate) && styles.selectedDateItem
-              ]}
-              onPress={() => setSelectedDate(date)}
-            >
-              <Text style={[
-                styles.weekDay, 
-                isSameDay(date, selectedDate) && styles.selectedWeekDay
-              ]}>
-                {weekDays[date.getDay()]}
-              </Text>
-              <View style={[
-                styles.dateCircle,
-                isSameDay(date, selectedDate) && styles.selectedDateCircle,
-                isSameDay(date, today) && styles.todayCircle
-              ]}>
+          {dates.map((date, index) => {
+            const isSelected = isSameDay(date, selectedDate);
+            const isToday = isSameDay(date, today);
+            const hasEventForDate = hasEvent(date);
+            
+            return (
+              <TouchableOpacity 
+                key={index}
+                style={[
+                  styles.dateItem,
+                  isSelected && styles.selectedDateItem
+                ]}
+                onPress={() => setSelectedDate(date)}
+              >
+                {/* Haftanın günü */}
                 <Text style={[
-                  styles.dateNumber,
-                  isSameDay(date, selectedDate) && styles.selectedDateNumber
+                  styles.weekDay,
+                  isSelected && styles.selectedWeekDay
                 ]}>
-                  {date.getDate()}
+                  {weekDays[date.getDay()]}
                 </Text>
-              </View>
-              {hasEvent(date) && <View style={styles.eventDot} />}
-            </TouchableOpacity>
-          ))}
+
+                {/* Tarih dairesi */}
+                <View style={[
+                  styles.dateCircle,
+                  isSelected && styles.selectedDateCircle,
+                  isToday && styles.todayCircle
+                ]}>
+                  <Text style={[
+                    styles.dateNumber,
+                    isSelected && styles.selectedDateNumber,
+                    isToday && styles.todayNumber
+                  ]}>
+                    {date.getDate()}
+                  </Text>
+                </View>
+
+                {/* Etkinlik göstergesi */}
+                {hasEventForDate && (
+                  <View style={[
+                    styles.eventDot,
+                    isSelected && styles.selectedEventDot
+                  ]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -471,7 +501,7 @@ const Meetings = ({ navigation }) => {
                 <Text style={styles.plusBadgeText}>+</Text>
               </View>
             </View>
-            <Text style={styles.createEventText}>Buluşma Ayarla</Text>
+            <Text style={styles.createEventText}>{translate('meetings_create')}</Text>
           </TouchableOpacity>
           
           {userMeetings.length > 0 ? (
@@ -507,7 +537,7 @@ const Meetings = ({ navigation }) => {
                       handleOpenMeetingDetail(meeting);
                     }}
                   >
-                    <Text style={styles.joinButtonText}>Detay</Text>
+                    <Text style={styles.joinButtonText}>{translate('meetings_detail')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -515,8 +545,8 @@ const Meetings = ({ navigation }) => {
           ) : (
             <View style={styles.emptyMeetingsContainer}>
               <MaterialCommunityIcons name="calendar-remove" size={48} color="#9797A9" />
-              <Text style={styles.emptyMeetingsText}>Hiç buluşmanız yok</Text>
-              <Text style={styles.emptyMeetingsSubText}>Yeni bir buluşma oluşturmak için "Buluşma Ayarla" butonuna tıklayın</Text>
+              <Text style={styles.emptyMeetingsText}>{translate('meetings_empty')}</Text>
+              <Text style={styles.emptyMeetingsSubText}>{translate('meetings_empty_subtitle')}</Text>
             </View>
           )}
         </ScrollView>
@@ -532,7 +562,7 @@ const Meetings = ({ navigation }) => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Yeni Buluşma</Text>
+              <Text style={styles.modalTitle}>{translate('meetings_new')}</Text>
               <TouchableOpacity onPress={() => setShowNewMeetingModal(false)}>
                 <Ionicons name="close" size={24} color="#FFAC30" />
               </TouchableOpacity>
@@ -543,10 +573,10 @@ const Meetings = ({ navigation }) => {
               contentContainerStyle={styles.formContainer}
             >
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Başlık</Text>
+                <Text style={styles.formLabel}>{translate('meetings_title_label')}</Text>
                 <TextInput
                   style={styles.formInput}
-                  placeholder="Etkinlik adı"
+                  placeholder={translate('meetings_title_placeholder')}
                   placeholderTextColor="#9797A9"
                   value={meetingTitle}
                   onChangeText={setMeetingTitle}
@@ -554,10 +584,10 @@ const Meetings = ({ navigation }) => {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Konum</Text>
+                <Text style={styles.formLabel}>{translate('meetings_location_label')}</Text>
                 <TextInput
                   style={styles.formInput}
-                  placeholder="Buluşma yeri"
+                  placeholder={translate('meetings_location_placeholder')}
                   placeholderTextColor="#9797A9"
                   value={meetingLocation}
                   onChangeText={setMeetingLocation}
@@ -565,13 +595,13 @@ const Meetings = ({ navigation }) => {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Tarih</Text>
+                <Text style={styles.formLabel}>{translate('meetings_date_label')}</Text>
                 <TouchableOpacity 
                   style={styles.datePickerButton}
                   onPress={() => setShowCalendar(!showCalendar)}
                 >
                   <Text style={styles.datePickerButtonText}>
-                    {meetingDate.getDate()} {turkishMonths[meetingDate.getMonth()]} {meetingDate.getFullYear()}
+                    {meetingDate.getDate()} {translate('calendar_months')[meetingDate.getMonth()]} {meetingDate.getFullYear()}
                   </Text>
                   <Ionicons name="calendar" size={20} color="#FFAC30" />
                 </TouchableOpacity>
@@ -626,18 +656,18 @@ const Meetings = ({ navigation }) => {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Saat (24 saat formatı)</Text>
+                <Text style={styles.formLabel}>{translate('meetings_time_label')}</Text>
                 <TimeInput 
                   value={meetingTime}
                   onChangeText={setMeetingTime}
                 />
-                <Text style={styles.formHint}>Örnek: 14:30, 08:15 gibi</Text>
+                <Text style={styles.formHint}>{translate('meetings_time_hint')}</Text>
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Katılımcılar</Text>
+                <Text style={styles.formLabel}>{translate('meetings_participants_label')}</Text>
                 <Text style={styles.formInfo}>
-                  <Ionicons name="information-circle-outline" size={14} color="#FFAC30" /> Seçtiğiniz kişiler buluşma ile ilgili davet bildirimi alacaklar.
+                  <Ionicons name="information-circle-outline" size={14} color="#FFAC30" /> {translate('meetings_participants_info')}
                 </Text>
                 {loadingFriends ? (
                   <ActivityIndicator size="small" color="#FFAC30" />
@@ -671,16 +701,16 @@ const Meetings = ({ navigation }) => {
                           ))}
                         </ScrollView>
                       ) : (
-                        <Text style={styles.noSelectedFriendsText}>Henüz kimseyi seçmediniz</Text>
+                        <Text style={styles.noSelectedFriendsText}>{translate('meetings_no_selected_friends')}</Text>
                       )}
                     </View>
 
-                    <Text style={styles.friendsSelectionLabel}>Arkadaşlarınız</Text>
+                    <Text style={styles.friendsSelectionLabel}>{translate('meetings_friends_label')}</Text>
                     
                     <View style={styles.searchFriendContainer}>
                       <TextInput
                         style={styles.searchFriendInput}
-                        placeholder="Arkadaşlarınızı arayın..."
+                        placeholder={translate('meetings_search_friends')}
                         placeholderTextColor="#9797A9"
                         value={searchFriendQuery}
                         onChangeText={setSearchFriendQuery}
@@ -725,11 +755,11 @@ const Meetings = ({ navigation }) => {
                         </View>
                       ) : (
                         <Text style={styles.noSearchResultsText}>
-                          "{searchFriendQuery}" için sonuç bulunamadı
+                          "{searchFriendQuery}" {translate('meetings_no_search_results')}
                         </Text>
                       )
                     ) : (
-                      <Text style={styles.noFriendsText}>Arkadaş listeniz boş.</Text>
+                      <Text style={styles.noFriendsText}>{translate('meetings_no_friends')}</Text>
                     )}
                   </>
                 )}
@@ -742,7 +772,7 @@ const Meetings = ({ navigation }) => {
               style={[styles.createButton, { position: 'absolute', bottom: 20, left: 20, right: 20 }]}
               onPress={createNewMeeting}
             >
-              <Text style={styles.createButtonText}>Etkinlik Oluştur</Text>
+              <Text style={styles.createButtonText}>{translate('meetings_create_button')}</Text>
             </TouchableOpacity>
           </View>
         </View>

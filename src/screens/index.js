@@ -8,6 +8,7 @@ import SettingsPage from './SettingsPage';
 import ActivitiesScreen from './ActivitiesScreen';
 import OnboardingScreen from './OnboardingScreens/OnboardingScreen';
 import MaviTikSorgulamaPage from './SettingsPageScreens/MaviTikSorgulamaPage';
+import AllFriends from './AllFriends';
 
 export {
     HomePage,
@@ -18,5 +19,6 @@ export {
     SettingsPage,
     ActivitiesScreen,
     OnboardingScreen,
-    MaviTikSorgulamaPage
+    MaviTikSorgulamaPage,
+    AllFriends
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Easing, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
@@ -18,6 +18,7 @@ const CityExplorerCard = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
     const [cities, setCities] = useState([]);
+    const [imageLoadingStates, setImageLoadingStates] = useState({});
     const lastLoadedIndex = useRef(0);
     const allCitiesRef = useRef([]);
     const loadingMoreRef = useRef(false);
@@ -124,6 +125,21 @@ const CityExplorerCard = ({ navigation }) => {
         navigation.navigate('CityExplorer');
     };
 
+    // Resim yükleme durumunu izle
+    const handleImageLoad = (cityId) => {
+        setImageLoadingStates(prev => ({
+            ...prev,
+            [cityId]: false
+        }));
+    };
+
+    const handleImageLoadStart = (cityId) => {
+        setImageLoadingStates(prev => ({
+            ...prev,
+            [cityId]: true
+        }));
+    };
+
     // Loading durumunda farklı bir görünüm
     if (loading) {
         return (
@@ -174,10 +190,20 @@ const CityExplorerCard = ({ navigation }) => {
                                     key={`${city.id}-${index}`}
                                     style={styles.suggestedCityCard}
                                 >
-                                    <Image
-                                        source={{ uri: city.image }}
-                                        style={styles.cityImage}
-                                    />
+                                    <View style={styles.cityImageContainer}>
+                                        {imageLoadingStates[city.id] && (
+                                            <View style={styles.imagePlaceholder}>
+                                                <ActivityIndicator size="small" color="#FFF" />
+                                                <Text style={styles.loadingImageText}>{translate('loading')}</Text>
+                                            </View>
+                                        )}
+                                        <Image
+                                            source={{ uri: city.image }}
+                                            style={styles.cityImage}
+                                            onLoadStart={() => handleImageLoadStart(city.id)}
+                                            onLoad={() => handleImageLoad(city.id)}
+                                        />
+                                    </View>
                                     <Text style={styles.cityTitle}>{city.name}</Text>
                                     <Text style={styles.cityDescription}>
                                         {formatRegionName(city.region)}
@@ -300,6 +326,27 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 4,
         elevation: 3,
+    },
+    cityImageContainer: {
+        width: '100%',
+        height: 90,
+        position: 'relative',
+    },
+    imagePlaceholder: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(100,100,100,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
+    },
+    loadingImageText: {
+        color: '#FFF',
+        fontSize: 12,
+        marginTop: 5,
     },
     cityImage: {
         width: '100%',

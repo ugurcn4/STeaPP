@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, FlatList, Image, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Image, Modal, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { getCityData } from '../services/cityService';
@@ -10,7 +10,6 @@ import { translate } from '../i18n/i18n';
 const CityExplorer = ({ navigation }) => {
     const [cityData, setCityData] = useState(null);
     const [selectedCity, setSelectedCity] = useState(null);
-    const [animation] = useState(new Animated.Value(0));
     const [selectedRegion, setSelectedRegion] = useState('all');
     const [cities, setCities] = useState([]);
     const [loading, setLoading] = useState(true);

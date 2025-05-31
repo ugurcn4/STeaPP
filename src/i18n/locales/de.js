@@ -992,7 +992,304 @@ export default {
     'faq_reduce_data_answer': '1. Bevorzuge die sofortige Standortfreigabe gegenüber der Live-Standortfreigabe\n2. Teile den Standort nur mit den notwendigen Personen bei der Auswahl mehrerer Freunde\n3. Stelle Standortaktualisierungen weniger häufig ein\n4. Verwende die App nur, wenn du mit Wi-Fi verbunden bist\n5. Beende Standortfreigaben, wenn du sie nicht aktiv nutzt',
 
     'faq_delete_history_question': 'Wie kann ich meine Standortgeschichte löschen?',
-    'faq_delete_history_answer': 'Um deine Standortgeschichte zu löschen:\n1. Gehe zu Einstellungen > Datenschutz > Standortgeschichte\n2. Klicke auf die Schaltfläche "Verlauf löschen"\n3. Wähle den Zeitraum, den du löschen möchtest (Alle, Letzte 7 Tage, Letzte 30 Tage)\nHinweis: Gelöschte Standortdaten können nicht wiederhergestellt werden. Dieser Vorgang löscht nur die von dir geteilten Standortdaten und hat keine Auswirkungen auf Daten auf den Geräten deiner Freunde.'
+    'faq_delete_history_answer': 'Um deine Standortgeschichte zu löschen:\n1. Gehe zu Einstellungen > Datenschutz > Standortgeschichte\n2. Klicke auf die Schaltfläche "Verlauf löschen"\n3. Wähle den Zeitraum, den du löschen möchtest (Alle, Letzte 7 Tage, Letzte 30 Tage)\nHinweis: Gelöschte Standortdaten können nicht wiederhergestellt werden. Dieser Vorgang löscht nur die von dir geteilten Standortdaten und hat keine Auswirkungen auf Daten auf den Geräten deiner Freunde.',
 
+
+    // FriendsPage Texte
+    'friends_page_title': 'Meine Freunde',
+    'friends_page_social_circle': 'Mein sozialer Kreis',
+    'friends_page_meetings': 'Meine Treffen',
+    'friends_page_activities': 'Meine Aktivitäten',
+    'friends_page_groups': 'Meine Gruppen',
+    'friends_page_connections': 'Meine Verbindungen',
+    'friends_page_social_network': 'Mein soziales Netzwerk',
+    'friends_page_friend_list': 'Meine Freundesliste',
+
+    'friends_page_pending_requests': 'Ausstehende Anfragen',
+    'friends_page_see_all': 'Alle anzeigen',
+    'friends_page_new_friend_requests': 'neue Freundschaftsanfragen',
+    'friends_page_view_pending_requests': 'Ausstehende Anfragen anzeigen und beantworten',
+
+    'friends_page_group_invites': 'Gruppeneinladungen',
+    'friends_page_new_group_invites': 'neue Gruppeneinladungen',
+    'friends_page_view_group_invites': 'Gruppeneinladungen anzeigen und beantworten',
+
+    'friends_page_meeting_invites': 'Termineinladungen',
+    'friends_page_new_meeting_invites': 'neue Termineinladungen',
+    'friends_page_view_meeting_invites': 'Termineinladungen anzeigen und beantworten',
+
+    'friends_page_quick_access': 'Schnellzugriff',
+    'friends_page_customize': 'Anpassen',
+
+    // Untere Navigationsleiste
+    'nav_home': 'Startseite',
+    'nav_friends': 'Freunde',
+    'nav_map': 'Karte',
+    'nav_events': 'Termine',
+    'nav_profile': 'Profil',
+
+    // Fehlermeldungen
+    'error_friend_requests': 'Fehler beim Laden der Freundschaftsanfragen:',
+    'error_group_invites': 'Fehler beim Laden der Gruppeneinladungen:',
+    'error_meeting_invites': 'Fehler beim Laden der Termineinladungen:',
+
+
+    // QuickOptions Texte
+    'quick_options_add_friend': 'Freund hinzufügen',
+    'quick_options_groups': 'Gruppen',
+    'quick_options_events': 'Veranstaltungen',
+    'quick_options_locations': 'Standorte',
+    'quick_options_all_friends': 'Alle Freunde',
+    'quick_options_requests': 'Anfragen',
+
+    // Fehlermeldungen
+    'error_loading_friend_requests': 'Fehler beim Laden der Freundschaftsanfragen:',
+    'error_loading_groups': 'Fehler beim Laden der Gruppen:',
+    'error_accepting_request': 'Beim Annehmen der Anfrage ist ein Fehler aufgetreten.',
+    'error_rejecting_request': 'Beim Ablehnen der Anfrage ist ein Fehler aufgetreten.',
+
+    // Erfolgsmeldungen
+    'success_friend_request_accepted': 'Freundschaftsanfrage angenommen.',
+    'success_friend_request_rejected': 'Freundschaftsanfrage abgelehnt.',
+
+    // Modal-Texte
+    'modal_friend_requests_title': 'Freundschaftsanfragen',
+    'modal_no_pending_requests': 'Keine ausstehenden Freundschaftsanfragen.',
+    'modal_unnamed_user': 'Unbenannter Benutzer',
+
+    // GroupDetailScreen Texte
+    'group_detail_loading': 'Gruppendaten werden geladen...',
+    'group_detail_title': 'Gruppendetails',
+    'group_detail_no_description': 'Keine Beschreibung für diese Gruppe vorhanden.',
+    'group_detail_members': 'Mitglied',
+    'group_detail_events': 'Veranstaltung',
+    'group_detail_create_event': 'Veranstaltung erstellen',
+    'group_detail_invite_member': 'Mitglied einladen',
+    'group_detail_delete_group': 'Gruppe löschen',
+    'group_detail_leave_group': 'Gruppe verlassen',
+    'group_detail_members_title': 'Gruppenmitglieder',
+    'group_detail_see_all': 'Alle anzeigen',
+    'group_detail_upcoming_events': 'Bevorstehende Veranstaltungen',
+    'group_detail_no_upcoming_events': 'Keine bevorstehenden Veranstaltungen',
+    'group_detail_create_event_prompt': 'Klicken Sie auf "Veranstaltung erstellen", um eine neue zu erstellen',
+    'group_detail_past_events': 'Vergangene Veranstaltungen',
+
+    // Erfolgsmeldungen
+    'success_event_created': 'Veranstaltung erfolgreich erstellt',
+    'success_member_invited': 'Benutzer zur Gruppe eingeladen',
+    'success_left_group': 'Sie haben die Gruppe erfolgreich verlassen',
+    'success_group_deleted': 'Gruppe erfolgreich gelöscht',
+
+    // Fehlermeldungen
+    'error_group_not_found': 'Gruppe nicht gefunden',
+    'error_loading_group': 'Fehler beim Laden der Gruppendetails',
+    'error_creating_event': 'Fehler beim Erstellen der Veranstaltung',
+    'error_inviting_member': 'Fehler beim Einladen des Benutzers',
+    'error_leaving_group': 'Fehler beim Verlassen der Gruppe',
+    'error_deleting_group': 'Fehler beim Löschen der Gruppe',
+
+    // Bestätigungsmodale
+    'modal_leave_group_title': 'Gruppe verlassen',
+    'modal_leave_group_message': 'Möchten Sie die Gruppe "{groupName}" wirklich verlassen?',
+    'modal_delete_group_title': 'Gruppe löschen',
+    'modal_delete_group_message': 'Möchten Sie die Gruppe "{groupName}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden und alle Veranstaltungen und Mitglieder werden gelöscht.',
+    'modal_cancel': 'Abbrechen',
+    'modal_leave': 'Verlassen',
+    'modal_delete': 'Löschen',
+
+    // GroupsList Texte
+    'groups_page_title': 'Meine Gruppen',
+    'groups_loading': 'Gruppen werden geladen...',
+    'groups_invites': 'Gruppeneinladungen',
+    'groups_no_groups': 'Sie sind noch in keiner Gruppe Mitglied',
+    'groups_create_prompt': 'Klicken Sie auf "+", um eine neue Gruppe zu erstellen',
+
+    // Gruppenstatus
+    'group_status_active': 'Aktiv',
+    'group_status_quiet': 'Ruhig',
+    'group_status_passive': 'Passiv',
+
+    // Gruppen-Meta
+    'group_meta_members': 'Mitglied',
+    'group_meta_events': 'Veranstaltung',
+
+    // Fehlermeldungen
+    'error_loading_groups': 'Fehler beim Laden der Gruppen',
+
+    // FriendGroups Texte
+    'friend_groups_title': 'Freundesgruppen',
+    'friend_groups_see_all': 'Alle anzeigen',
+    'friend_groups_loading': 'Lädt...',
+    'friend_groups_new_group': 'Neue Gruppe',
+    'friend_groups_invites': 'Gruppeneinladungen',
+    'friend_groups_new': 'Neu',
+    'friend_groups_invites_count': 'Einladung',
+    'friend_groups_invite_text': 'Gruppeneinladung',
+    'friend_groups_view': 'Anzeigen',
+    'friend_groups_members_count': 'Mitglied',
+    'friend_groups_no_members': 'Keine Mitglieder',
+    'friend_groups_empty_title': 'Du hast noch keine Gruppen',
+    'friend_groups_empty_subtitle': 'Klicke auf „Neue Gruppe“, um eine zu erstellen',
+
+    // Fehlermeldungen
+    'error_loading_friends_groups': 'Fehler beim Laden der Daten:',
+    'error_unnamed_user': 'Unbenannter Benutzer',
+
+
+    // CreateGroupScreen Texte
+    'create_group_title': 'Neue Gruppe erstellen',
+    'create_group_button': 'Erstellen',
+    'create_group_name_label': 'Gruppenname',
+    'create_group_name_placeholder': 'z. B. Enge Freunde',
+    'create_group_description_label': 'Beschreibung (optional)',
+    'create_group_description_placeholder': 'Eine kurze Beschreibung Ihrer Gruppe...',
+    'create_group_icon_label': 'Gruppensymbol',
+    'create_group_color_label': 'Gruppenfarbe',
+    'create_group_preview_name': 'Gruppenname',
+    'create_group_loading': 'Gruppe wird erstellt...',
+
+    // Fehlermeldungen
+    'error_empty_group_name': 'Bitte geben Sie einen Gruppennamen ein',
+    'error_user_data': 'Benutzerdaten konnten nicht abgerufen werden',
+    'error_creating_group': 'Beim Erstellen der Gruppe ist ein Fehler aufgetreten',
+
+    // Erfolgsmeldungen
+    'success_group_created': 'Gruppe erfolgreich erstellt',
+    'success_button': 'OK',
+
+
+    // Neues Treffen Modal
+    'meetings_new': 'Neues Treffen',
+    'meetings_title_label': 'Titel',
+    'meetings_title_placeholder': 'Veranstaltungsname',
+    'meetings_location_label': 'Ort',
+    'meetings_location_placeholder': 'Treffpunkt',
+    'meetings_date_label': 'Datum',
+    'meetings_time_label': 'Uhrzeit (24-Stunden-Format)',
+    'meetings_time_hint': 'Beispiel: 14:30, 08:15 usw.',
+    'meetings_participants_label': 'Teilnehmer',
+    'meetings_participants_info': 'Ausgewählte Personen erhalten eine Einladung zum Treffen.',
+    'meetings_no_selected_friends': 'Noch niemand ausgewählt',
+    'meetings_friends_label': 'Deine Freunde',
+    'meetings_search_friends': 'Freunde suchen...',
+    'meetings_no_search_results': 'Keine Ergebnisse gefunden für',
+    'meetings_no_friends': 'Deine Freundesliste ist leer.',
+    'meetings_create_button': 'Veranstaltung erstellen',
+
+    // Fehlermeldungen
+    'meetings_error_loading': 'Fehler beim Laden der Veranstaltungen:',
+    'meetings_error_friends_loading': 'Fehler beim Laden der Freunde:',
+    'meetings_error_validation': 'Bitte füllen Sie alle Felder aus und wählen Sie mindestens einen Freund.',
+    'meetings_error_time_format': 'Bitte geben Sie eine gültige Uhrzeit ein (z. B. 14:30)',
+    'meetings_error_creating': 'Fehler beim Erstellen der Veranstaltung.',
+    'meetings_unnamed_user': 'Unbenannter Benutzer',
+
+    // Erfolgsmeldungen
+    'meetings_success_created': 'Veranstaltung erfolgreich erstellt! Teilnehmer werden benachrichtigt.',
+
+    // Kalender
+    'calendar_weekdays': ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+    'calendar_weekdays_short': ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+    'calendar_months': ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
+    'calendar_months_short': ['JAN', 'FEB', 'MÄR', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'],
+
+
+    // AllMeetingsScreen Texte
+    'all_meetings_title': 'Meine Veranstaltungen',
+    'all_meetings_loading': 'Veranstaltungen werden geladen...',
+    'all_meetings_empty': 'Sie haben noch keine Veranstaltungen',
+    'all_meetings_empty_upcoming': 'Keine bevorstehenden Veranstaltungen',
+    'all_meetings_empty_past': 'Keine vergangenen Veranstaltungen',
+    'all_meetings_create': 'Neue Veranstaltung erstellen',
+    'all_meetings_details': 'Details',
+    'all_meetings_completed': 'Abgeschlossen',
+
+    // Tab Texte
+    'all_meetings_tab_upcoming': 'Bevorstehend',
+    'all_meetings_tab_past': 'Vergangen',
+
+    // Fehlermeldungen
+    'all_meetings_error_loading': 'Fehler beim Laden der Veranstaltungen:',
+    'all_meetings_unnamed_user': 'Unbenannter Benutzer',
+
+    // Wochentage und Monate
+    'days_full': ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
+    'months_full': ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
+
+
+    // Meetings.js Texte
+    'meetings_upcoming': 'Bevorstehende Veranstaltungen',
+    'meetings_see_all': 'Alle anzeigen',
+    'meetings_create': 'Veranstaltung erstellen',
+    'meetings_empty': 'Sie haben noch keine Veranstaltungen',
+    'meetings_empty_subtitle': 'Klicken Sie auf "Veranstaltung erstellen", um eine neue zu erstellen',
+    'meetings_detail': 'Details',
+
+    'add_members_title': 'Freund zur Gruppe einladen',
+    'add_members_search': 'Freunde suchen...',
+    'add_members_loading': 'Freunde werden geladen...',
+    'add_members_invite': 'Einladen',
+    'add_members_no_results': 'Keine Ergebnisse gefunden für',
+    'add_members_empty': 'Keine Freunde zum Einladen verfügbar',
+    'add_members_empty_subtitle': 'Alle deine Freunde sind bereits in dieser Gruppe oder du hast noch keine Freunde.',
+    'add_members_unnamed_user': 'Unbenannter Benutzer',
+
+    // Fehlermeldungen
+    'add_members_error_loading': 'Fehler beim Laden der Freunde:',
+    'add_members_error_alert': 'Beim Laden der Freundesliste ist ein Fehler aufgetreten.',
+    'error': 'Fehler',
+
+    'user_search_title': 'Freunde suchen',
+    'user_search_placeholder': 'Suche nach Name, Benutzername oder E-Mail...',
+    'user_search_tips_title': 'Suchtipps',
+    'user_search_tip_1': '• Sie können nach Name, Benutzername oder E-Mail suchen',
+    'user_search_tip_2': '• Ergebnisse werden beim Tippen automatisch aktualisiert',
+    'user_search_tip_3': '• Relevanteste Ergebnisse werden oben angezeigt',
+    'user_search_loading': 'Benutzer werden geladen...',
+    'user_search_searching': 'Benutzer werden gesucht...',
+    'user_search_results_count': 'Benutzer gefunden',
+    'user_search_results_limit': 'Erste 10 Ergebnisse werden angezeigt',
+    'user_search_show_more': 'Weitere Ergebnisse anzeigen',
+    'user_search_no_results': 'Keine Benutzer gefunden',
+    'user_search_try_different': 'Versuchen Sie einen anderen Suchbegriff',
+    'user_search_start_message': 'Um Freunde zu suchen',
+    'user_search_start_submessage': 'können Sie die obige Suchleiste verwenden',
+
+    // Freundschaftsstatus-Texte
+    'friendship_status_friend': 'Ihr Freund',
+    'friendship_status_sent': 'Anfrage gesendet',
+    'friendship_status_received': 'Anfrage annehmen',
+    'friendship_status_add': 'Freund hinzufügen',
+    'friendship_action_remove': 'Freund entfernen',
+    'friendship_action_cancel': 'Anfrage abbrechen',
+    'friendship_action_accept_info': 'Besuchen Sie die Freundschaftsanfragen-Seite, um die Anfrage anzunehmen',
+
+    // Bestätigungs- und Fehlermeldungen
+    'user_search_remove_title': 'Freund entfernen',
+    'user_search_remove_message': 'Sind Sie sicher, dass Sie diese Person aus Ihrer Freundesliste entfernen möchten?',
+    'user_search_remove_success': 'Freundschaft erfolgreich entfernt.',
+    'user_search_error_loading': 'Fehler beim Abrufen der Benutzerdetails:',
+    'user_search_error_search': 'Beim Suchen nach Benutzern ist ein Fehler aufgetreten.',
+    'user_search_error_remove': 'Beim Entfernen des Freundes ist ein Fehler aufgetreten.',
+    'user_search_error_request': 'Beim Senden der Freundschaftsanfrage ist ein Fehler aufgetreten.',
+    'user_search_error_cancel': 'Beim Abbrechen der Freundschaftsanfrage ist ein Fehler aufgetreten.',
+    'user_search_unnamed': 'Unbenannter Benutzer',
+
+    // Schaltflächentexte
+    'cancel': 'Abbrechen',
+    'remove': 'Entfernen',
+    'info': 'Info',
+    'error': 'Fehler',
+    'success': 'Erfolg',
+
+
+    // AllFriends Texte'all_friends_title': 'Alle Freunde',
+    'all_friends_search': 'Freunde suchen...',
+    'all_friends_loading': 'Fehler beim Laden der Freundesliste:',
+    'all_friends_no_results': 'Keine Suchergebnisse gefunden',
+    'all_friends_empty': 'Sie haben noch keine Freunde',
+    'all_friends_add': 'Freund hinzufügen',
+    'all_friends_unnamed': 'Unbenannter Benutzer',
+    'all_friends_username_prefix': '@',
 
 };

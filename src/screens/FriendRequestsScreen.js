@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getFriendRequests, acceptFriendRequest, rejectFriendRequest } from '../services/friendFunctions';
+import FriendProfileModal from '../modals/friendProfileModal';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight;
 
@@ -24,6 +26,8 @@ const FriendRequestsScreen = () => {
   const [friendRequests, setFriendRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [friendModalVisible, setFriendModalVisible] = useState(false);
 
   useEffect(() => {
     loadFriendRequests();
@@ -70,22 +74,44 @@ const FriendRequestsScreen = () => {
     }
   };
 
+  const handleUserPress = (request) => {
+    // Kullanıcı verilerini hazırla
+    const friendData = {
+      id: request.id,
+      name: request.name || 'İsimsiz Kullanıcı',
+      profilePicture: request.profilePicture || null,
+      friends: request.friends || [],  // Arkadaş listesini ekle
+      informations: {
+        name: request.name || 'İsimsiz Kullanıcı',
+        username: request.username || request.name?.toLowerCase().replace(/\s+/g, '_') || 'kullanici'
+      }
+    };
+    
+    // Arkadaş verilerini ayarla ve modalı göster
+    setSelectedFriend(friendData);
+    setFriendModalVisible(true);
+  };
+
   const renderRequestItem = (request) => {
     return (
       <View key={request.id} style={styles.requestCard}>
         <View style={styles.userInfo}>
-          {request.profilePicture ? (
-            <Image 
-              source={{ uri: request.profilePicture }} 
-              style={styles.profilePicture} 
-            />
-          ) : (
-            <View style={styles.defaultProfilePicture}>
-              <Text style={styles.profileInitial}>{request.name.charAt(0)}</Text>
-            </View>
-          )}
+          <TouchableOpacity onPress={() => handleUserPress(request)}>
+            {request.profilePicture ? (
+              <Image 
+                source={{ uri: request.profilePicture }} 
+                style={styles.profilePicture} 
+              />
+            ) : (
+              <View style={styles.defaultProfilePicture}>
+                <Text style={styles.profileInitial}>{request.name.charAt(0)}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{request.name}</Text>
+            <TouchableOpacity onPress={() => handleUserPress(request)}>
+              <Text style={styles.userName}>{request.name}</Text>
+            </TouchableOpacity>
             <Text style={styles.userSubText}>Arkadaşlık isteği gönderdi</Text>
           </View>
         </View>
@@ -114,22 +140,26 @@ const FriendRequestsScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
-        translucent={Platform.OS === 'android'}
+        translucent
         backgroundColor="transparent"
-        barStyle={Platform.OS === 'ios' ? 'dark-content' : 'light-content'}
+        barStyle="light-content"
       />
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerText}>Arkadaşlık İstekleri</Text>
-          </View>
-        </View>
+        <LinearGradient 
+          colors={['#252636', '#1E1E2C']} 
+          start={{x: 0, y: 0}} 
+          end={{x: 0, y: 1}}
+          style={styles.header}
+        >
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFAC30" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Arkadaşlık İstekleri</Text>
+          <View style={styles.actionButton} />
+        </LinearGradient>
         
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -163,6 +193,14 @@ const FriendRequestsScreen = () => {
             )}
           </ScrollView>
         )}
+        
+        {/* FriendProfileModal */}
+        <FriendProfileModal
+          visible={friendModalVisible}
+          onClose={() => setFriendModalVisible(false)}
+          friend={selectedFriend}
+          navigation={navigation}
+        />
       </View>
     </SafeAreaView>
   );
@@ -176,37 +214,27 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#252636',
+    backgroundColor: '#1E1E2C',
   },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: Platform.OS === 'ios' ? 12 : 16,
-    backgroundColor: '#252636',
-    borderBottomWidth: 1,
-    borderBottomColor: '#32323E',
-    elevation: Platform.OS === 'android' ? 3 : 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: Platform.OS === 'ios' ? 0.2 : 0.1,
-    shadowRadius: Platform.OS === 'ios' ? 4 : 3,
-    zIndex: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 10 : 16,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
   },
   backButton: {
-    padding: 8,
+    padding: 5,
   },
-  headerText: {
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 12,
+  },
+  actionButton: {
+    padding: 5,
+    width: 24,
   },
   loadingContainer: {
     flex: 1,

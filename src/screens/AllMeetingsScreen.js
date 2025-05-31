@@ -15,6 +15,7 @@ import { db } from '../../firebaseConfig';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import MeetingDetailModal from '../components/MeetingDetailModal';
+import { translate } from '../i18n/i18n';
 
 const AllMeetingsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
@@ -30,8 +31,7 @@ const AllMeetingsScreen = ({ navigation }) => {
 
   // Türkçe ay adını al
   const getTurkishMonth = (date) => {
-    const months = ['OCA', 'ŞUB', 'MAR', 'NİS', 'MAY', 'HAZ', 'TEM', 'AĞU', 'EYL', 'EKİ', 'KAS', 'ARA'];
-    return months[date.getMonth()];
+    return translate('calendar_months_short')[date.getMonth()];
   };
 
   // Etkinlikleri yükle
@@ -60,7 +60,7 @@ const AllMeetingsScreen = ({ navigation }) => {
             if (userDoc.exists()) {
               return {
                 id: participantId,
-                name: userDoc.data().informations?.name || 'İsimsiz Kullanıcı',
+                name: userDoc.data().informations?.name || translate('all_meetings_unnamed_user'),
                 profilePicture: userDoc.data().profilePicture || null
               };
             }
@@ -97,7 +97,7 @@ const AllMeetingsScreen = ({ navigation }) => {
       
       setUserMeetings(meetingsData);
     } catch (error) {
-      console.error('Etkinlikler yüklenirken hata:', error);
+      console.error(translate('all_meetings_error_loading'), error);
     } finally {
       setLoading(false);
     }
@@ -168,8 +168,8 @@ const AllMeetingsScreen = ({ navigation }) => {
 
   // Tarih formatını düzenle ve Türkçe gün adını döndür
   const formatDateToTurkish = (date) => {
-    const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const days = translate('days_full');
+    const months = translate('months_full');
     
     return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
   };
@@ -199,7 +199,7 @@ const AllMeetingsScreen = ({ navigation }) => {
           </View>
           {item.isPast && (
             <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>Tamamlandı</Text>
+              <Text style={styles.statusText}>{translate('all_meetings_completed')}</Text>
             </View>
           )}
         </View>
@@ -226,7 +226,7 @@ const AllMeetingsScreen = ({ navigation }) => {
             style={styles.detailButton}
             onPress={() => handleOpenMeetingDetail(item)}
           >
-            <Text style={styles.detailButtonText}>Detaylar</Text>
+            <Text style={styles.detailButtonText}>{translate('all_meetings_details')}</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -246,7 +246,7 @@ const AllMeetingsScreen = ({ navigation }) => {
         onPress={() => setActiveTab('upcoming')}
       >
         <Text style={[styles.tabText, activeTab === 'upcoming' && styles.activeTabText]}>
-          Yaklaşan ({getFilteredMeetingsCount(false)})
+          {translate('all_meetings_tab_upcoming')} ({getFilteredMeetingsCount(false)})
         </Text>
       </TouchableOpacity>
       <TouchableOpacity 
@@ -254,7 +254,7 @@ const AllMeetingsScreen = ({ navigation }) => {
         onPress={() => setActiveTab('past')}
       >
         <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
-          Geçmiş ({getFilteredMeetingsCount(true)})
+          {translate('all_meetings_tab_past')} ({getFilteredMeetingsCount(true)})
         </Text>
       </TouchableOpacity>
     </View>
@@ -281,10 +281,10 @@ const AllMeetingsScreen = ({ navigation }) => {
         >
           <Ionicons name="arrow-back" size={24} color="#FFAC30" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Etkinliklerim</Text>
+        <Text style={styles.headerTitle}>{translate('all_meetings_title')}</Text>
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => navigation.navigate('FriendsPage')}
+          onPress={() => navigation.navigate('Meetings')}
         >
           <Ionicons name="add" size={24} color="#FFAC30" />
         </TouchableOpacity>
@@ -297,17 +297,17 @@ const AllMeetingsScreen = ({ navigation }) => {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FFAC30" />
-          <Text style={styles.loadingText}>Etkinlikler yükleniyor...</Text>
+          <Text style={styles.loadingText}>{translate('all_meetings_loading')}</Text>
         </View>
       ) : userMeetings.length === 0 ? (
         <View style={styles.emptyContainer}>
           <MaterialCommunityIcons name="calendar-blank" size={80} color="#9797A9" />
-          <Text style={styles.emptyText}>Henüz bir etkinliğiniz bulunmuyor</Text>
+          <Text style={styles.emptyText}>{translate('all_meetings_empty')}</Text>
           <TouchableOpacity 
             style={styles.createButton}
             onPress={() => navigation.navigate('FriendsPage')}
           >
-            <Text style={styles.createButtonText}>Yeni Etkinlik Oluştur</Text>
+            <Text style={styles.createButtonText}>{translate('all_meetings_create')}</Text>
           </TouchableOpacity>
         </View>
       ) : getFilteredMeetingsCount(activeTab === 'past') === 0 ? (
@@ -318,14 +318,14 @@ const AllMeetingsScreen = ({ navigation }) => {
             color="#9797A9" 
           />
           <Text style={styles.emptyText}>
-            {activeTab === 'upcoming' ? 'Yaklaşan etkinliğiniz bulunmuyor' : 'Geçmiş etkinliğiniz bulunmuyor'}
+            {translate(activeTab === 'upcoming' ? 'all_meetings_empty_upcoming' : 'all_meetings_empty_past')}
           </Text>
           {activeTab === 'upcoming' && (
             <TouchableOpacity 
               style={styles.createButton}
               onPress={() => navigation.navigate('FriendsPage')}
             >
-              <Text style={styles.createButtonText}>Yeni Etkinlik Oluştur</Text>
+              <Text style={styles.createButtonText}>{translate('all_meetings_create')}</Text>
             </TouchableOpacity>
           )}
         </View>

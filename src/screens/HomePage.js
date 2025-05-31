@@ -1,21 +1,23 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, ActivityIndicator, Easing, Platform, RefreshControl, Alert } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import ProfileModal from '../modals/ProfileModal';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, onSnapshot, orderBy, doc, getDoc, where, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
-import ProgressBar from 'react-native-progress/Bar';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
-import { LinearGradient } from 'expo-linear-gradient';
-import WeatherCard from './HomePageCards/WeatherCard';
-import { haversine } from '../helpers/locationUtils';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import LottieView from 'lottie-react-native';
-import CityExplorerCard from './HomePageCards/CityExplorerCard';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Easing, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import FastImage from 'react-native-fast-image';
-import styles from '../styles/HomePageStyles';
+import ProgressBar from 'react-native-progress/Bar';
+import { db } from '../../firebaseConfig';
+import { haversine } from '../helpers/locationUtils';
 import { translate } from '../i18n/i18n';
+import ProfileModal from '../modals/ProfileModal';
+import styles from '../styles/HomePageStyles';
+import CityExplorerCard from './HomePageCards/CityExplorerCard';
+import WeatherCard from './HomePageCards/WeatherCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AIRecommendationsCard from './HomePageCards/AIRecommendationsCard';
 
 // motivationMessages'ı component dışında tanımlayalım
 const motivationMessages = [
@@ -32,7 +34,6 @@ const HomePage = ({ navigation }) => {
     const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [isAnimating, setIsAnimating] = useState(false);
-
     const [userId, setUserId] = useState(null);
     const [todayStats, setTodayStats] = useState({ places: 0, distance: 0 });
     const [totalStats, setTotalStats] = useState({ places: 0, distance: 0 });
@@ -43,11 +44,9 @@ const HomePage = ({ navigation }) => {
     const [userEmail, setUserEmail] = useState('');
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [waveAnimation] = useState(new Animated.Value(0));
-    const [handAnimation] = useState(new Animated.Value(0));
     const [showConfetti, setShowConfetti] = useState(false);
     const [currentStreak, setCurrentStreak] = useState(0);
-    const [lastCompletionDate, setLastCompletionDate] = useState(null);
+    const [, setLastCompletionDate] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [showInfoTooltip, setShowInfoTooltip] = useState(false);
 
@@ -86,32 +85,52 @@ const HomePage = ({ navigation }) => {
             }, 5000);
         };
 
-        startMessageCycle();
-
+        // İlk açılışta animasyonu daha geç başlat
+        if (!isLoading) {
+            const initialDelay = setTimeout(() => {
+                startMessageCycle();
+            }, 2000); // UI yüklendikten 2 saniye sonra animasyonu başlat
+            
+            return () => {
+                clearTimeout(initialDelay);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            };
+        }
+        
         return () => {
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }
         };
-    }, [isAnimating]);
+    }, [isAnimating, isLoading]);
 
     useEffect(() => {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setUserId(user.uid);
-                // Firebase'in başlatılmasını bekle
+                
+                // Önce önbellekten verileri yüklemeyi dene
+                const cachedDataLoaded = await loadCachedUserData();
+                
                 try {
-                    if (!db) {
-                        await initializeFirebase();
-                        db = getFirebaseDb();
-                    }
+                    // Arka planda verileri güncelleyecek, yükleme göstergesini etkilemeyecek
                     fetchUserData(user);
-
-                    // Uygulama açıldığında hemen konum ve bildirim izinlerini talep et
-                    requestPermissions();
+                    
+                    // Eğer önbellekten veriler yüklendiyse, konum izinlerini arka planda iste
+                    if (cachedDataLoaded) {
+                        // Konum ve bildirim izinlerini 1 saniye sonra iste (UI yüklendikten sonra)
+                        setTimeout(() => {
+                            requestPermissions();
+                        }, 1000);
+                    } else {
+                        // Önbellekten veri yüklenemezse, normal şekilde iste
+                        requestPermissions(); 
+                    }
                 } catch (error) {
-                    console.error('Firebase başlatma hatası:', error);
+                    console.error('Veri yükleme hatası:', error);
                     setIsLoading(false);
                 }
             } else {
@@ -156,82 +175,6 @@ const HomePage = ({ navigation }) => {
         fetchWeather();
     }, []);
 
-    useEffect(() => {
-        const startAnimation = () => {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(waveAnimation, {
-                        toValue: 1,
-                        duration: 1500,
-                        easing: Easing.linear,
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(waveAnimation, {
-                        toValue: 0,
-                        duration: 1500,
-                        easing: Easing.linear,
-                        useNativeDriver: true
-                    })
-                ])
-            ).start();
-        };
-
-        startAnimation();
-        return () => waveAnimation.setValue(0);
-    }, []);
-
-    useEffect(() => {
-        const waveHand = () => {
-            Animated.sequence([
-                Animated.timing(handAnimation, {
-                    toValue: 1,
-                    duration: 400,
-                    easing: Easing.linear,
-                    useNativeDriver: true
-                }),
-                Animated.timing(handAnimation, {
-                    toValue: -1,
-                    duration: 400,
-                    easing: Easing.linear,
-                    useNativeDriver: true
-                }),
-                Animated.timing(handAnimation, {
-                    toValue: 1,
-                    duration: 400,
-                    easing: Easing.linear,
-                    useNativeDriver: true
-                }),
-                Animated.timing(handAnimation, {
-                    toValue: 0,
-                    duration: 400,
-                    easing: Easing.linear,
-                    useNativeDriver: true
-                })
-            ]).start(() => {
-                // 2 saniye bekle ve tekrar başlat
-                setTimeout(waveHand, 2000);
-            });
-        };
-
-        waveHand();
-        return () => handAnimation.setValue(0);
-    }, []);
-
-    const rotate = waveAnimation.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg']
-    });
-
-    const scale = waveAnimation.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [1, 1.2, 1]
-    });
-
-    const handRotate = handAnimation.interpolate({
-        inputRange: [-1, 0, 1],
-        outputRange: ['-20deg', '0deg', '20deg']
-    });
-
     const fetchUserData = async (user) => {
         try {
             const docRef = doc(db, 'users', user.uid);
@@ -240,8 +183,12 @@ const HomePage = ({ navigation }) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setUserData(data);
-                setUserName(data.informations?.name || user.displayName || user.email.split('@')[0]);
+                const name = data.informations?.name || user.displayName || user.email.split('@')[0];
+                setUserName(name);
                 setUserEmail(user.email);
+
+                // Kullanıcı verilerini önbelleğe kaydet
+                cacheUserData(data, user.email, name);
 
                 // Streak verilerini doğru şekilde al
                 const streak = data.currentStreak || 0;
@@ -328,87 +275,6 @@ const HomePage = ({ navigation }) => {
         }
     };
 
-    useEffect(() => {
-        if (userId) {
-            const pathsRef = collection(db, `users/${userId}/paths`);
-            const userPathsQuery = query(
-                pathsRef,
-                orderBy('firstDiscovery', 'desc')
-            );
-
-            const unsubscribe = onSnapshot(userPathsQuery, (snapshot) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                let todayTotalDistance = 0;
-                let todayPlacesCount = 0;
-                let allTimeDistance = 0;
-                let allTimePlacesCount = 0;
-
-                snapshot.docs.forEach(doc => {
-                    const path = doc.data();
-                    let discoveryTime;
-
-                    // firstDiscovery'nin türünü kontrol et ve uygun şekilde işle
-                    if (path.firstDiscovery) {
-                        if (typeof path.firstDiscovery.toDate === 'function') {
-                            // Firestore Timestamp nesnesi
-                            discoveryTime = path.firstDiscovery.toDate();
-                        } else if (path.firstDiscovery instanceof Date) {
-                            // Zaten Date nesnesi
-                            discoveryTime = path.firstDiscovery;
-                        } else if (typeof path.firstDiscovery === 'string') {
-                            // ISO string
-                            discoveryTime = new Date(path.firstDiscovery);
-                        } else {
-                            // Diğer durumlar için güvenli bir varsayılan
-                            discoveryTime = new Date();
-                        }
-                    } else {
-                        // firstDiscovery yoksa şimdiki zamanı kullan
-                        discoveryTime = new Date();
-                    }
-
-                    const points = path.points || [];
-
-                    if (points.length >= 2) {
-                        // Mesafeyi metre cinsinden hesapla ve kilometreye çevir
-                        const pathDistance = calculatePathDistance(points) / 1000; // km'ye çevir
-
-                        // Her path bir yer olarak sayılır
-                        if (discoveryTime && discoveryTime >= today) {
-                            todayTotalDistance += pathDistance;
-                            todayPlacesCount += 1; // Bugün keşfedilen yer sayısı
-                        }
-
-                        allTimeDistance += pathDistance;
-                        allTimePlacesCount += 1; // Toplam keşfedilen yer sayısı
-                    }
-                });
-
-                setTodayStats({
-                    places: todayPlacesCount,
-                    distance: Math.round(todayTotalDistance)
-                });
-
-                setTotalStats({
-                    places: allTimePlacesCount,
-                    distance: Math.round(allTimeDistance)
-                });
-
-                const percentage = Math.min((todayTotalDistance / DAILY_GOAL_KM) * 100, 100);
-                setDailyGoalPercentage(Math.round(percentage));
-
-                // Hedef tamamlandığında streak'i güncelle
-                if (percentage >= 100) {
-                    updateStreak();
-                }
-            });
-
-            return () => unsubscribe();
-        }
-    }, [userId]);
-
     const calculatePathDistance = (points) => {
         if (!points || points.length < 2) return 0;
 
@@ -431,22 +297,23 @@ const HomePage = ({ navigation }) => {
         return total;
     };
 
-    const getProfileImageUri = () => {
+    // Yeni hali - useCallback ile memoize edilmiş ve öncelik yükseltilmiş:
+    const getProfileImageUri = useCallback(() => {
         if (userData?.profilePicture) {
             return {
                 uri: userData.profilePicture,
-                priority: FastImage.priority.normal,
+                priority: FastImage.priority.high, // Önceliği yükselt
                 cache: FastImage.cacheControl.immutable
             };
         } else {
             const initials = userName?.slice(0, 2).toUpperCase() || "PP";
             return {
                 uri: `https://ui-avatars.com/api/?name=${initials}&background=4CAF50&color=fff&size=128`,
-                priority: FastImage.priority.normal,
-                cache: FastImage.cacheControl.web
+                priority: FastImage.priority.high, // Önceliği yükselt 
+                cache: FastImage.cacheControl.immutable // web yerine immutable kullanarak daha iyi önbellekleme
             };
         }
-    };
+    }, [userData, userName]); // Sadece bu değerler değiştiğinde fonksiyon yeniden oluşturulacak
 
     const formatUserName = (name) => {
         if (!name) return '';
@@ -517,130 +384,6 @@ const HomePage = ({ navigation }) => {
             </TouchableOpacity>
         </View>
     );
-
-    const renderAIRecommendationsCard = () => {
-        const [currentMessage, setCurrentMessage] = useState(0);
-        const [displayedText, setDisplayedText] = useState('');
-        const [isTyping, setIsTyping] = useState(true);
-
-        const messages = [
-            translate('ai_help_message'),
-            translate('ai_discover_places'),
-            translate('ai_today_suggestion'),
-            translate('ai_create_routes'),
-            translate('ai_special_recommendations')
-        ];
-
-        // Yazma animasyonu için
-        useEffect(() => {
-            let currentIndex = 0;
-            let currentText = messages[currentMessage];
-            setIsTyping(true);
-
-            // Karakterleri tek tek yazma
-            const typingInterval = setInterval(() => {
-                if (currentIndex <= currentText.length) {
-                    setDisplayedText(currentText.slice(0, currentIndex));
-                    currentIndex++;
-                } else {
-                    clearInterval(typingInterval);
-                    setIsTyping(false);
-
-                    // Silme işlemi için zamanlayıcı
-                    setTimeout(() => {
-                        const deletingInterval = setInterval(() => {
-                            setDisplayedText(prev => {
-                                if (prev.length > 0) {
-                                    return prev.slice(0, -1);
-                                } else {
-                                    clearInterval(deletingInterval);
-                                    setCurrentMessage((prev) => (prev + 1) % messages.length);
-                                    return '';
-                                }
-                            });
-                        }, 50); // Silme hızı
-                    }, 2000); // Mesajın ekranda kalma süresi
-                }
-            }, 100); // Yazma hızı
-
-            return () => {
-                clearInterval(typingInterval);
-            };
-        }, [currentMessage]);
-
-        // Yanıp sönen imleç için animasyon
-        const cursorAnim = useRef(new Animated.Value(0)).current;
-
-        useEffect(() => {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(cursorAnim, {
-                        toValue: 1,
-                        duration: 500,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(cursorAnim, {
-                        toValue: 0,
-                        duration: 500,
-                        useNativeDriver: true,
-                    }),
-                ])
-            ).start();
-        }, []);
-
-        return (
-            <TouchableOpacity
-                style={styles.aiRecommendCard}
-                onPress={() => navigation.navigate('AIChat')}
-            >
-                <LinearGradient
-                    colors={['#6C3EE8', '#4527A0']}
-                    style={styles.aiCardGradient}
-                >
-                    <View style={styles.aiCardContent}>
-                        <View style={styles.aiCardLeft}>
-                            <View style={styles.aiIconContainer}>
-                                <MaterialIcons name="psychology" size={32} color="#FFF" />
-                                <Animated.View
-                                    style={[
-                                        styles.pulseCircle,
-                                        { opacity: isTyping ? 1 : 0.3 }
-                                    ]}
-                                />
-                            </View>
-                            <View style={styles.aiCardTextContainer}>
-                                <Text style={styles.aiCardTitle}>{translate('ai_assistant_name')}</Text>
-                                <View style={styles.messageContainer}>
-                                    <Text
-                                        style={styles.aiCardSubtitle}
-                                        numberOfLines={2}
-                                    >
-                                        {displayedText}
-                                    </Text>
-                                    <Animated.Text
-                                        style={[
-                                            styles.cursor,
-                                            { opacity: cursorAnim }
-                                        ]}
-                                    >
-                                        |
-                                    </Animated.Text>
-                                </View>
-                            </View>
-                        </View>
-                        <Animated.View
-                            style={[
-                                styles.aiCardIcon,
-                                { transform: [{ rotate: rotate }, { scale: scale }] }
-                            ]}
-                        >
-                            <MaterialIcons name="arrow-forward" size={24} color="#FFF" />
-                        </Animated.View>
-                    </View>
-                </LinearGradient>
-            </TouchableOpacity>
-        );
-    };
 
     const renderMotivationCard = () => (
         <Animated.View
@@ -835,6 +578,186 @@ const HomePage = ({ navigation }) => {
         }
     }, []);
 
+    // Önbellekten kullanıcı verilerini yükleyen fonksiyon
+    const loadCachedUserData = async () => {
+        try {
+            const cachedData = await AsyncStorage.getItem('cached_user_data');
+            if (cachedData) {
+                const { userData, userEmail, userName, timestamp, todayStatsCache, totalStatsCache } = JSON.parse(cachedData);
+                
+                // Önbelleğin 24 saatten eski olup olmadığını kontrol et
+                const isExpired = Date.now() - timestamp > 24 * 60 * 60 * 1000;
+                
+                if (!isExpired) {
+                    setUserData(userData);
+                    setUserEmail(userEmail);
+                    setUserName(userName);
+                    
+                    // Önbellekten istatistik verilerini de yükle
+                    if (todayStatsCache) setTodayStats(todayStatsCache);
+                    if (totalStatsCache) setTotalStats(totalStatsCache);
+                    
+                    // Yükleme durumunun sona erdiğini göster (bu sayede UI hemen görüntülenecek)
+                    setIsLoading(false);
+                    return true; // Önbellekten veri yüklendi
+                }
+            }
+            return false; // Önbellekten veri yüklenemedi veya süresi doldu
+        } catch (error) {
+            console.error(translate('cache_load_error'), error);
+            return false;
+        }
+    };
+
+    // Kullanıcı verilerini önbelleğe kaydeden fonksiyon
+    const cacheUserData = async (userData, userEmail, userName) => {
+        try {
+            const cacheData = {
+                userData,
+                userEmail,
+                userName,
+                todayStatsCache: todayStats,
+                totalStatsCache: totalStats,
+                timestamp: Date.now()
+            };
+            await AsyncStorage.setItem('cached_user_data', JSON.stringify(cacheData));
+        } catch (error) {
+            console.error(translate('cache_error'), error);
+        }
+    };
+
+    // Hava durumu verilerini yükle - arka planda çalışacak ve UI'ı bloke etmeyecek
+    const fetchWeatherInBackground = () => {
+        // Arka planda çalışacak wrapper fonksiyon
+        setTimeout(async () => {
+            try {
+                await fetchWeather();
+            } catch (error) {
+                console.error('Hava durumu verisi yüklenemedi:', error);
+            }
+        }, 500); // UI yüklendikten 500ms sonra başlat
+    };
+
+    useEffect(() => {
+        // İlk yüklemede arka planda hava durumu verilerini getir
+        if (!isLoading) {
+            fetchWeatherInBackground();
+        }
+    }, [isLoading]);
+
+    // UI kullanılabilir olduktan sonra gereksiz verileri yükleyen fonksiyon
+    const loadNonEssentialData = useCallback(() => {
+        if (!isLoading && userId) {
+            // Sadece UI hazır olduğunda ve kullanıcı kimliği varsa ağır işlemleri yap
+            setTimeout(async () => {
+                try {
+                    // Firebase veri dinlemelerini başlat (paths collection)
+                    setupFirebaseListeners();
+                    
+                    // İstatistikleri güncelle
+                    await updateStats();
+                    
+                } catch (error) {
+                    console.error('Arka plan veri yükleme hatası:', error);
+                }
+            }, 2500); // UI tam olarak yüklendikten 2.5 saniye sonra
+        }
+    }, [isLoading, userId, setupFirebaseListeners]);
+
+    // UI yüklendikten sonra gereksiz verileri yükle
+    useEffect(() => {
+        loadNonEssentialData();
+    }, [isLoading, loadNonEssentialData]);
+
+    // Veri dinleyicilerini ayrı bir fonksiyon olarak ayır
+    const setupFirebaseListeners = useCallback(() => {
+        if (!userId) return;
+        
+        const pathsRef = collection(db, `users/${userId}/paths`);
+        const userPathsQuery = query(
+            pathsRef,
+            orderBy('firstDiscovery', 'desc')
+        );
+
+        const unsubscribe = onSnapshot(userPathsQuery, (snapshot) => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            let todayTotalDistance = 0;
+            let todayPlacesCount = 0;
+            let allTimeDistance = 0;
+            let allTimePlacesCount = 0;
+
+            snapshot.docs.forEach(doc => {
+                const path = doc.data();
+                let discoveryTime;
+
+                // firstDiscovery'nin türünü kontrol et ve uygun şekilde işle
+                if (path.firstDiscovery) {
+                    if (typeof path.firstDiscovery.toDate === 'function') {
+                        // Firestore Timestamp nesnesi
+                        discoveryTime = path.firstDiscovery.toDate();
+                    } else if (path.firstDiscovery instanceof Date) {
+                        // Zaten Date nesnesi
+                        discoveryTime = path.firstDiscovery;
+                    } else if (typeof path.firstDiscovery === 'string') {
+                        // ISO string
+                        discoveryTime = new Date(path.firstDiscovery);
+                    } else {
+                        // Diğer durumlar için güvenli bir varsayılan
+                        discoveryTime = new Date();
+                    }
+                } else {
+                    // firstDiscovery yoksa şimdiki zamanı kullan
+                    discoveryTime = new Date();
+                }
+
+                const points = path.points || [];
+
+                if (points.length >= 2) {
+                    // Mesafeyi metre cinsinden hesapla ve kilometreye çevir
+                    const pathDistance = calculatePathDistance(points) / 1000; // km'ye çevir
+
+                    // Her path bir yer olarak sayılır
+                    if (discoveryTime && discoveryTime >= today) {
+                        todayTotalDistance += pathDistance;
+                        todayPlacesCount += 1; // Bugün keşfedilen yer sayısı
+                    }
+
+                    allTimeDistance += pathDistance;
+                    allTimePlacesCount += 1; // Toplam keşfedilen yer sayısı
+                }
+            });
+
+            setTodayStats({
+                places: todayPlacesCount,
+                distance: Math.round(todayTotalDistance)
+            });
+
+            setTotalStats({
+                places: allTimePlacesCount,
+                distance: Math.round(allTimeDistance)
+            });
+
+            const percentage = Math.min((todayTotalDistance / DAILY_GOAL_KM) * 100, 100);
+            setDailyGoalPercentage(Math.round(percentage));
+
+            // Hedef tamamlandığında streak'i güncelle
+            if (percentage >= 100) {
+                updateStreak();
+            }
+        });
+        
+        // Cleanup fonksiyonunu doğrudan döndürmek yerine bir temizleme işlemi yapabiliriz
+        return unsubscribe;
+    }, [userId]);
+
+    // İstatistikleri güncelleyecek fonksiyon
+    const updateStats = async () => {
+        // Burada istatistikleri güncelleyecek ek işlemler yapılabilir
+        return Promise.resolve();
+    };
+
     return (
         <ScrollView
             style={styles.container}
@@ -860,17 +783,7 @@ const HomePage = ({ navigation }) => {
                                     <Text style={styles.welcomeText} numberOfLines={1} ellipsizeMode="tail">
                                         {userName ? formatUserName(userName) : ''}
                                     </Text>
-                                    <Animated.Text
-                                        style={[
-                                            styles.welcomeText,
-                                            {
-                                                transform: [{ rotate: handRotate }],
-                                                marginLeft: 4
-                                            }
-                                        ]}
-                                    >
-                                        👋
-                                    </Animated.Text>
+                                    <Text style={[styles.welcomeText, { marginLeft: 4 }]}>👋</Text>
                                 </View>
                                 <Text style={styles.emailText}>{userEmail}</Text>
                             </View>
@@ -878,40 +791,25 @@ const HomePage = ({ navigation }) => {
                         <TouchableOpacity
                             style={styles.profileButton}
                             onPress={() => setModalVisible(true)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                            <View style={styles.avatarOuterContainer}>
-                                <Animated.View
-                                    style={[
-                                        styles.waveContainer,
-                                        {
-                                            transform: [
-                                                { rotate },
-                                                { scale }
-                                            ]
-                                        }
-                                    ]}
-                                >
-                                    <View style={styles.wave} />
-                                    <View style={[styles.wave, styles.wave2]} />
-                                </Animated.View>
-                                <View style={styles.avatarContainer}>
-                                    {isLoading ? (
-                                        <ActivityIndicator size="small" color="#25D220" />
-                                    ) : (
-                                        <FastImage
-                                            source={getProfileImageUri()}
-                                            style={styles.avatarImage}
-                                            resizeMode={FastImage.resizeMode.cover}
-                                            onError={() => {
-                                                const initials = userName?.slice(0, 2).toUpperCase() || "PP";
-                                                setUserData(prev => ({
-                                                    ...prev,
-                                                    profilePicture: `https://ui-avatars.com/api/?name=${initials}&background=4CAF50&color=fff&size=128`
-                                                }));
-                                            }}
-                                        />
-                                    )}
-                                </View>
+                            <View style={styles.avatarContainer}>
+                                {isLoading ? (
+                                    <ActivityIndicator size="small" color="#25D220" />
+                                ) : (
+                                    <FastImage
+                                        source={getProfileImageUri()}
+                                        style={styles.avatarImage}
+                                        resizeMode={FastImage.resizeMode.cover}
+                                        onError={() => {
+                                            const initials = userName?.slice(0, 2).toUpperCase() || "PP";
+                                            setUserData(prev => ({
+                                                ...prev,
+                                                profilePicture: `https://ui-avatars.com/api/?name=${initials}&background=4CAF50&color=fff&size=128`
+                                            }));
+                                        }}
+                                    />
+                                )}
                             </View>
                         </TouchableOpacity>
                     </View>
@@ -951,7 +849,10 @@ const HomePage = ({ navigation }) => {
 
                 {quickAccessContainer}
 
-                {renderAIRecommendationsCard()}
+                <AIRecommendationsCard 
+                    navigation={navigation} 
+                />
+                
                 {renderMotivationCard()}
             </View>
 

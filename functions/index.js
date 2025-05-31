@@ -59,7 +59,7 @@ const sendSMS = async (phoneNumber, message) => {
 
         // API isteği gönder
         const response = await axios.get(SMS_API_ENDPOINT, { params });
-        console.log("SMS API yanıtı:", response.data);
+        ("SMS API yanıtı:", response.data);
 
         // API yanıtını kontrol et
         if (response.data && response.data.includes("00")) {
@@ -76,19 +76,23 @@ const sendSMS = async (phoneNumber, message) => {
 // Expo Push Notification gönderme fonksiyonu
 const sendExpoPushNotification = async (token, title, body, data) => {
     try {
-        console.log("Bildirim gönderiliyor:", { token, title, body, data });
+        ("Bildirim gönderiliyor:", { token, title, body, data });
 
         const message = {
             to: token,
             title,
             body,
-            data,
+            data: {
+                ...data,
+                screen: data.type, // Açılacak ekran adı
+                openScreen: true,  // Yönlendirme gerektiğini belirtir
+            },
             sound: "default",
             priority: "high",
             channelId: "default",
         };
 
-        console.log("Hazırlanan bildirim mesajı:", message);
+        ("Hazırlanan bildirim mesajı:", message);
 
         const response = await axios.post(EXPO_PUSH_ENDPOINT, message, {
             headers: {
@@ -98,7 +102,7 @@ const sendExpoPushNotification = async (token, title, body, data) => {
             },
         });
 
-        console.log("Expo API yanıtı:", response.data);
+        ("Expo API yanıtı:", response.data);
         return response.data;
     } catch (error) {
         console.error("Bildirim gönderme hatası detayları:", {
@@ -148,6 +152,10 @@ exports.onFriendRequestUpdate = onDocumentUpdated("users/{userId}", async (event
                     data: {
                         type: "friendRequest",
                         senderId: fromUserId,
+                        screen: "FriendsPage",   // Açılacak ekran adı
+                        params: {                   // Ekran parametreleri
+                            tab: "İstekler"         // Gelen istekler sekmesi
+                        }
                     },
                 };
 
@@ -180,10 +188,10 @@ exports.onFriendRequestUpdate = onDocumentUpdated("users/{userId}", async (event
 // Yeni mesaj bildirimi
 exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) => {
     const message = event.data.data();
-    console.log("Yeni mesaj alındı:", message);
+    ("Yeni mesaj alındı:", message);
 
     if (!message) {
-        console.log("Mesaj verisi boş, işlem sonlandırılıyor");
+        ("Mesaj verisi boş, işlem sonlandırılıyor");
         return;
     }
 
@@ -197,13 +205,13 @@ exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) =
 
     // Kendi mesajlarımız için bildirim gönderme
     if (senderId === receiverId) {
-        console.log("Kendi mesajı olduğu için bildirim gönderilmiyor");
+        ("Kendi mesajı olduğu için bildirim gönderilmiyor");
         return;
     }
 
     try {
         // Gönderen kullanıcının bilgilerini al
-        console.log("Gönderen kullanıcı bilgileri alınıyor:", senderId);
+        ("Gönderen kullanıcı bilgileri alınıyor:", senderId);
         const senderDoc = await db.collection("users").doc(senderId).get();
         const sender = senderDoc.data();
 
@@ -212,7 +220,7 @@ exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) =
             return;
         }
 
-        console.log("Gönderen kullanıcı bilgileri:", sender);
+        ("Gönderen kullanıcı bilgileri:", sender);
 
         // Bildirim oluştur
         const notification = {
@@ -227,18 +235,23 @@ exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) =
                 type: "message",
                 messageId: event.data.id,
                 chatId: chatId,
-                senderId: senderId
+                senderId: senderId,
+                screen: "ChatScreen",    // Açılacak ekran adı
+                params: {          // Ekran parametreleri
+                    chatId: chatId,
+                    userId: senderId
+                }
             }
         };
 
-        console.log("Oluşturulan bildirim:", notification);
+        ("Oluşturulan bildirim:", notification);
 
         // Bildirimi Firestore'a kaydet
         await db.collection("notifications").add(notification);
-        console.log("Bildirim Firestore'a kaydedildi");
+        ("Bildirim Firestore'a kaydedildi");
 
         // Kullanıcının Expo Push Token'larını al
-        console.log("Alıcı kullanıcının token bilgileri alınıyor:", receiverId);
+        ("Alıcı kullanıcının token bilgileri alınıyor:", receiverId);
         const userDoc = await db.collection("users").doc(receiverId).get();
         const user = userDoc.data();
 
@@ -248,12 +261,12 @@ exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) =
         }
 
         const tokens = Object.values(user.fcmTokens || {}).map((t) => t.token).filter(Boolean);
-        console.log("Bulunan token sayısı:", tokens.length);
+        ("Bulunan token sayısı:", tokens.length);
 
         // Her token için bildirim gönder
         for (const token of tokens) {
             if (token.startsWith("ExponentPushToken[")) {
-                console.log("Token geçerli, bildirim gönderiliyor:", token);
+                ("Token geçerli, bildirim gönderiliyor:", token);
                 await sendExpoPushNotification(
                     token,
                     notification.title,
@@ -261,7 +274,7 @@ exports.onNewMessage = onDocumentCreated("messages/{messageId}", async (event) =
                     notification.data
                 );
             } else {
-                console.log("Geçersiz token formatı:", token);
+                ("Geçersiz token formatı:", token);
             }
         }
     } catch (error) {
@@ -303,6 +316,10 @@ exports.onNewActivity = onDocumentCreated("activities/{activityId}", async (even
                     type: "activity",
                     activityId: event.data.id,
                     createdBy,
+                    screen: "ActivityDetail",    // Açılacak ekran adı
+                    params: {                   // Ekran parametreleri
+                        activityId: event.data.id
+                    }
                 },
             };
 
@@ -367,7 +384,7 @@ exports.watchPhoneVerifications = onDocumentCreated("phone_verifications/{verifi
     const verificationId = event.params.verificationId;
 
     if (!verification) {
-        console.log("Doğrulama verisi boş, işlem sonlandırılıyor");
+        ("Doğrulama verisi boş, işlem sonlandırılıyor");
         return;
     }
 
@@ -381,7 +398,7 @@ exports.watchPhoneVerifications = onDocumentCreated("phone_verifications/{verifi
 
             // SMS gönder - Gerçek SMS API'si ile değiştirin
             // Örnek: await sendSMS(phoneNumber, message);
-            console.log(`SMS gönderildi: ${phoneNumber} numarasına "${message}"`);
+            (`SMS gönderildi: ${phoneNumber} numarasına "${message}"`);
 
             // Şimdilik SMS gönderim durumunu veritabanına kaydedelim
             await db.collection("phone_verifications").doc(verificationId).update({
@@ -404,17 +421,17 @@ exports.watchPhoneVerifications = onDocumentCreated("phone_verifications/{verifi
 // Beğeni bildirimi
 exports.onNewLike = onDocumentCreated("likes/{likeId}", async (event) => {
     const like = event.data.data();
-    console.log("Yeni beğeni alındı:", like);
+    ("Yeni beğeni alındı:", like);
 
     // Gerekli alanları kontrol et
     if (!like || !like.postId || !like.userId || !like.ownerId) {
-        console.log("Geçersiz beğeni verisi, işlem sonlandırılıyor");
+        ("Geçersiz beğeni verisi, işlem sonlandırılıyor");
         return;
     }
 
     // Kendi gönderisini beğenenler için bildirim gönderme
     if (like.userId === like.ownerId) {
-        console.log("Kullanıcı kendi gönderisini beğendiği için bildirim gönderilmiyor");
+        ("Kullanıcı kendi gönderisini beğendiği için bildirim gönderilmiyor");
         return;
     }
 
@@ -423,11 +440,11 @@ exports.onNewLike = onDocumentCreated("likes/{likeId}", async (event) => {
         const ownerDoc = await db.collection("users").doc(like.ownerId).get();
         const owner = ownerDoc.data();
 
-        console.log("Kullanıcı bildirim ayarları:", owner.notificationSettings);
+        ("Kullanıcı bildirim ayarları:", owner.notificationSettings);
 
         // Bildirim ayarlarını kontrol et
         if (!owner || !owner.notificationSettings || !owner.notificationSettings.likeNotifications) {
-            console.log("Kullanıcının beğeni bildirimleri kapalı");
+            ("Kullanıcının beğeni bildirimleri kapalı");
             return;
         }
 
@@ -458,7 +475,14 @@ exports.onNewLike = onDocumentCreated("likes/{likeId}", async (event) => {
                 type: "like",
                 likeId: event.data.id,
                 postId: like.postId,
-                userId: like.userId
+                userId: like.userId,
+                screen: "FriendProfileModal",       // Profil modalını açacak
+                params: {
+                    friend: {
+                        id: like.ownerId,
+                        selectedPostId: like.postId  // Seçili gönderiyi belirt
+                    }
+                }
             }
         };
 
@@ -487,17 +511,17 @@ exports.onNewLike = onDocumentCreated("likes/{likeId}", async (event) => {
 // Yorum bildirimi
 exports.onNewComment = onDocumentCreated("comments/{commentId}", async (event) => {
     const comment = event.data.data();
-    console.log("Yeni yorum alındı:", comment);
+    ("Yeni yorum alındı:", comment);
 
     // Gerekli alanları kontrol et
     if (!comment || !comment.postId || !comment.userId || !comment.ownerId || !comment.text) {
-        console.log("Geçersiz yorum verisi, işlem sonlandırılıyor");
+        ("Geçersiz yorum verisi, işlem sonlandırılıyor");
         return;
     }
 
     // Kendi gönderisine yorum yapanlar için bildirim gönderme (opsiyonel - isteğe bağlı değiştirilebilir)
     if (comment.userId === comment.ownerId) {
-        console.log("Kullanıcı kendi gönderisine yorum yaptığı için bildirim gönderilmiyor");
+        ("Kullanıcı kendi gönderisine yorum yaptığı için bildirim gönderilmiyor");
         return;
     }
 
@@ -508,7 +532,7 @@ exports.onNewComment = onDocumentCreated("comments/{commentId}", async (event) =
 
         // Bildirim ayarlarını kontrol et
         if (!owner || !owner.notificationSettings || !owner.notificationSettings.commentNotifications) {
-            console.log("Kullanıcının yorum bildirimleri kapalı");
+            ("Kullanıcının yorum bildirimleri kapalı");
             return;
         }
 
@@ -544,7 +568,14 @@ exports.onNewComment = onDocumentCreated("comments/{commentId}", async (event) =
                 type: "comment",
                 commentId: event.data.id,
                 postId: comment.postId,
-                userId: comment.userId
+                userId: comment.userId,
+                screen: "FriendProfileModal",       // Profil modalını açacak
+                params: {
+                    friend: {
+                        id: comment.ownerId,
+                        selectedPostId: comment.postId  // Seçili gönderiyi belirt
+                    }
+                }
             }
         };
 

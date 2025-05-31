@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Alert
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import TimeInput from './TimeInput';
 
 const CreateEventModal = ({ visible, onClose, onCreate, groupId }) => {
@@ -154,8 +154,8 @@ const CreateEventModal = ({ visible, onClose, onCreate, groupId }) => {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Saat</Text>
               <TimeInput
-                time={time}
-                onTimeChange={setTime}
+                value={time}
+                onChangeText={setTime}
                 containerStyle={styles.timeInputContainer}
               />
             </View>

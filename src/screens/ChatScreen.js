@@ -8,9 +8,7 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
-    Image,
-    SafeAreaView,
-    Dimensions,
+    Image, Dimensions,
     Alert,
     Linking,
     ActionSheetIOS,
@@ -1023,7 +1021,7 @@ const ChatScreen = ({ route, navigation }) => {
                             if (text.length === 0) {
                                 setInputHeight(20);
                             } else {
-                                inputRef.current?.measure((x, y, width, height, pageX, pageY) => {
+                                inputRef.current?.measure((x, y, width, height) => {
                                     const newHeight = Math.max(20, height);
                                     setInputHeight(newHeight);
                                 });

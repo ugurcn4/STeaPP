@@ -52,7 +52,13 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
   };
 
   const formatDate = (date) => {
-    if (!date) return '';
+    // Firebase'den gelen timestamp formatını Date objesine çevirme kontrolü
+    if (date && typeof date === 'object' && date.toDate && typeof date.toDate === 'function') {
+      date = date.toDate();
+    }
+    
+    // Date kontrolü
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) return '';
     
     const options = { 
       weekday: 'long', 
@@ -85,8 +91,31 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
       
       // Tarih ve saati birleştir
       const [hours, minutes] = editedTime.split(':').map(Number);
-      const updatedDate = new Date(meeting.date);
+      
+      let updatedDate;
+      // meeting.date kontrol edilir, geçerli bir Date nesnesi mi?
+      if (meeting.date && meeting.date instanceof Date && !isNaN(meeting.date.getTime())) {
+        updatedDate = new Date(meeting.date);
+      } else {
+        // Eğer date geçerli değilse bugünün tarihini kullan
+        updatedDate = new Date();
+      }
+      
       updatedDate.setHours(hours, minutes, 0, 0);
+      
+      // Arayüz güncellemesi için hemen meeting nesnesini güncelle
+      const updatedMeeting = {
+        ...meeting,
+        title: editedTitle,
+        location: editedLocation,
+        time: editedTime,
+        date: updatedDate
+      };
+      
+      // Hemen UI'yi güncelle
+      if (onUpdate) {
+        onUpdate(updatedMeeting);
+      }
       
       await updateDoc(meetingRef, {
         title: editedTitle,
@@ -99,18 +128,6 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
 
       // Güncelleme başarılı olduğu zaman düzenleme modunu kapat
       setIsEditing(false);
-      
-      // Varsa dışarıdan gelen güncelleme fonksiyonunu çağır
-      if (onUpdate) {
-        const updatedMeeting = {
-          ...meeting,
-          title: editedTitle,
-          location: editedLocation,
-          time: editedTime,
-          date: updatedDate
-        };
-        onUpdate(updatedMeeting);
-      }
       
       Alert.alert('Başarılı', 'Buluşma bilgileri güncellendi');
     } catch (error) {
@@ -144,7 +161,7 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
 
   const handleJoinMeeting = async () => {
     try {
-      const isParticipant = meeting.participants.includes(currentUserId);
+      const isParticipant = meeting.participants?.includes(currentUserId);
       
       if (isParticipant) {
         Alert.alert('Bilgi', 'Bu buluşmaya zaten katılıyorsunuz');
@@ -154,13 +171,25 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
       setLoading(true);
       
       // Katılımcı listesini güncelle
-      const updatedParticipants = [...meeting.participants, currentUserId];
+      const updatedParticipants = [...(meeting.participants || []), currentUserId];
       
       // Katılımcı durumunu 'accepted' olarak ayarla
       const updatedParticipantStatus = { 
-        ...meeting.participantStatus || {}, 
+        ...(meeting.participantStatus || {}), 
         [currentUserId]: 'accepted' 
       };
+      
+      // Arayüz güncellemesi için hemen meeting nesnesini güncelle
+      const updatedMeeting = {
+        ...meeting,
+        participants: updatedParticipants,
+        participantStatus: updatedParticipantStatus
+      };
+      
+      // Hemen UI'yi güncelle
+      if (onUpdate) {
+        onUpdate(updatedMeeting);
+      }
       
       const meetingRef = doc(db, 'meetings', meeting.id);
       await updateDoc(meetingRef, {
@@ -171,10 +200,22 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
       // Güncel buluşma verisini al
       const updatedMeetingDoc = await getDoc(meetingRef);
       if (updatedMeetingDoc.exists() && onUpdate) {
+        const updatedData = updatedMeetingDoc.data();
+        let date = updatedData.date;
+        
+        // Firebase timestamp'i Date nesnesine çevir
+        if (date && typeof date === 'object' && date.toDate && typeof date.toDate === 'function') {
+          date = date.toDate();
+        }
+        
         const updatedMeetingData = {
           id: meeting.id,
-          ...updatedMeetingDoc.data()
+          ...updatedData,
+          date: date,
+          // Katılımcı verilerini koru veya boş dizi olarak ayarla
+          participantsData: meeting.participantsData || []
         };
+        
         onUpdate(updatedMeetingData);
       }
       
@@ -194,9 +235,20 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
       
       // Katılımcı durumunu güncelle
       const updatedParticipantStatus = { 
-        ...meeting.participantStatus || {}, 
+        ...(meeting.participantStatus || {}), 
         [currentUserId]: status 
       };
+      
+      // Arayüz güncellemesi için hemen meeting nesnesini güncelle
+      const updatedMeeting = {
+        ...meeting,
+        participantStatus: updatedParticipantStatus
+      };
+      
+      // Hemen UI'yi güncelle
+      if (onUpdate) {
+        onUpdate(updatedMeeting);
+      }
       
       const meetingRef = doc(db, 'meetings', meeting.id);
       await updateDoc(meetingRef, {
@@ -209,13 +261,25 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
         // Bu örnekte declined olan kişiler listede kalacak ama durumları görünecek
       }
       
-      // Güncel buluşma verisini al
+      // Güncel buluşma verisini al ve date nesnesini kontrol et
       const updatedMeetingDoc = await getDoc(meetingRef);
       if (updatedMeetingDoc.exists() && onUpdate) {
+        const updatedData = updatedMeetingDoc.data();
+        let date = updatedData.date;
+        
+        // Firebase timestamp'i Date nesnesine çevir
+        if (date && typeof date === 'object' && date.toDate && typeof date.toDate === 'function') {
+          date = date.toDate();
+        }
+        
         const updatedMeetingData = {
           id: meeting.id,
-          ...updatedMeetingDoc.data()
+          ...updatedData,
+          date: date,
+          // Katılımcı verilerini koru veya boş dizi olarak ayarla
+          participantsData: meeting.participantsData || []
         };
+        
         onUpdate(updatedMeetingData);
       }
       
@@ -256,7 +320,7 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
   };
 
   const renderParticipants = () => {
-    if (!meeting.participantsData || meeting.participantsData.length === 0) {
+    if (!meeting.participantsData || !Array.isArray(meeting.participantsData) || meeting.participantsData.length === 0) {
       return (
         <Text style={styles.noParticipantsText}>Henüz katılımcı yok</Text>
       );
@@ -278,14 +342,14 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
               ) : (
                 <View style={styles.participantAvatarPlaceholder}>
                   <Text style={styles.participantAvatarText}>
-                    {participant.name.charAt(0)}
+                    {participant.name && participant.name.length > 0 ? participant.name.charAt(0) : '?'}
                   </Text>
                 </View>
               )}
               <View style={styles.participantInfo}>
                 <View>
                   <Text style={styles.participantName}>
-                    {participant.name}
+                    {participant.name || 'İsimsiz Kullanıcı'}
                     {isCurrentUser && ' (Sen)'}
                   </Text>
                   
@@ -491,7 +555,7 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
                     </View>
 
                     {/* Kullanıcı katılımcı değilse katılım butonu göster */}
-                    {!meeting.participants.includes(currentUserId) && (
+                    {!(meeting.participants && Array.isArray(meeting.participants) && meeting.participants.includes(currentUserId)) && (
                       <TouchableOpacity
                         style={styles.joinButton}
                         onPress={handleJoinMeeting}
@@ -502,7 +566,7 @@ const MeetingDetailModal = ({ visible, onClose, meeting, onUpdate, onDelete }) =
                     )}
                     
                     {/* Kullanıcı katılımcı ise ve admin değilse, durumu 'pending' ise katılım butonları göster */}
-                    {meeting.participants.includes(currentUserId) && 
+                    {meeting.participants && Array.isArray(meeting.participants) && meeting.participants.includes(currentUserId) && 
                      !isAdmin && 
                      getCurrentUserStatus() === 'pending' && (
                       <View style={styles.participationActionsContainer}>

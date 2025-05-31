@@ -8,7 +8,6 @@ import {
     ScrollView,
     Dimensions
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { translate } from '../i18n/i18n';
 

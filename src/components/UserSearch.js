@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import FriendProfileModal from '../modals/friendProfileModal';
+import { translate } from '../i18n/i18n';
 
 import { 
   searchUsers, 
@@ -38,6 +40,8 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
   const [userSentRequests, setUserSentRequests] = useState([]);
   const [userReceivedRequests, setUserReceivedRequests] = useState([]);
   const searchTimeoutRef = useRef(null);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [friendModalVisible, setFriendModalVisible] = useState(false);
 
   // Modal açıldığında kullanıcı listesini ve mevcut kullanıcı ID'sini çek
   useEffect(() => {
@@ -135,7 +139,7 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
     setIsSearching(true);
     
     // 300ms gecikme ile arama fonksiyonunu çağır
-    searchTimeoutRef.current = setTimeout(() => {
+    searchTimeoutRef.current = setTimeout(async () => {
       // Yerel arama - daha hızlı sonuç için
       const filteredResults = allUsers.filter(user => {
         // Kendini aramada gösterme
@@ -153,8 +157,30 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
         return nameMatch || usernameMatch || emailMatch;
       });
 
+      // Gelişmiş kullanıcı bilgilerini al
+      const detailedResults = await Promise.all(
+        filteredResults.map(async (user) => {
+          // Eğer friends bilgisi yoksa, kullanıcı belgesinden tekrar alalım
+          if (!user.friends) {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', user.id));
+              if (userDoc.exists()) {
+                const userData = userDoc.data();
+                return {
+                  ...user,
+                  friends: userData.friends || []
+                };
+              }
+            } catch (error) {
+              console.error(`Kullanıcı detayları alınırken hata: ${user.id}`, error);
+            }
+          }
+          return user;
+        })
+      );
+
       // Sonuçları sırala ve arkadaşlık durumunu ekle
-      const resultsWithStatus = filteredResults.map(user => ({
+      const resultsWithStatus = detailedResults.map(user => ({
         ...user,
         friendshipStatus: checkFriendshipStatus(user.id)
       }));
@@ -203,8 +229,30 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
       // Kendini aramada gösterme
       const filteredResults = results.filter(user => user.id !== currentUserId);
       
+      // Gelişmiş kullanıcı bilgilerini al
+      const detailedResults = await Promise.all(
+        filteredResults.map(async (user) => {
+          // Eğer friends bilgisi yoksa, kullanıcı belgesinden tekrar alalım
+          if (!user.friends) {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', user.id));
+              if (userDoc.exists()) {
+                const userData = userDoc.data();
+                return {
+                  ...user,
+                  friends: userData.friends || []
+                };
+              }
+            } catch (error) {
+              console.error(`Kullanıcı detayları alınırken hata: ${user.id}`, error);
+            }
+          }
+          return user;
+        })
+      );
+      
       // Arkadaşlık durumunu ekle
-      const resultsWithStatus = filteredResults.map(user => ({
+      const resultsWithStatus = detailedResults.map(user => ({
         ...user,
         friendshipStatus: checkFriendshipStatus(user.id)
       }));
@@ -346,6 +394,25 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
     );
   };
 
+  // Kullanıcı profil modalını açma fonksiyonu
+  const handleUserProfilePress = (user) => {
+    // Kullanıcı verilerini hazırla
+    const friendData = {
+      id: user.id,
+      name: user.informations?.name || translate('user_search_unnamed'),
+      profilePicture: user.profilePicture || null,
+      friends: user.friends || [], // Arkadaş listesini ekle
+      informations: {
+        name: user.informations?.name || translate('user_search_unnamed'),
+        username: user.informations?.username || user.informations?.name?.toLowerCase().replace(/\s+/g, '_') || 'kullanici'
+      }
+    };
+    
+    // Arkadaş verilerini ayarla ve modalı göster
+    setSelectedFriend(friendData);
+    setFriendModalVisible(true);
+  };
+
   // Arkadaşlık durumunu gösteren etiket
   const renderFriendshipStatusLabel = (status) => {
     let label = '';
@@ -354,19 +421,19 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
     
     switch(status) {
       case 'friend':
-        label = 'Arkadaşınız';
+        label = translate('friendship_status_friend');
         color = '#44D7B6';
         icon = 'people';
         break;
       
       case 'sent':
-        label = 'İstek Gönderildi';
+        label = translate('friendship_status_sent');
         color = '#FF9500';
         icon = 'paper-plane';
         break;
       
       case 'received':
-        label = 'İstek Aldınız';
+        label = translate('friendship_status_received');
         color = '#007AFF';
         icon = 'mail';
         break;
@@ -413,7 +480,7 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalContent}>
             <View style={styles.searchHeader}>
-              <Text style={styles.searchTitle}>Arkadaş Ara</Text>
+              <Text style={styles.searchTitle}>{translate('user_search_title')}</Text>
               <TouchableOpacity 
                 style={styles.headerButton} 
                 onPress={closeModal}
@@ -426,7 +493,7 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
               <Ionicons name="search-outline" size={20} color="#9797A9" style={{marginLeft: 15}} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="İsim, kullanıcı adı veya e-posta ile ara..."
+                placeholder={translate('user_search_placeholder')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholderTextColor="#9797A9"
@@ -450,11 +517,19 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
             {/* Arama ipuçları */}
             {!searchQuery.trim() && !loading && !isSearching && (
               <View style={{marginBottom: 20}}>
-                <Text style={{color: '#AE63E4', fontSize: 16, fontWeight: '600', marginBottom: 10}}>Arama İpuçları</Text>
+                <Text style={{color: '#AE63E4', fontSize: 16, fontWeight: '600', marginBottom: 10}}>
+                  {translate('user_search_tips_title')}
+                </Text>
                 <View style={{backgroundColor: '#32323E', borderRadius: 10, padding: 15}}>
-                  <Text style={{color: '#E5E5E9', fontSize: 14, marginBottom: 8}}>• İsim, kullanıcı adı veya e-posta ile arama yapabilirsiniz</Text>
-                  <Text style={{color: '#E5E5E9', fontSize: 14, marginBottom: 8}}>• Yazarken sonuçlar otomatik olarak güncellenir</Text>
-                  <Text style={{color: '#E5E5E9', fontSize: 14}}>• En alakalı sonuçlar üstte gösterilir</Text>
+                  <Text style={{color: '#E5E5E9', fontSize: 14, marginBottom: 8}}>
+                    {translate('user_search_tip_1')}
+                  </Text>
+                  <Text style={{color: '#E5E5E9', fontSize: 14, marginBottom: 8}}>
+                    {translate('user_search_tip_2')}
+                  </Text>
+                  <Text style={{color: '#E5E5E9', fontSize: 14}}>
+                    {translate('user_search_tip_3')}
+                  </Text>
                 </View>
               </View>
             )}
@@ -462,22 +537,26 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
             {isSearching ? (
               <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
                 <ActivityIndicator size="large" color="#AE63E4" />
-                <Text style={[styles.statusText, {marginTop: 20}]}>Kullanıcılar aranıyor...</Text>
+                <Text style={[styles.statusText, {marginTop: 20}]}>
+                  {translate('user_search_searching')}
+                </Text>
               </View>
             ) : loading ? (
               <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
                 <ActivityIndicator size="large" color="#AE63E4" />
-                <Text style={[styles.statusText, {marginTop: 20}]}>Kullanıcılar yükleniyor...</Text>
+                <Text style={[styles.statusText, {marginTop: 20}]}>
+                  {translate('user_search_loading')}
+                </Text>
               </View>
             ) : searchResults.length > 0 ? (
               <>
                 <View style={{flexDirection: 'row', marginBottom: 15, justifyContent: 'space-between', alignItems: 'center'}}>
                   <Text style={{color: '#9797A9', fontSize: 14}}>
-                    {searchResults.length} kullanıcı bulundu
+                    {searchResults.length} {translate('user_search_results_count')}
                   </Text>
                   {searchResults.length > 10 && (
                     <Text style={{color: '#AE63E4', fontSize: 14}}>
-                      İlk 10 sonuç gösteriliyor
+                      {translate('user_search_results_limit')}
                     </Text>
                   )}
                 </View>
@@ -494,40 +573,46 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
                     
                     switch(friendshipStatus) {
                       case 'friend':
-                        buttonText = 'Arkadaşlıktan Çıkar';
+                        buttonText = translate('friendship_action_remove');
                         buttonColor = '#32323E';
                         buttonIcon = 'person-remove';
                         break;
                       case 'sent':
-                        buttonText = 'İsteği İptal Et';
+                        buttonText = translate('friendship_action_cancel');
                         buttonColor = '#FF6B78';
                         buttonIcon = 'close';
                         break;
                       case 'received':
-                        buttonText = 'İsteği Kabul Et';
+                        buttonText = translate('friendship_status_received');
                         buttonColor = '#44D7B6';
                         buttonIcon = 'checkmark';
                         break;
                       default:
-                        buttonText = 'Arkadaş Ekle';
+                        buttonText = translate('friendship_status_add');
                         break;
                     }
                     
                     return (
                       <View style={styles.userCard}>
                         <View style={styles.userInfo}>
-                          {item.profilePicture ? (
-                            <Image source={{ uri: item.profilePicture }} style={styles.userAvatar} />
-                          ) : (
-                            <LinearGradient
-                              colors={['#8E2DE2', '#4A00E0']}
-                              style={styles.userAvatar}
-                            >
-                              <Text style={styles.avatarText}>{item.informations?.name?.charAt(0) || "?"}</Text>
-                            </LinearGradient>
-                          )}
+                          <TouchableOpacity onPress={() => handleUserProfilePress(item)}>
+                            {item.profilePicture ? (
+                              <Image source={{ uri: item.profilePicture }} style={styles.userAvatar} />
+                            ) : (
+                              <LinearGradient
+                                colors={['#8E2DE2', '#4A00E0']}
+                                style={styles.userAvatar}
+                              >
+                                <Text style={styles.avatarText}>{item.informations?.name?.charAt(0) || "?"}</Text>
+                              </LinearGradient>
+                            )}
+                          </TouchableOpacity>
                           <View>
-                            <Text style={styles.userName}>{item.informations?.name || 'İsimsiz Kullanıcı'}</Text>
+                            <TouchableOpacity onPress={() => handleUserProfilePress(item)}>
+                              <Text style={styles.userName}>
+                                {item.informations?.name || translate('user_search_unnamed')}
+                              </Text>
+                            </TouchableOpacity>
                             {renderFriendshipStatusLabel(friendshipStatus)}
                           </View>
                         </View>
@@ -546,7 +631,7 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
                                 handleCancelRequest(item.id);
                                 break;
                               case 'received':
-                                Alert.alert('Bilgi', 'İsteği kabul etmek için arkadaşlık istekleri sayfasını ziyaret edin');
+                                Alert.alert(translate('info'), translate('friendship_action_accept_info'));
                                 break;
                               default:
                                 handleSendRequest(item.id);
@@ -578,7 +663,9 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
                     }}
                     onPress={handleSearch}
                   >
-                    <Text style={{color: '#AE63E4', fontSize: 14, marginRight: 5}}>Daha fazla sonuç göster</Text>
+                    <Text style={{color: '#AE63E4', fontSize: 14, marginRight: 5}}>
+                      {translate('user_search_show_more')}
+                    </Text>
                     <Ionicons name="chevron-down" size={16} color="#AE63E4" />
                   </TouchableOpacity>
                 )}
@@ -586,23 +673,31 @@ const UserSearch = ({ visible, onClose, refreshData }) => {
             ) : searchQuery.trim() !== '' && !loading ? (
               <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
                 <Ionicons name="search-outline" size={60} color="#9797A9" />
-                <Text style={styles.statusText}>Kullanıcı bulunamadı</Text>
+                <Text style={styles.statusText}>{translate('user_search_no_results')}</Text>
                 <Text style={{color: '#9797A9', fontSize: 14, textAlign: 'center', marginTop: 10}}>
-                  Farklı bir arama terimi deneyin
+                  {translate('user_search_try_different')}
                 </Text>
               </View>
             ) : (
               <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
                 <Ionicons name="people-outline" size={60} color="#9797A9" />
-                <Text style={styles.statusText}>Arkadaş aramak için</Text>
+                <Text style={styles.statusText}>{translate('user_search_start_message')}</Text>
                 <Text style={{color: '#9797A9', fontSize: 14, textAlign: 'center', marginTop: 10}}>
-                  yukarıdaki arama çubuğunu kullanabilirsiniz
+                  {translate('user_search_start_submessage')}
                 </Text>
               </View>
             )}
           </View>
         </TouchableWithoutFeedback>
       </LinearGradient>
+      
+      {/* FriendProfileModal */}
+      <FriendProfileModal
+        visible={friendModalVisible}
+        onClose={() => setFriendModalVisible(false)}
+        friend={selectedFriend}
+        navigation={refreshData ? { refresh: refreshData } : undefined}
+      />
     </Modal>
   );
 };

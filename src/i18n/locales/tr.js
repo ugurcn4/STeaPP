@@ -449,6 +449,7 @@ export default {
     'capsule': 'Kapsül',
     'detailed_profile_view': 'Detaylı Profil Görünümü',
     'contact_info': 'İletişim Bilgileri',
+    'test_phase': 'Test Aşaması', // test aşaması
     'email': 'E-posta',
     'phone': 'Telefon',
     'add_phone_number': 'Telefon numarası ekle',
@@ -1002,5 +1003,301 @@ export default {
     'faq_reduce_data_answer': '1. Canlı konum paylaşımı yerine anlık konum paylaşımını tercih edin\n2. Çoklu arkadaş seçiminde aynı anda sadece gerekli kişilerle konum paylaşın\n3. Konum güncellemelerini daha seyrek ayarlayın\n4. Sadece WiFi bağlantısı varken uygulamayı kullanın\n5. Konum paylaşımlarını aktif olarak kullanmadığınızda sonlandırın',
     
     'faq_delete_history_question': 'Geçmiş konum verilerimi nasıl silebilirim?',
-    'faq_delete_history_answer': 'Konum geçmişinizi silmek için:\n1. Ayarlar > Gizlilik > Konum Geçmişi bölümüne gidin\n2. "Geçmişi Temizle" butonuna tıklayın\n3. Temizlemek istediğiniz tarih aralığını seçin (Tümü, Son 7 gün, Son 30 gün)\nNot: Silinen konum verileri geri getirilemez. Bu işlem sadece sizin tarafınızdan paylaşılan konum verilerini siler, arkadaşlarınızın cihazlarındaki verileri etkilemez.'
+    'faq_delete_history_answer': 'Konum geçmişinizi silmek için:\n1. Ayarlar > Gizlilik > Konum Geçmişi bölümüne gidin\n2. "Geçmişi Temizle" butonuna tıklayın\n3. Temizlemek istediğiniz tarih aralığını seçin (Tümü, Son 7 gün, Son 30 gün)\nNot: Silinen konum verileri geri getirilemez. Bu işlem sadece sizin tarafınızdan paylaşılan konum verilerini siler, arkadaşlarınızın cihazlarındaki verileri etkilemez.',
+
+    // FriendsPage metinleri
+    'friends_page_title': 'Arkadaşlarım',
+    'friends_page_social_circle': 'Sosyal Çevrem',
+    'friends_page_meetings': 'Buluşmalarım',
+    'friends_page_activities': 'Etkinliklerim',
+    'friends_page_groups': 'Gruplarım',
+    'friends_page_connections': 'Bağlantılarım',
+    'friends_page_social_network': 'Sosyal Ağım',
+    'friends_page_friend_list': 'Arkadaş Listem',
+
+    'friends_page_pending_requests': 'Bekleyen İstekler',
+    'friends_page_see_all': 'Tümünü Gör',
+    'friends_page_new_friend_requests': 'yeni arkadaşlık isteği',
+    'friends_page_view_pending_requests': 'Bekleyen istekleri görüntüle ve yanıtla',
+
+    'friends_page_group_invites': 'Grup Davetleri',
+    'friends_page_new_group_invites': 'yeni grup daveti',
+    'friends_page_view_group_invites': 'Grup davetlerini görüntüle ve yanıtla',
+
+    'friends_page_meeting_invites': 'Buluşma Davetleri',
+    'friends_page_new_meeting_invites': 'yeni buluşma daveti',
+    'friends_page_view_meeting_invites': 'Buluşma davetlerini görüntüle ve yanıtla',
+
+    'friends_page_quick_access': 'Hızlı Erişim',
+    'friends_page_customize': 'Özelleştir',
+
+    // Alt navigasyon çubuğu
+    'nav_home': 'Ana Sayfa',
+    'nav_friends': 'Arkadaşlar',
+    'nav_map': 'Harita',
+    'nav_events': 'Etkinlikler',
+    'nav_profile': 'Profil',
+
+    // Hata mesajları
+    'error_friend_requests': 'Arkadaşlık istekleri yüklenirken hata:',
+    'error_group_invites': 'Grup davetleri yüklenirken hata:',
+    'error_meeting_invites': 'Buluşma davetleri yüklenirken hata:',
+
+    // QuickOptions metinleri
+    'quick_options_add_friend': 'Arkadaş Ekle',
+    'quick_options_groups': 'Gruplar',
+    'quick_options_events': 'Etkinlikler',
+    'quick_options_locations': 'Konumlar',
+    'quick_options_all_friends': 'Tüm Arkadaşlar',
+    'quick_options_requests': 'İstekler',
+    
+    // Hata mesajları
+    'error_loading_friend_requests': 'Arkadaşlık istekleri alınırken hata:',
+    'error_loading_groups': 'Gruplar yüklenirken hata:',
+    'error_accepting_request': 'İstek kabul edilirken bir hata oluştu.',
+    'error_rejecting_request': 'İstek reddedilirken bir hata oluştu.',
+    
+    // Başarı mesajları
+    'success_friend_request_accepted': 'Arkadaşlık isteği kabul edildi.',
+    'success_friend_request_rejected': 'Arkadaşlık isteği reddedildi.',
+    
+    // Modal metinleri
+    'modal_friend_requests_title': 'Arkadaşlık İstekleri',
+    'modal_no_pending_requests': 'Bekleyen arkadaşlık isteği bulunmamaktadır.',
+    'modal_unnamed_user': 'İsimsiz Kullanıcı',
+
+    // GroupDetailScreen metinleri
+    'group_detail_loading': 'Grup bilgileri yükleniyor...',
+    'group_detail_title': 'Grup Detayları',
+    'group_detail_no_description': 'Bu grup için açıklama bulunmuyor.',
+    'group_detail_members': 'Üye',
+    'group_detail_events': 'Etkinlik',
+    'group_detail_create_event': 'Etkinlik Oluştur',
+    'group_detail_invite_member': 'Üye Davet Et',
+    'group_detail_delete_group': 'Grubu Sil',
+    'group_detail_leave_group': 'Gruptan Ayrıl',
+    'group_detail_members_title': 'Grup Üyeleri',
+    'group_detail_see_all': 'Tümünü Gör',
+    'group_detail_upcoming_events': 'Yaklaşan Etkinlikler',
+    'group_detail_no_upcoming_events': 'Yaklaşan etkinlik yok',
+    'group_detail_create_event_prompt': 'Yeni bir etkinlik oluşturmak için "Etkinlik Oluştur" butonuna tıklayın',
+    'group_detail_past_events': 'Geçmiş Etkinlikler',
+
+    // Başarı mesajları
+    'success_event_created': 'Etkinlik başarıyla oluşturuldu',
+    'success_member_invited': 'Kullanıcı gruba davet edildi',
+    'success_left_group': 'Gruptan başarıyla ayrıldınız',
+    'success_group_deleted': 'Grup başarıyla silindi',
+
+    // Hata mesajları
+    'error_group_not_found': 'Grup bulunamadı',
+    'error_loading_group': 'Grup detayları yüklenirken bir sorun oluştu',
+    'error_creating_event': 'Etkinlik oluşturulurken bir sorun oluştu',
+    'error_inviting_member': 'Kullanıcı davet edilirken bir sorun oluştu',
+    'error_leaving_group': 'Gruptan çıkarken bir sorun oluştu',
+    'error_deleting_group': 'Grup silinirken bir sorun oluştu',
+
+    // Onay modalları
+    'modal_leave_group_title': 'Gruptan Ayrıl',
+    'modal_leave_group_message': '"{groupName}" grubundan ayrılmak istediğinizden emin misiniz?',
+    'modal_delete_group_title': 'Grubu Sil',
+    'modal_delete_group_message': '"{groupName}" grubunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm etkinlikler ve üyelikler silinecektir.',
+    'modal_cancel': 'İptal',
+    'modal_leave': 'Ayrıl',
+    'modal_delete': 'Sil',
+
+    // GroupsList metinleri
+    'groups_page_title': 'Gruplarım',
+    'groups_loading': 'Gruplar yükleniyor...',
+    'groups_invites': 'Grup Daveti',
+    'groups_no_groups': 'Henüz bir gruba üye değilsiniz',
+    'groups_create_prompt': 'Yeni bir grup oluşturmak için "+" butonuna tıklayın',
+    
+    // Grup durumları
+    'group_status_active': 'Aktif',
+    'group_status_quiet': 'Sessiz',
+    'group_status_passive': 'Pasif',
+    
+    // Grup meta bilgileri
+    'group_meta_members': 'üye',
+    'group_meta_events': 'etkinlik',
+
+    // Hata mesajları
+    'error_loading_groups': 'Gruplar yüklenirken bir sorun oluştu',
+
+    // FriendGroups metinleri
+    'friend_groups_title': 'Arkadaş Grupları',
+    'friend_groups_see_all': 'Tümünü Gör',
+    'friend_groups_loading': 'Yükleniyor...',
+    'friend_groups_new_group': 'Yeni Grup',
+    'friend_groups_invites': 'Grup Davetleri',
+    'friend_groups_new': 'Yeni',
+    'friend_groups_invites_count': 'davet',
+    'friend_groups_invite_text': 'Grup daveti',
+    'friend_groups_view': 'Görüntüle',
+    'friend_groups_members_count': 'üye',
+    'friend_groups_no_members': 'Üye yok',
+    'friend_groups_empty_title': 'Henüz bir grubunuz yok',
+    'friend_groups_empty_subtitle': 'Yeni bir grup oluşturmak için "Yeni Grup" butonuna tıklayın',
+
+    // Hata mesajları
+    'error_loading_friends_groups': 'Veriler yüklenirken hata:',
+    'error_unnamed_user': 'İsimsiz Kullanıcı',
+
+    // CreateGroupScreen metinleri
+    'create_group_title': 'Yeni Grup Oluştur',
+    'create_group_button': 'Oluştur',
+    'create_group_name_label': 'Grup Adı',
+    'create_group_name_placeholder': 'Örn: Yakın Arkadaşlar',
+    'create_group_description_label': 'Açıklama (İsteğe Bağlı)',
+    'create_group_description_placeholder': 'Grubunuz hakkında kısa bir açıklama...',
+    'create_group_icon_label': 'Grup Simgesi',
+    'create_group_color_label': 'Grup Rengi',
+    'create_group_preview_name': 'Grup Adı',
+    'create_group_loading': 'Grup oluşturuluyor...',
+    
+    // Hata mesajları
+    'error_empty_group_name': 'Lütfen grup adı girin',
+    'error_user_data': 'Kullanıcı bilgileriniz alınamadı',
+    'error_creating_group': 'Grup oluşturulurken bir sorun oluştu',
+    
+    // Başarı mesajları
+    'success_group_created': 'Grup başarıyla oluşturuldu',
+    'success_button': 'Tamam',
+
+    // Meetings metinleri
+    'meetings_upcoming': 'Yaklaşan Etkinlikler',
+    'meetings_see_all': 'Tümünü Gör',
+    'meetings_create': 'Buluşma Ayarla',
+    'meetings_empty': 'Hiç buluşmanız yok',
+    'meetings_empty_subtitle': 'Yeni bir buluşma oluşturmak için "Buluşma Ayarla" butonuna tıklayın',
+    'meetings_detail': 'Detay',
+
+    // Yeni buluşma modalı
+    'meetings_new': 'Yeni Buluşma',
+    'meetings_title_label': 'Başlık',
+    'meetings_title_placeholder': 'Etkinlik adı',
+    'meetings_location_label': 'Konum',
+    'meetings_location_placeholder': 'Buluşma yeri',
+    'meetings_date_label': 'Tarih',
+    'meetings_time_label': 'Saat (24 saat formatı)',
+    'meetings_time_hint': 'Örnek: 14:30, 08:15 gibi',
+    'meetings_participants_label': 'Katılımcılar',
+    'meetings_participants_info': 'Seçtiğiniz kişiler buluşma ile ilgili davet bildirimi alacaklar.',
+    'meetings_no_selected_friends': 'Henüz kimseyi seçmediniz',
+    'meetings_friends_label': 'Arkadaşlarınız',
+    'meetings_search_friends': 'Arkadaşlarınızı arayın...',
+    'meetings_no_search_results': 'için sonuç bulunamadı',
+    'meetings_no_friends': 'Arkadaş listeniz boş.',
+    'meetings_create_button': 'Etkinlik Oluştur',
+
+    // Hata mesajları
+    'meetings_error_loading': 'Etkinlikler yüklenirken hata:',
+    'meetings_error_friends_loading': 'Arkadaşlar yüklenirken hata:',
+    'meetings_error_validation': 'Lütfen tüm alanları doldurun ve en az bir arkadaş seçin.',
+    'meetings_error_time_format': 'Lütfen geçerli bir saat formatı girin (örn: 14:30)',
+    'meetings_error_creating': 'Etkinlik oluşturulurken bir hata oluştu.',
+    'meetings_unnamed_user': 'İsimsiz Kullanıcı',
+
+    // Başarı mesajları
+    'meetings_success_created': 'Etkinlik başarıyla oluşturuldu! Katılımcılar bilgilendirilecek.',
+
+    // Takvim
+    'calendar_weekdays': ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+    'calendar_weekdays_short': ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pa'],
+    'calendar_months': ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'],
+    'calendar_months_short': ['OCA', 'ŞUB', 'MAR', 'NİS', 'MAY', 'HAZ', 'TEM', 'AĞU', 'EYL', 'EKİ', 'KAS', 'ARA'],
+
+    // AllMeetingsScreen metinleri
+    'all_meetings_title': 'Etkinliklerim',
+    'all_meetings_loading': 'Etkinlikler yükleniyor...',
+    'all_meetings_empty': 'Henüz bir etkinliğiniz bulunmuyor',
+    'all_meetings_empty_upcoming': 'Yaklaşan etkinliğiniz bulunmuyor',
+    'all_meetings_empty_past': 'Geçmiş etkinliğiniz bulunmuyor',
+    'all_meetings_create': 'Yeni Etkinlik Oluştur',
+    'all_meetings_details': 'Detaylar',
+    'all_meetings_completed': 'Tamamlandı',
+    
+    // Tab metinleri
+    'all_meetings_tab_upcoming': 'Yaklaşan',
+    'all_meetings_tab_past': 'Geçmiş',
+
+    // Hata mesajları
+    'all_meetings_error_loading': 'Etkinlikler yüklenirken hata:',
+    'all_meetings_unnamed_user': 'İsimsiz Kullanıcı',
+
+    // Gün isimleri
+    'days_full': ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'],
+    'months_full': ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'],
+
+    // AddMembersModal metinleri
+    'add_members_title': 'Arkadaşını Gruba Davet Et',
+    'add_members_search': 'Arkadaş ara...',
+    'add_members_loading': 'Arkadaşlar yükleniyor...',
+    'add_members_invite': 'Davet Et',
+    'add_members_no_results': 'için sonuç bulunamadı',
+    'add_members_empty': 'Davet edilebilecek arkadaşınız bulunmuyor',
+    'add_members_empty_subtitle': 'Tüm arkadaşlarınız zaten bu gruba dahil edilmiş veya henüz arkadaşınız yok.',
+    'add_members_unnamed_user': 'İsimsiz Kullanıcı',
+
+    // Hata mesajları
+    'add_members_error_loading': 'Arkadaşlar yüklenirken hata:',
+    'add_members_error_alert': 'Arkadaş listesi yüklenirken bir sorun oluştu.',
+    'error': 'Hata',
+
+    // UserSearch metinleri
+    'user_search_title': 'Arkadaş Ara',
+    'user_search_placeholder': 'İsim, kullanıcı adı veya e-posta ile ara...',
+    'user_search_tips_title': 'Arama İpuçları',
+    'user_search_tip_1': '• İsim, kullanıcı adı veya e-posta ile arama yapabilirsiniz',
+    'user_search_tip_2': '• Yazarken sonuçlar otomatik olarak güncellenir',
+    'user_search_tip_3': '• En alakalı sonuçlar üstte gösterilir',
+    'user_search_loading': 'Kullanıcılar yükleniyor...',
+    'user_search_searching': 'Kullanıcılar aranıyor...',
+    'user_search_results_count': 'kullanıcı bulundu',
+    'user_search_results_limit': 'İlk 10 sonuç gösteriliyor',
+    'user_search_show_more': 'Daha fazla sonuç göster',
+    'user_search_no_results': 'Kullanıcı bulunamadı',
+    'user_search_try_different': 'Farklı bir arama terimi deneyin',
+    'user_search_start_message': 'Arkadaş aramak için',
+    'user_search_start_submessage': 'yukarıdaki arama çubuğunu kullanabilirsiniz',
+
+    // Arkadaşlık durumu metinleri
+    'friendship_status_friend': 'Arkadaşınız',
+    'friendship_status_sent': 'İstek Gönderildi',
+    'friendship_status_received': 'İsteği Kabul Et',
+    'friendship_status_add': 'Arkadaş Ekle',
+    'friendship_action_remove': 'Arkadaşlıktan Çıkar',
+    'friendship_action_cancel': 'İsteği İptal Et',
+    'friendship_action_accept_info': 'İsteği kabul etmek için arkadaşlık istekleri sayfasını ziyaret edin',
+
+    // Onay ve hata mesajları
+    'user_search_remove_title': 'Arkadaşı Kaldır',
+    'user_search_remove_message': 'Bu kişiyi arkadaş listenizden kaldırmak istediğinize emin misiniz?',
+    'user_search_remove_success': 'Arkadaşlık başarıyla kaldırıldı.',
+    'user_search_error_loading': 'Kullanıcı detayları alınırken hata:',
+    'user_search_error_search': 'Kullanıcı araması sırasında bir hata oluştu.',
+    'user_search_error_remove': 'Arkadaş kaldırılırken bir hata oluştu.',
+    'user_search_error_request': 'Arkadaşlık isteği gönderilirken bir hata oluştu.',
+    'user_search_error_cancel': 'Arkadaşlık isteği iptal edilirken bir hata oluştu.',
+    'user_search_unnamed': 'İsimsiz Kullanıcı',
+
+    // Buton metinleri
+    'cancel': 'İptal',
+    'remove': 'Kaldır',
+    'info': 'Bilgi',
+    'error': 'Hata',
+    'success': 'Başarılı',
+
+    // AllFriends metinleri
+    'all_friends_title': 'Tüm Arkadaşlar',
+    'all_friends_search': 'Arkadaş ara...',
+    'all_friends_loading': 'Arkadaş listesi yüklenirken hata:',
+    'all_friends_no_results': 'Arama sonucu bulunamadı',
+    'all_friends_empty': 'Henüz arkadaşınız bulunmuyor',
+    'all_friends_add': 'Arkadaş Ekle',
+    'all_friends_unnamed': 'İsimsiz Kullanıcı',
+    'all_friends_username_prefix': '@',
+
+    
 }; 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator, Image } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { translate } from '../i18n/i18n';
 import styles from '../styles/QuickOptionsStyles';
 import { getFriendRequests, acceptFriendRequest, rejectFriendRequest, getCurrentUserUid } from '../services/friendFunctions';
 import { fetchUserGroups } from '../services/groupService';
@@ -28,7 +29,7 @@ const QuickOptions = () => {
       const requests = await getFriendRequests();
       setFriendRequests(requests);
     } catch (error) {
-      console.error('Arkadaşlık istekleri alınırken hata:', error);
+      console.error(translate('error_loading_friend_requests'), error);
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ const QuickOptions = () => {
       const groups = await fetchUserGroups(uid);
       setUserGroups(groups);
     } catch (error) {
-      console.error('Gruplar yüklenirken hata:', error);
+      console.error(translate('error_loading_groups'), error);
     }
   };
 
@@ -51,13 +52,12 @@ const QuickOptions = () => {
       setLoading(true);
       const result = await acceptFriendRequest(friendId);
       if (result.success) {
-        // İsteği listeden kaldır
         setFriendRequests(prev => prev.filter(request => request.id !== friendId));
-        alert('Arkadaşlık isteği kabul edildi.');
+        alert(translate('success_friend_request_accepted'));
       }
     } catch (error) {
-      console.error('İstek kabul edilirken hata:', error);
-      alert('İstek kabul edilirken bir hata oluştu.');
+      console.error(translate('error_accepting_request'), error);
+      alert(translate('error_accepting_request'));
     } finally {
       setLoading(false);
     }
@@ -68,13 +68,12 @@ const QuickOptions = () => {
       setLoading(true);
       const result = await rejectFriendRequest(friendId);
       if (result.success) {
-        // İsteği listeden kaldır
         setFriendRequests(prev => prev.filter(request => request.id !== friendId));
-        alert('Arkadaşlık isteği reddedildi.');
+        alert(translate('success_friend_request_rejected'));
       }
     } catch (error) {
-      console.error('İstek reddedilirken hata:', error);
-      alert('İstek reddedilirken bir hata oluştu.');
+      console.error(translate('error_rejecting_request'), error);
+      alert(translate('error_rejecting_request'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +82,7 @@ const QuickOptions = () => {
   const options = [
     { 
       id: 1, 
-      title: 'Arkadaş Ekle', 
+      title: translate('quick_options_add_friend'), 
       icon: 'user-plus', 
       iconType: 'FontAwesome5',
       gradientColors: ['#FF416C', '#FF4B2B'],
@@ -91,7 +90,7 @@ const QuickOptions = () => {
     },
     { 
       id: 2, 
-      title: 'Gruplar', 
+      title: translate('quick_options_groups'), 
       icon: 'account-group', 
       iconType: 'MaterialCommunityIcons',
       gradientColors: ['#2980B9', '#6DD5FA'],
@@ -102,40 +101,40 @@ const QuickOptions = () => {
     },
     { 
       id: 3, 
-      title: 'Etkinlikler', 
+      title: translate('quick_options_events'), 
       icon: 'calendar-star', 
       iconType: 'MaterialCommunityIcons',
       gradientColors: ['#F2994A', '#F2C94C'],
       badge: '2',
       badgeColor: '#F2994A',
       borderColor: '#252636',
-      action: () => setSelectedOption('events')
+      action: () => navigation.navigate('AllMeetings')
     },
     { 
       id: 4, 
-      title: 'Konumlar', 
+      title: translate('quick_options_locations'), 
       icon: 'map-marker-alt', 
       iconType: 'FontAwesome5',
       gradientColors: ['#8E2DE2', '#4A00E0'],
       badge: '3',
       badgeColor: '#8E2DE2',
       borderColor: '#252636',
-      action: () => setSelectedOption('locations')
+      action: () => navigation.navigate('Locations')
     },
-    { 
-      id: 5, 
-      title: 'Paylaşımlar', 
-      icon: 'share-alt', 
-      iconType: 'FontAwesome5',
-      gradientColors: ['#11998E', '#38EF7D'],
-      badge: '1',
-      badgeColor: '#11998E',
+    {
+      id: 7,
+      title: translate('quick_options_all_friends'),
+      icon: 'users',
+      iconType: 'FontAwesome5', 
+      gradientColors: ['#4A62B3', '#3949AB'],
+      badge: null,
+      badgeColor: '#4A62B3',
       borderColor: '#252636',
-      action: () => setSelectedOption('shares')
+      action: () => navigation.navigate('AllFriends')
     },
     { 
       id: 6, 
-      title: 'İstekler', 
+      title: translate('quick_options_requests'), 
       icon: 'user-friends', 
       iconType: 'FontAwesome5',
       gradientColors: ['#FF8008', '#FFC837'],
@@ -144,7 +143,7 @@ const QuickOptions = () => {
       badgeColor: '#FF3B30',
       borderColor: '#FFFFFF',
       action: () => navigation.navigate('FriendRequests')
-    },
+    }
   ];
 
   const renderIcon = (option) => {
@@ -190,8 +189,8 @@ const QuickOptions = () => {
                   styles.badgeContainer,
                   { 
                     backgroundColor: option.badgeColor || '#FF3B30',
-                    top: option.id === 6 ? -8 : -6,  // İstekler için özel konum ayarı
-                    right: option.id === 6 ? -8 : -6,  // İstekler için özel konum ayarı
+                    top: option.id === 6 ? -8 : -6,
+                    right: option.id === 6 ? -8 : -6,
                     borderColor: option.borderColor || '#252636'
                   }
                 ]}>
@@ -207,7 +206,6 @@ const QuickOptions = () => {
         ))}
       </View>
 
-      {/* Arkadaşlık İstekleri Modalı */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -217,7 +215,7 @@ const QuickOptions = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Arkadaşlık İstekleri</Text>
+              <Text style={styles.modalTitle}>{translate('modal_friend_requests_title')}</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#AE63E4" />
               </TouchableOpacity>
@@ -239,7 +237,7 @@ const QuickOptions = () => {
                           <Text style={styles.avatarText}>{item.name?.charAt(0) || "?"}</Text>
                         </View>
                       )}
-                      <Text style={styles.userName}>{item.name || 'İsimsiz Kullanıcı'}</Text>
+                      <Text style={styles.userName}>{item.name || translate('modal_unnamed_user')}</Text>
                     </View>
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
@@ -262,13 +260,12 @@ const QuickOptions = () => {
                 style={styles.requestsList}
               />
             ) : (
-              <Text style={styles.emptyText}>Bekleyen arkadaşlık isteği bulunmamaktadır.</Text>
+              <Text style={styles.emptyText}>{translate('modal_no_pending_requests')}</Text>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Arkadaş Arama Modalı */}
       <UserSearch 
         visible={searchModalVisible}
         onClose={() => setSearchModalVisible(false)}

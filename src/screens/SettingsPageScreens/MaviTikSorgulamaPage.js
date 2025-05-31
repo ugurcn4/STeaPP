@@ -7,7 +7,6 @@ import {
     TouchableOpacity,
     ScrollView,
     TextInput,
-    Image,
     Alert,
     KeyboardAvoidingView,
     Platform,
@@ -19,9 +18,8 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db, rtdb } from '../../../firebaseConfig';
-import { collection, query, where, getDocs, orderBy, limit, getDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref as databaseRef, get } from 'firebase/database';
+import { db } from '../../../firebaseConfig';
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';

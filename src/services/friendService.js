@@ -1,6 +1,5 @@
 import { db } from '../../firebaseConfig';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { getCurrentUserUid } from './friendFunctions';
+import { doc, getDoc} from 'firebase/firestore';
 
 // Arkadaşları getir
 export const getFriends = async (userId) => {
@@ -57,47 +56,3 @@ export const getFriendDetails = async (friendId) => {
         return null;
     }
 };
-
-// Kullanıcı detaylarını getir
-export const getUserDetails = async (userId) => {
-    try {
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (!userDoc.exists()) {
-            return null;
-        }
-        return {
-            id: userId,
-            ...userDoc.data()
-        };
-    } catch (error) {
-        console.error('Kullanıcı detayları alınırken hata:', error);
-        return null;
-    }
-};
-
-// Arkadaş aramalarını getir
-export const searchFriends = async (searchQuery) => {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(
-            usersRef,
-            where('informations.name', '>=', searchQuery),
-            where('informations.name', '<=', searchQuery + '\uf8ff')
-        );
-
-        const querySnapshot = await getDocs(q);
-        const currentUserId = await getCurrentUserUid();
-
-        return querySnapshot.docs
-            .map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                name: doc.data().informations?.name || 'İsimsiz Kullanıcı',
-                profilePicture: doc.data().informations?.profileImage
-            }))
-            .filter(user => user.id !== currentUserId);
-    } catch (error) {
-        console.error('Arkadaş arama hatası:', error);
-        throw error;
-    }
-}; 

@@ -17,8 +17,8 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getCurrentUserUid } from '../services/friendFunctions';
 import { fetchUserGroups, fetchPendingGroupInvitations } from '../services/groupService';
+import { translate } from '../i18n/i18n';
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight;
 
 // Mor renk kodu
 const PURPLE_COLOR = '#8A56AC';
@@ -49,8 +49,8 @@ const GroupsList = ({ onCreateGroup }) => {
       const invitations = await fetchPendingGroupInvitations(uid);
       setPendingInvitations(invitations);
     } catch (error) {
-      console.error('Gruplar yüklenirken hata:', error);
-      Alert.alert('Hata', 'Gruplar yüklenirken bir sorun oluştu');
+      console.error(translate('error_loading_groups'), error);
+      Alert.alert(translate('error'), translate('error_loading_groups'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -87,20 +87,20 @@ const GroupsList = ({ onCreateGroup }) => {
   const getGroupStatus = (group) => {
     if (hasActiveEvents(group)) {
       return {
-        text: 'Aktif',
+        text: translate('group_status_active'),
         color: '#4CAF50'
       };
     }
     
     if (group.isActive) {
       return {
-        text: 'Sessiz',
+        text: translate('group_status_quiet'),
         color: '#FFAC30'
       };
     }
     
     return {
-      text: 'Pasif',
+      text: translate('group_status_passive'),
       color: '#9797A9'
     };
   };
@@ -128,13 +128,13 @@ const GroupsList = ({ onCreateGroup }) => {
           <View style={styles.groupMeta}>
             <View style={styles.metaItem}>
               <Ionicons name="people" size={14} color="#9797A9" />
-              <Text style={styles.metaText}>{group.members?.length || 0} üye</Text>
+              <Text style={styles.metaText}>{group.members?.length || 0} {translate('group_meta_members')}</Text>
             </View>
             
             {group.events && (
               <View style={styles.metaItem}>
                 <Ionicons name="calendar" size={14} color="#9797A9" />
-                <Text style={styles.metaText}>{group.events.length} etkinlik</Text>
+                <Text style={styles.metaText}>{group.events.length} {translate('group_meta_events')}</Text>
               </View>
             )}
           </View>
@@ -172,7 +172,7 @@ const GroupsList = ({ onCreateGroup }) => {
           >
             <Ionicons name="arrow-back" size={24} color={PURPLE_COLOR} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Gruplarım</Text>
+          <Text style={styles.headerTitle}>{translate('groups_page_title')}</Text>
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={handleCreateGroup}
@@ -188,7 +188,7 @@ const GroupsList = ({ onCreateGroup }) => {
             onPress={handleInvitationsPress}
           >
             <Text style={styles.invitationsText}>
-              {pendingInvitations.length} Grup Daveti
+              {pendingInvitations.length} {translate('groups_invites')}
             </Text>
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationText}>{pendingInvitations.length}</Text>
@@ -199,7 +199,7 @@ const GroupsList = ({ onCreateGroup }) => {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={PURPLE_COLOR} />
-            <Text style={styles.loadingText}>Gruplar yükleniyor...</Text>
+            <Text style={styles.loadingText}>{translate('groups_loading')}</Text>
           </View>
         ) : (
           <ScrollView 
@@ -223,9 +223,9 @@ const GroupsList = ({ onCreateGroup }) => {
             ) : (
               <View style={styles.emptyContainer}>
                 <Ionicons name="people" size={48} color="#9797A9" />
-                <Text style={styles.emptyText}>Henüz bir gruba üye değilsiniz</Text>
+                <Text style={styles.emptyText}>{translate('groups_no_groups')}</Text>
                 <Text style={styles.emptySubText}>
-                  Yeni bir grup oluşturmak için "+" butonuna tıklayın
+                  {translate('groups_create_prompt')}
                 </Text>
               </View>
             )}
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#252636',
-    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ? StatusBar.currentHeight / 2 : 0 : 0,
   },
   container: {
     flex: 1,
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 10 : STATUSBAR_HEIGHT,
+    paddingTop: Platform.OS === 'ios' ? 10 : 10,
     paddingBottom: 15,
     paddingHorizontal: 20,
   },

@@ -52,7 +52,7 @@ const SUGGESTED_PROMPTS = [
 const AIChatScreen = ({ navigation }) => {
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading] = useState(false);
     const flatListRef = useRef(null);
     const loadingDots = useRef(new Animated.Value(0)).current;
     const [location, setLocation] = useState(null);

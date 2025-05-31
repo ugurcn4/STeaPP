@@ -996,7 +996,302 @@ export default {
     'faq_reduce_data_answer': '1. Prefer instant location sharing over live location sharing\n2. When selecting multiple friends, share location only with necessary people\n3. Set location updates less frequently\n4. Use the app only when connected to Wi-Fi\n5. End location shares when you are not actively using them',
 
     'faq_delete_history_question': 'How can I delete my location history?',
-    'faq_delete_history_answer': 'To delete your location history:\n1. Go to Settings > Privacy > Location History\n2. Click the "Clear History" button\n3. Select the date range you want to clear (All, Last 7 days, Last 30 days)\nNote: Deleted location data cannot be recovered. This process only deletes the location data you have shared and does not affect data on your friends’ devices.'
+    'faq_delete_history_answer': 'To delete your location history:\n1. Go to Settings > Privacy > Location History\n2. Click the "Clear History" button\n3. Select the date range you want to clear (All, Last 7 days, Last 30 days)\nNote: Deleted location data cannot be recovered. This process only deletes the location data you have shared and does not affect data on your friends\' devices.',
+
+    // FriendsPage texts
+    'friends_page_title': 'My Friends',
+    'friends_page_social_circle': 'My Social Circle',
+    'friends_page_meetings': 'My Meetings',
+    'friends_page_activities': 'My Activities',
+    'friends_page_groups': 'My Groups',
+    'friends_page_connections': 'My Connections',
+    'friends_page_social_network': 'My Social Network',
+    'friends_page_friend_list': 'My Friend List',
+
+    'friends_page_pending_requests': 'Pending Requests',
+    'friends_page_see_all': 'See All',
+    'friends_page_new_friend_requests': 'new friend requests',
+    'friends_page_view_pending_requests': 'View and respond to pending requests',
+
+    'friends_page_group_invites': 'Group Invites',
+    'friends_page_new_group_invites': 'new group invites',
+    'friends_page_view_group_invites': 'View and respond to group invites',
+
+    'friends_page_meeting_invites': 'Meeting Invites',
+    'friends_page_new_meeting_invites': 'new meeting invites',
+    'friends_page_view_meeting_invites': 'View and respond to meeting invites',
+
+    'friends_page_quick_access': 'Quick Access',
+    'friends_page_customize': 'Customize',
+
+    // Bottom navigation bar
+    'nav_home': 'Home',
+    'nav_friends': 'Friends',
+    'nav_map': 'Map',
+    'nav_events': 'Events',
+    'nav_profile': 'Profile',
+
+    // Error messages
+    'error_friend_requests': 'Error loading friend requests:',
+    'error_group_invites': 'Error loading group invites:',
+    'error_meeting_invites': 'Error loading meeting invites:',
+
+
+    // QuickOptions texts
+    'quick_options_add_friend': 'Add Friend',
+    'quick_options_groups': 'Groups',
+    'quick_options_events': 'Events',
+    'quick_options_locations': 'Locations',
+    'quick_options_all_friends': 'All Friends',
+    'quick_options_requests': 'Requests',
+
+    // Error messages
+    'error_loading_friend_requests': 'Error loading friend requests:',
+    'error_loading_groups': 'Error loading groups:',
+    'error_accepting_request': 'An error occurred while accepting the request.',
+    'error_rejecting_request': 'An error occurred while rejecting the request.',
+
+    // Success messages
+    'success_friend_request_accepted': 'Friend request accepted.',
+    'success_friend_request_rejected': 'Friend request rejected.',
+
+    // Modal texts
+    'modal_friend_requests_title': 'Friend Requests',
+    'modal_no_pending_requests': 'No pending friend requests.',
+    'modal_unnamed_user': 'Unnamed User',
+
+    // GroupDetailScreen texts
+    'group_detail_loading': 'Loading group information...',
+    'group_detail_title': 'Group Details',
+    'group_detail_no_description': 'No description available for this group.',
+    'group_detail_members': 'Member',
+    'group_detail_events': 'Event',
+    'group_detail_create_event': 'Create Event',
+    'group_detail_invite_member': 'Invite Member',
+    'group_detail_delete_group': 'Delete Group',
+    'group_detail_leave_group': 'Leave Group',
+    'group_detail_members_title': 'Group Members',
+    'group_detail_see_all': 'See All',
+    'group_detail_upcoming_events': 'Upcoming Events',
+    'group_detail_no_upcoming_events': 'No upcoming events',
+    'group_detail_create_event_prompt': 'Click "Create Event" to make a new event',
+    'group_detail_past_events': 'Past Events',
+
+    // Success messages
+    'success_event_created': 'Event created successfully',
+    'success_member_invited': 'User invited to the group',
+    'success_left_group': 'You have successfully left the group',
+    'success_group_deleted': 'Group deleted successfully',
+
+    // Error messages
+    'error_group_not_found': 'Group not found',
+    'error_loading_group': 'An error occurred while loading group details',
+    'error_creating_event': 'An error occurred while creating the event',
+    'error_inviting_member': 'An error occurred while inviting the user',
+    'error_leaving_group': 'An error occurred while leaving the group',
+    'error_deleting_group': 'An error occurred while deleting the group',
+
+    // Confirmation modals
+    'modal_leave_group_title': 'Leave Group',
+    'modal_leave_group_message': 'Are you sure you want to leave the group "{groupName}"?',
+    'modal_delete_group_title': 'Delete Group',
+    'modal_delete_group_message': 'Are you sure you want to delete the group "{groupName}"? This action is irreversible and all events and memberships will be deleted.',
+    'modal_cancel': 'Cancel',
+    'modal_leave': 'Leave',
+    'modal_delete': 'Delete',
+
+    // GroupsList texts
+    'groups_page_title': 'My Groups',
+    'groups_loading': 'Loading groups...',
+    'groups_invites': 'Group Invites',
+    'groups_no_groups': 'You are not a member of any group yet',
+    'groups_create_prompt': 'Click the "+" button to create a new group',
+
+    // Group statuses
+    'group_status_active': 'Active',
+    'group_status_quiet': 'Quiet',
+    'group_status_passive': 'Passive',
+
+    // Group meta
+    'group_meta_members': 'member',
+    'group_meta_events': 'event',
+
+    // Error messages
+    'error_loading_groups': 'An error occurred while loading groups',
+
+    // FriendGroups texts
+    'friend_groups_title': 'Friend Groups',
+    'friend_groups_see_all': 'See All',
+    'friend_groups_loading': 'Loading...',
+    'friend_groups_new_group': 'New Group',
+    'friend_groups_invites': 'Group Invites',
+    'friend_groups_new': 'New',
+    'friend_groups_invites_count': 'invite',
+    'friend_groups_invite_text': 'Group invite',
+    'friend_groups_view': 'View',
+    'friend_groups_members_count': 'member',
+    'friend_groups_no_members': 'No members',
+    'friend_groups_empty_title': 'You don’t have any groups yet',
+    'friend_groups_empty_subtitle': 'Click the "New Group" button to create one',
+
+    // Error messages
+    'error_loading_friends_groups': 'Error loading data:',
+    'error_unnamed_user': 'Unnamed User',
+
+    // CreateGroupScreen texts
+    'create_group_title': 'Create New Group',
+    'create_group_button': 'Create',
+    'create_group_name_label': 'Group Name',
+    'create_group_name_placeholder': 'e.g., Close Friends',
+    'create_group_description_label': 'Description (Optional)',
+    'create_group_description_placeholder': 'A short description about your group...',
+    'create_group_icon_label': 'Group Icon',
+    'create_group_color_label': 'Group Color',
+    'create_group_preview_name': 'Group Name',
+    'create_group_loading': 'Creating group...',
+
+    // Error messages
+    'error_empty_group_name': 'Please enter a group name',
+    'error_user_data': 'Could not retrieve your user data',
+    'error_creating_group': 'An error occurred while creating the group',
+
+    // Success messages
+    'success_group_created': 'Group created successfully',
+    'success_button': 'OK',
+
+
+    // New meeting modal
+    'meetings_new': 'New Meeting',
+    'meetings_title_label': 'Title',
+    'meetings_title_placeholder': 'Event name',
+    'meetings_location_label': 'Location',
+    'meetings_location_placeholder': 'Meeting place',
+    'meetings_date_label': 'Date',
+    'meetings_time_label': 'Time (24-hour format)',
+    'meetings_time_hint': 'Example: 14:30, 08:15 etc.',
+    'meetings_participants_label': 'Participants',
+    'meetings_participants_info': 'Selected people will receive a notification about the meeting.',
+    'meetings_no_selected_friends': 'No one selected yet',
+    'meetings_friends_label': 'Your Friends',
+    'meetings_search_friends': 'Search your friends...',
+    'meetings_no_search_results': 'No results found for',
+    'meetings_no_friends': 'Your friends list is empty.',
+    'meetings_create_button': 'Create Event',
+
+    // Error messages
+    'meetings_error_loading': 'Error loading meetings:',
+    'meetings_error_friends_loading': 'Error loading friends:',
+    'meetings_error_validation': 'Please fill all fields and select at least one friend.',
+    'meetings_error_time_format': 'Please enter a valid time format (e.g., 14:30)',
+    'meetings_error_creating': 'An error occurred while creating the event.',
+    'meetings_unnamed_user': 'Unnamed User',
+
+    // Success messages
+    'meetings_success_created': 'Event successfully created! Participants will be notified.',
+
+    // Calendar
+    'calendar_weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    'calendar_weekdays_short': ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+    'calendar_months': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+    'calendar_months_short': ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'],
+
+
+    // AllMeetingsScreen texts
+    'all_meetings_title': 'My Events',
+    'all_meetings_loading': 'Loading events...',
+    'all_meetings_empty': 'You don’t have any events yet',
+    'all_meetings_empty_upcoming': 'No upcoming events',
+    'all_meetings_empty_past': 'No past events',
+    'all_meetings_create': 'Create New Event',
+    'all_meetings_details': 'Details',
+    'all_meetings_completed': 'Completed',
+
+    // Tab texts
+    'all_meetings_tab_upcoming': 'Upcoming',
+    'all_meetings_tab_past': 'Past',
+
+    // Error messages
+    'all_meetings_error_loading': 'Error loading events:',
+    'all_meetings_unnamed_user': 'Unnamed User',
+
+    // Days and Months
+    'days_full': ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    'months_full': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+
+    // Meetings texts
+    'meetings_upcoming': 'Upcoming Meetings',
+    'meetings_see_all': 'See All',
+    'meetings_create': 'Create Meeting',
+    'meetings_empty': 'No meetings yet',
+    'meetings_empty_subtitle': 'Click the "Create Meeting" button to create one',
+
+
+    'add_members_title': 'Invite a Friend to the Group',
+    'add_members_search': 'Search friends...',
+    'add_members_loading': 'Loading friends...',
+    'add_members_invite': 'Invite',
+    'add_members_no_results': 'No results found for',
+    'add_members_empty': 'No friends available to invite',
+    'add_members_empty_subtitle': 'All your friends are already in this group or you have no friends yet.',
+    'add_members_unnamed_user': 'Unnamed User',
+
+    // Error messages
+    'add_members_error_loading': 'Error loading friends:',
+    'add_members_error_alert': 'An issue occurred while loading your friend list.',
+    'error': 'Error',
+
+
+    'user_search_title': 'Search Friends',
+    'user_search_placeholder': 'Search by name, username, or email...',
+    'user_search_tips_title': 'Search Tips',
+    'user_search_tip_1': '• You can search by name, username, or email',
+    'user_search_tip_2': '• Results update automatically as you type',
+    'user_search_tip_3': '• Most relevant results appear at the top',
+    'user_search_loading': 'Loading users...',
+    'user_search_searching': 'Searching users...',
+    'user_search_results_count': 'users found',
+    'user_search_results_limit': 'Showing first 10 results',
+    'user_search_show_more': 'Show more results',
+    'user_search_no_results': 'No users found',
+    'user_search_try_different': 'Try a different search term',
+    'user_search_start_message': 'To search for friends',
+    'user_search_start_submessage': 'you can use the search bar above',
+
+    // Friendship status texts
+    'friendship_status_friend': 'Your Friend',
+    'friendship_status_sent': 'Request Sent',
+    'friendship_status_received': 'Accept Request',
+    'friendship_status_add': 'Add Friend',
+    'friendship_action_remove': 'Remove Friend',
+    'friendship_action_cancel': 'Cancel Request',
+    'friendship_action_accept_info': 'Visit the friend requests page to accept the request',
+
+    // Confirmation and error messages
+    'user_search_remove_title': 'Remove Friend',
+    'user_search_remove_message': 'Are you sure you want to remove this person from your friend list?',
+    'user_search_remove_success': 'Friendship successfully removed.',
+    'user_search_error_loading': 'Error retrieving user details:',
+    'user_search_error_search': 'An error occurred during user search.',
+    'user_search_error_remove': 'An error occurred while removing the friend.',
+    'user_search_error_request': 'An error occurred while sending the friend request.',
+    'user_search_error_cancel': 'An error occurred while canceling the friend request.',
+    'user_search_unnamed': 'Unnamed User',
+
+    // Button texts
+    'cancel': 'Cancel',
+    'remove': 'Remove',
+    'info': 'Info',
+    'error': 'Error',
+    'success': 'Success',
+
+    'all_friends_title': 'All Friends',
+    'all_friends_search': 'Search friends...',
+    'all_friends_loading': 'Error loading friend list:',
+    'all_friends_no_results': 'No search results found',
+    'all_friends_empty': 'You don’t have any friends yet',
+    'all_friends_add': 'Add Friend',
+    'all_friends_unnamed': 'Unnamed User',
+    'all_friends_username_prefix': '@',
 
 
 }; 

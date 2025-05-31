@@ -2,7 +2,6 @@ import { db } from '../../firebaseConfig';
 import { collection, doc, getDoc, getDocs, query, where, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { getFirebaseDb } from '../../firebaseConfig';
 import { calculateCityExplorationStats } from '../helpers/cityExplorationHelpers';
-import { CITY_AREAS } from '../constants/cityAreas';
 
 // Şehir verilerini getir
 export const getCityData = async (userId) => {

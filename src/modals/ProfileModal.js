@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Button } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput } from 'react-native';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from '../../firebaseConfig';
@@ -12,6 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import FastImage from 'react-native-fast-image';
 import FriendProfileModal from './friendProfileModal';
+import CapsuleViewModal from './CapsuleViewModal';
 import VerificationBadge from '../components/VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
 import { sendVerificationSMS, verifyPhoneNumber, isPhoneNumberVerified } from '../utils/phoneVerificationUtils';
@@ -32,6 +33,7 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
     const [instaModalVisible, setInstaModalVisible] = useState(false);
     const [bioModalVisible, setBioModalVisible] = useState(false);
     const [imageModalVisible, setImageModalVisible] = useState(false);
+    const [capsuleModalVisible, setCapsuleModalVisible] = useState(false);
     const [uploading, setUploading] = useState(false); // Yükleme durumu
     const [progress, setProgress] = useState(0); // Yükleme ilerlemesi
     const [verificationStep, setVerificationStep] = useState('input'); // 'input', 'verify'
@@ -305,6 +307,10 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
         navigation.navigate('Arkadaşlar');
     };
 
+    const handleShowCapsules = () => {
+        setCapsuleModalVisible(true);
+    };
+
     const handleBioChange = (text) => {
         if (text.length <= 50) {
             setUserInfo((prevData) => ({
@@ -463,10 +469,18 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                                 <Text style={styles.statLabel}>{translate('friend')}</Text>
                             </TouchableOpacity>
                             <View style={styles.statDivider} />
-                            <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>10</Text>
-                                <Text style={styles.statLabel}>{translate('capsule')}</Text>
-                            </View>
+                            <TouchableOpacity 
+                                style={styles.statItem}
+                                onPress={handleShowCapsules}
+                            >
+                                <View style={styles.capsuleContainer}>
+                                    <View style={styles.betaContainer}>
+                                        <Text style={styles.betaText}>{translate('test_phase')}</Text>
+                                    </View>
+                                    <Text style={styles.statNumber}>10</Text>
+                                    <Text style={styles.statLabel}>{translate('capsule')}</Text>
+                                </View>
+                            </TouchableOpacity>
                         </View>
 
                         <TouchableOpacity
@@ -833,6 +847,12 @@ const ProfileModal = ({ modalVisible, setModalVisible, navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            <CapsuleViewModal 
+                visible={capsuleModalVisible}
+                onClose={() => setCapsuleModalVisible(false)}
+                userId={user?.uid}
+            />
 
             <FriendProfileModal
                 visible={friendProfileVisible}
@@ -1298,6 +1318,29 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#2c3e50',
+    },
+    capsuleContainer: {
+        position: 'relative',
+        alignItems: 'center',
+    },
+    betaContainer: {
+        position: 'absolute',
+        top: -10,
+        right: -20,
+        backgroundColor: '#FF9800',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        zIndex: 1,
+    },
+    betaText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    statItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
 });
 

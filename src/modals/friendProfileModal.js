@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
     Modal,
     View,
     Text,
-    Image,
     TouchableOpacity,
-    TouchableWithoutFeedback,
-    StyleSheet,
-    ScrollView,
+    TouchableWithoutFeedback, ScrollView,
     Platform,
     FlatList,
     Dimensions,
@@ -16,25 +13,87 @@ import {
     ActionSheetIOS,
     Share,
     Clipboard,
-    TextInput
+    TextInput,
+    StatusBar,
+    Animated,
+    Easing
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUserUid, sendFriendRequest, acceptFriendRequest, removeFriend } from '../services/friendFunctions';
 import { db } from '../../firebaseConfig';
 import FastImage from 'react-native-fast-image';
-import Activity from '../components/Activity';
 import { toggleLikePost, addComment, deleteComment } from '../services/postService';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, updateDoc, arrayUnion, arrayRemove, addDoc } from 'firebase/firestore';
 import PostDetailModal from './PostDetailModal';
 import Toast from 'react-native-toast-message';
 import VerificationBadge from '../components/VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
+import styles from '../styles/friendProfileModalStyle';
 
-const { width } = Dimensions.get('window');
-const POST_SIZE = width / 3 - 2;
+// Shimmer animasyonu bileşeni - performans için hafif bir shimmer efekti
+const ShimmerEffect = ({ width, height, style }) => {
+    const animatedValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.timing(animatedValue, {
+                toValue: 1,
+                duration: 1500,
+                easing: Easing.linear,
+                useNativeDriver: true // Native driver kullanarak performansı artırıyoruz
+            })
+        ).start();
+    }, []);
+
+    const translateX = animatedValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-width, width]
+    });
+
+    return (
+        <View style={[{ width, height, overflow: 'hidden', backgroundColor: '#e0e0e0' }, style]}>
+            <Animated.View
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: '#f5f5f5',
+                    position: 'absolute',
+                    opacity: 0.5,
+                    transform: [{ translateX }]
+                }}
+            />
+        </View>
+    );
+};
+
+// Post grid için yer tutucu bileşen - Performans için React.memo ile optimize edildi
+const PostGridSkeleton = React.memo(() => {
+    // 3x3 grid için 9 adet yer tutucu
+    const skeletonItems = Array.from({ length: 9 }, (_, i) => i);
+    
+    return (
+        <FlatList
+            data={skeletonItems}
+            numColumns={3}
+            renderItem={({ index }) => (
+                <View style={styles.postSkeletonItem}>
+                    <ShimmerEffect
+                        width={styles.postItem.width}
+                        height={styles.postItem.width}
+                        style={{ borderRadius: 4 }}
+                    />
+                </View>
+            )}
+            keyExtractor={item => `post-skeleton-${item}`}
+            scrollEnabled={false}
+            contentContainerStyle={styles.postsGrid}
+            removeClippedSubviews={false}
+        />
+    );
+});
 
 // Android için ActionSheet alternatifi
-const ActionSheet = ({ options, cancelButtonIndex, destructiveButtonIndex, onPress, visible, onDismiss }) => {
+const CustomActionSheet = ({ options, cancelButtonIndex, destructiveButtonIndex, onPress, visible, onDismiss }) => {
     if (!visible) return null;
 
     return (
@@ -79,6 +138,27 @@ const ActionSheet = ({ options, cancelButtonIndex, destructiveButtonIndex, onPre
     );
 };
 
+// PostItem bileşeni - memo ile optimize edildi
+const PostItem = memo(({ item, onPress }) => {
+    return (
+        <TouchableOpacity
+            style={styles.postItem}
+            onPress={onPress}
+        >
+            <FastImage
+                source={{
+                    uri: item.imageUrl,
+                    priority: FastImage.priority.normal,
+                    cache: FastImage.cacheControl.immutable
+                }}
+                style={styles.postImage}
+                resizeMode={FastImage.resizeMode.cover}
+                cacheKey={item.id}
+            />
+        </TouchableOpacity>
+    );
+});
+
 const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
     const [friendshipStatus, setFriendshipStatus] = useState('none');
     const [loading, setLoading] = useState(false);
@@ -106,6 +186,98 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
         hasBlueTick: false,
         hasGreenTick: false
     });
+    // Post detail modal için kapanma durumunu takip eden ref
+    const isDetailModalClosingRef = useRef(false);
+
+    // Optimize edilmiş renderlama fonksiyonları
+    // Buradaki tanımlamaları bileşenin içine taşıyoruz, global tanımları siliyoruz
+    const renderPostItem = useCallback(({ item }) => {
+        return (
+            <PostItem 
+                item={item} 
+                onPress={() => setSelectedPost(item)} 
+            />
+        );
+    }, []);
+
+    const keyExtractor = useCallback((item) => item.id, []);
+
+    const getItemLayout = useCallback((data, index) => ({
+        length: styles.postItem.width,
+        offset: styles.postItem.width * index,
+        index
+    }), []);
+
+    const renderFriendItem = useCallback(({ item }) => (
+        <View style={styles.friendsModalListItem}>
+            {/* Avatar */}
+            <View style={styles.friendsModalListItemAvatarContainer}>
+                {item.profilePicture ? (
+                    <FastImage
+                        source={{
+                            uri: item.profilePicture,
+                            priority: FastImage.priority.normal,
+                            cache: FastImage.cacheControl.immutable
+                        }}
+                        style={styles.friendsModalListItemAvatar}
+                    />
+                ) : (
+                    <View style={styles.friendsModalListItemAvatarPlaceholder}>
+                        <Text style={styles.friendsModalListItemInitial}>
+                            {(item.name || '').charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
+                )}
+            </View>
+            {/* User info */}
+            <View style={styles.friendsModalListItemInfo}>
+                <Text style={styles.friendsModalListItemName} numberOfLines={1} ellipsizeMode="tail">
+                    {item.name}
+                </Text>
+            </View>
+        </View>
+    ), []);
+
+    const getFriendItemLayout = useCallback((data, index) => ({
+        length: 64, // Her öğenin yüksekliği
+        offset: 64 * index,
+        index
+    }), []);
+
+    // Post listesi FlatList'i için düzeltmeler
+    const renderPostsListMemo = useCallback((postsList) => {
+        if (postsList.length === 0) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Ionicons 
+                        name={activeTab === 'posts' ? "images-outline" : "heart-outline"} 
+                        size={48} 
+                        color="#ccc" 
+                    />
+                    <Text style={styles.emptyText}>
+                        {activeTab === 'posts' ? 'Henüz paylaşım yok' : 'Henüz beğenilen paylaşım yok'}
+                    </Text>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={postsList}
+                renderItem={renderPostItem}
+                keyExtractor={keyExtractor}
+                numColumns={3}
+                scrollEnabled={false}
+                contentContainerStyle={styles.postsGrid}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                initialNumToRender={9}
+                windowSize={5}
+                updateCellsBatchingPeriod={50}
+                getItemLayout={getItemLayout}
+            />
+        );
+    }, [activeTab, renderPostItem, keyExtractor, getItemLayout]);
 
     useEffect(() => {
         if (friend && visible) {
@@ -131,18 +303,35 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
 
     useEffect(() => {
         if (!visible) {
-            setSelectedPost(null);
-            setProfileImageModalVisible(false);
+            // Ref değerini tanımlamak için renderDetailModal'den bir referans alalım,
+            // o yüzden bu useEffect içinde doğrudan modal state'lerini sıfırlamak yerine
+            // bir gecikme kullanacağız
+            
+            // iOS'da modalların temizlenmesi için ekstra gecikme
+            const delay = Platform.OS === 'ios' ? 500 : 300;
+            
+            const timeoutId = setTimeout(() => {
+                // Tüm alt modalların kapanmasını sağla
+                setSelectedPost(null);
+                setProfileImageModalVisible(false);
+                setFriendsListModalVisible(false);
+            }, delay);
+            
+            // Timeout'u temizle
+            return () => clearTimeout(timeoutId);
         }
 
         // Bileşen değiştirildiğinde ya da kaldırıldığında temizleme işlemi
         return () => {
-            setSelectedPost(null);
-            setLoading(false);
-            setLoadingPosts(false);
-            setLoadingLikedPosts(false);
-            setActionSheetVisible(false);
-            setProfileImageModalVisible(false);
+            if (!visible) {
+                setSelectedPost(null);
+                setLoading(false);
+                setLoadingPosts(false);
+                setLoadingLikedPosts(false);
+                setActionSheetVisible(false);
+                setProfileImageModalVisible(false);
+                setFriendsListModalVisible(false);
+            }
         };
     }, [visible]);
 
@@ -1029,36 +1218,28 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
         }
     };
 
-    const renderPostItem = ({ item }) => {
-        return (
-            <TouchableOpacity
-                style={styles.postItem}
-                onPress={() => {
-                    setSelectedPost(item);
-                }}
-            >
-                <FastImage
-                    source={{
-                        uri: item.imageUrl,
-                        priority: FastImage.priority.high,
-                        cache: FastImage.cacheControl.immutable
-                    }}
-                    style={styles.postImage}
-                    resizeMode={FastImage.resizeMode.cover}
-                    cacheKey={item.id}
-                />
-            </TouchableOpacity>
-        );
-    };
-
     const renderDetailModal = () => {
         // Aktif sekmeye göre doğru veri kaynağını seçelim
         const currentPosts = activeTab === 'posts' ? posts : likedPosts;
 
         return (
             <PostDetailModal
-                visible={selectedPost !== null}
-                onClose={() => setSelectedPost(null)}
+                visible={selectedPost !== null && !isDetailModalClosingRef.current}
+                onClose={() => {
+                    // Kapatma işlemi başladığında ref'i güncelle
+                    isDetailModalClosingRef.current = true;
+                    
+                    // Önce modal kapanmasına izin ver, sonra state'i güncelle
+                    // Buradaki gecikme modal kapanma animasyonunu tamamlamaya yardımcı olur
+                    const delay = Platform.OS === 'ios' ? 350 : 250;
+                    
+                    setTimeout(() => {
+                        // Modal kapandıktan sonra state'i güncelle
+                        setSelectedPost(null);
+                        // Ref'i sıfırla (gelecekteki açılmalar için)
+                        isDetailModalClosingRef.current = false;
+                    }, delay);
+                }}
                 selectedPost={selectedPost}
                 currentPosts={currentPosts}
                 currentUserId={currentUserId}
@@ -1137,14 +1318,36 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 visible={profileImageModalVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setProfileImageModalVisible(false)}
+                onRequestClose={() => {
+                    setProfileImageModalVisible(false);
+                    // Modal state'ini temizleyelim
+                    setTimeout(() => {
+                        if (Platform.OS === 'ios') {
+                            // iOS için ek gecikme
+                            setTimeout(() => {
+                                setProfileImageModalVisible(false);
+                            }, 100);
+                        }
+                    }, 50);
+                }}
                 statusBarTranslucent={true}
             >
                 <View style={styles.profileImageModalContainer}>
                     <TouchableOpacity
                         style={styles.profileImageModalOverlay}
                         activeOpacity={1}
-                        onPress={() => setProfileImageModalVisible(false)}
+                        onPress={() => {
+                            setProfileImageModalVisible(false);
+                            // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                            setTimeout(() => {
+                                if (Platform.OS === 'ios') {
+                                    // iOS için ek gecikme
+                                    setTimeout(() => {
+                                        setProfileImageModalVisible(false);
+                                    }, 100);
+                                }
+                            }, 50);
+                        }}
                     >
                         <View style={styles.profileImageModalContent}>
                             <TouchableOpacity
@@ -1160,7 +1363,18 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.profileImageModalCloseButton}
-                                onPress={() => setProfileImageModalVisible(false)}
+                                onPress={() => {
+                                    setProfileImageModalVisible(false);
+                                    // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                                    setTimeout(() => {
+                                        if (Platform.OS === 'ios') {
+                                            // iOS için ek gecikme
+                                            setTimeout(() => {
+                                                setProfileImageModalVisible(false);
+                                            }, 100);
+                                        }
+                                    }, 50);
+                                }}
                             >
                                 <Ionicons name="close-circle" size={36} color="#fff" />
                             </TouchableOpacity>
@@ -1263,13 +1477,35 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                 visible={friendsListModalVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setFriendsListModalVisible(false)}
+                onRequestClose={() => {
+                    setFriendsListModalVisible(false);
+                    // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                    setTimeout(() => {
+                        if (Platform.OS === 'ios') {
+                            // iOS için ek gecikme
+                            setTimeout(() => {
+                                setFriendsListModalVisible(false);
+                            }, 100);
+                        }
+                    }, 50);
+                }}
                 statusBarTranslucent={true}
             >
                 <TouchableOpacity
                     style={styles.friendsModalOverlay}
                     activeOpacity={1}
-                    onPress={() => setFriendsListModalVisible(false)}
+                    onPress={() => {
+                        setFriendsListModalVisible(false);
+                        // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                        setTimeout(() => {
+                            if (Platform.OS === 'ios') {
+                                // iOS için ek gecikme
+                                setTimeout(() => {
+                                    setFriendsListModalVisible(false);
+                                }, 100);
+                            }
+                        }, 50);
+                    }}
                 >
                     <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
                         <View style={styles.friendsModalCard}>
@@ -1280,7 +1516,18 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                                     <Text style={styles.friendsModalCardTitle}>Arkadaş Listesi</Text>
                                 </View>
                                 <TouchableOpacity
-                                    onPress={() => setFriendsListModalVisible(false)}
+                                    onPress={() => {
+                                        setFriendsListModalVisible(false);
+                                        // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                                        setTimeout(() => {
+                                            if (Platform.OS === 'ios') {
+                                                // iOS için ek gecikme
+                                                setTimeout(() => {
+                                                    setFriendsListModalVisible(false);
+                                                }, 100);
+                                            }
+                                        }, 50);
+                                    }}
                                     style={styles.friendsModalCardClose}
                                 >
                                     <Ionicons name="close" size={20} color="#888" />
@@ -1321,39 +1568,15 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                             ) : filteredFriendsList.length > 0 ? (
                                 <FlatList
                                     data={filteredFriendsList}
-                                    keyExtractor={(item) => item.id}
-                                    renderItem={({ item }) => (
-                                        <View style={styles.friendsModalListItem}>
-                                            {/* Avatar */}
-                                            <View style={styles.friendsModalListItemAvatarContainer}>
-                                                {item.profilePicture ? (
-                                                    <FastImage
-                                                        source={{
-                                                            uri: item.profilePicture,
-                                                            priority: FastImage.priority.normal,
-                                                            cache: FastImage.cacheControl.immutable
-                                                        }}
-                                                        style={styles.friendsModalListItemAvatar}
-                                                    />
-                                                ) : (
-                                                    <View style={styles.friendsModalListItemAvatarPlaceholder}>
-                                                        <Text style={styles.friendsModalListItemInitial}>
-                                                            {(item.name || '').charAt(0).toUpperCase()}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                            {/* User info */}
-                                            <View style={styles.friendsModalListItemInfo}>
-                                                <Text style={styles.friendsModalListItemName} numberOfLines={1} ellipsizeMode="tail">
-                                                    {item.name}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
+                                    keyExtractor={keyExtractor}
+                                    renderItem={renderFriendItem}
                                     showsVerticalScrollIndicator={false}
                                     initialNumToRender={10}
-                                    contentContainerStyle={{ paddingBottom: 10 }}
+                                    maxToRenderPerBatch={5}
+                                    updateCellsBatchingPeriod={50}
+                                    windowSize={5}
+                                    removeClippedSubviews={true}
+                                    getItemLayout={getFriendItemLayout}
                                 />
                             ) : searchQuery.length > 0 ? (
                                 <View style={styles.friendsModalEmptyContainer}>
@@ -1402,112 +1625,320 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
             visible={visible}
             transparent={false}
             animationType="slide"
-            onRequestClose={onClose}
+            onRequestClose={() => {
+                // Alt modallardan herhangi biri açıksa, önce onları kapat
+                if (selectedPost || profileImageModalVisible || friendsListModalVisible) {
+                    if (selectedPost) {
+                        isDetailModalClosingRef.current = true;
+                        setTimeout(() => {
+                            setSelectedPost(null);
+                            isDetailModalClosingRef.current = false;
+                        }, Platform.OS === 'ios' ? 350 : 250);
+                    }
+                    if (profileImageModalVisible) {
+                        setProfileImageModalVisible(false);
+                    }
+                    if (friendsListModalVisible) {
+                        setFriendsListModalVisible(false);
+                    }
+                    return;
+                }
+                // Alt modallar kapalıysa ana modalı kapat
+                onClose();
+            }}
             statusBarTranslucent={true}
         >
-            <View style={styles.modalContainer}>
-                <View style={styles.headerSection}>
-                    <TouchableOpacity style={styles.backButton} onPress={onClose}>
-                        <Ionicons name="arrow-back" size={24} color="#333" />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleContainer}>
-                        <Text style={styles.headerTitle}>{informations?.username || friend.name}</Text>
-                        <VerificationBadge
-                            hasBlueTick={verificationStatus.hasBlueTick}
-                            hasGreenTick={verificationStatus.hasGreenTick}
-                            size={18}
-                            style={styles.verificationBadge}
-                            showTooltip={false}
-                        />
-                    </View>
-                    <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
-                        <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
-                    </TouchableOpacity>
-                </View>
-
-                {isProfilePrivate ? (
-                    <View style={styles.privateProfileContainer}>
-                        <View style={styles.profileTopSection}>
-                            <View style={styles.profileImageContainer}>
-                                <TouchableOpacity
-                                    onPress={handleProfileImagePress}
-                                    activeOpacity={0.8}
-                                >
-                                    <FastImage
-                                        source={getProfileImageSource(friend)}
-                                        style={styles.profileImage}
-                                        resizeMode={FastImage.resizeMode.cover}
-                                    />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.statsContainer}>
-                                <TouchableOpacity
-                                    style={styles.statCard}
-                                    onPress={handleFriendsCountPress}
-                                >
-                                    <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
-                                    <Text style={styles.statLabel}>Arkadaş</Text>
-                                </TouchableOpacity>
-                                <View style={styles.statCard}>
-                                    <Text style={styles.statNumber}>-</Text>
-                                    <Text style={styles.statLabel}>Paylaşım</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View style={styles.profileInfo}>
-                            <View style={styles.nameContainer}>
-                                <Text style={styles.name}>{informations?.name || friend.name}</Text>
+            {Platform.OS === 'android' ? (
+                <SafeAreaView style={styles.safeArea}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.headerSection}>
+                            <TouchableOpacity style={styles.backButton} onPress={onClose}>
+                                <Ionicons name="arrow-back" size={24} color="#333" />
+                            </TouchableOpacity>
+                            <View style={styles.headerTitleContainer}>
+                                <Text style={styles.headerTitle}>{informations?.username || friend.name}</Text>
                                 <VerificationBadge
                                     hasBlueTick={verificationStatus.hasBlueTick}
                                     hasGreenTick={verificationStatus.hasGreenTick}
                                     size={18}
-                                    style={styles.nameVerificationBadge}
+                                    style={styles.verificationBadge}
                                     showTooltip={false}
                                 />
                             </View>
-                        </View>
-
-                        <View style={styles.actionButtonsRow}>
-                            <TouchableOpacity
-                                style={buttonConfig.primary.style}
-                                onPress={() => {
-                                    buttonConfig.primary.onPress();
-                                }}
-                                disabled={buttonConfig.primary.disabled || loading}
-                            >
-                                <Text style={buttonConfig.primary.textStyle}>
-                                    {loading ? 'İşleniyor...' : buttonConfig.primary.text}
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={buttonConfig.secondary.style}
-                                onPress={buttonConfig.secondary.onPress}
-                                disabled={buttonConfig.secondary.disabled}
-                            >
-                                <Text style={buttonConfig.secondary.textStyle}>
-                                    {buttonConfig.secondary.text}
-                                </Text>
+                            <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
+                                <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
                             </TouchableOpacity>
                         </View>
+                        
+                        {isProfilePrivate ? (
+                            <View style={styles.privateProfileContainer}>
+                                <View style={styles.profileTopSection}>
+                                    <View style={styles.profileImageContainer}>
+                                        <TouchableOpacity
+                                            onPress={handleProfileImagePress}
+                                            activeOpacity={0.8}
+                                        >
+                                            <FastImage
+                                                source={getProfileImageSource(friend)}
+                                                style={styles.profileImage}
+                                                resizeMode={FastImage.resizeMode.cover}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
 
-                        <View style={styles.privateProfileContent}>
-                            <View style={styles.lockIconContainer}>
-                                <Ionicons name="lock-closed" size={64} color="#ccc" />
+                                    <View style={styles.statsContainer}>
+                                        <TouchableOpacity
+                                            style={styles.statCard}
+                                            onPress={handleFriendsCountPress}
+                                        >
+                                            <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
+                                            <Text style={styles.statLabel}>Arkadaş</Text>
+                                        </TouchableOpacity>
+                                        <View style={styles.statCard}>
+                                            <Text style={styles.statNumber}>-</Text>
+                                            <Text style={styles.statLabel}>Paylaşım</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <View style={styles.profileInfo}>
+                                    <View style={styles.nameContainer}>
+                                        <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                        <VerificationBadge
+                                            hasBlueTick={verificationStatus.hasBlueTick}
+                                            hasGreenTick={verificationStatus.hasGreenTick}
+                                            size={18}
+                                            style={styles.nameVerificationBadge}
+                                            showTooltip={false}
+                                        />
+                                    </View>
+                                </View>
+
+                                <View style={styles.actionButtonsRow}>
+                                    <TouchableOpacity
+                                        style={buttonConfig.primary.style}
+                                        onPress={() => {
+                                            buttonConfig.primary.onPress();
+                                        }}
+                                        disabled={buttonConfig.primary.disabled || loading}
+                                    >
+                                        <Text style={buttonConfig.primary.textStyle}>
+                                            {loading ? 'İşleniyor...' : buttonConfig.primary.text}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={buttonConfig.secondary.style}
+                                        onPress={buttonConfig.secondary.onPress}
+                                        disabled={buttonConfig.secondary.disabled}
+                                    >
+                                        <Text style={buttonConfig.secondary.textStyle}>
+                                            {buttonConfig.secondary.text}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.privateProfileContent}>
+                                    <View style={styles.lockIconContainer}>
+                                        <Ionicons name="lock-closed" size={64} color="#ccc" />
+                                    </View>
+                                    <Text style={styles.privateProfileTitle}>Bu Hesap Gizli</Text>
+                                    <Text style={styles.privateProfileText}>
+                                        Fotoğraf ve videolarını görmek için bu hesabı takip et.
+                                    </Text>
+                                </View>
                             </View>
-                            <Text style={styles.privateProfileTitle}>Bu Hesap Gizli</Text>
-                            <Text style={styles.privateProfileText}>
-                                Fotoğraf ve videolarını görmek için bu hesabı takip et.
-                            </Text>
-                        </View>
+                        ) : (
+                            <ScrollView
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.scrollContent}
+                            >
+                                <View style={styles.profileHeader}>
+                                    <View style={styles.profileTopSection}>
+                                        <View style={styles.profileImageContainer}>
+                                            <TouchableOpacity
+                                                onPress={handleProfileImagePress}
+                                                activeOpacity={0.8}
+                                            >
+                                                <FastImage
+                                                    source={getProfileImageSource(friend)}
+                                                    style={styles.profileImage}
+                                                    resizeMode={FastImage.resizeMode.cover}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.statsContainer}>
+                                            <TouchableOpacity
+                                                style={styles.statCard}
+                                                onPress={handleFriendsCountPress}
+                                            >
+                                                <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
+                                                <Text style={styles.statLabel}>Arkadaş</Text>
+                                            </TouchableOpacity>
+                                            <View style={styles.statCard}>
+                                                <Text style={styles.statNumber}>{posts.length}</Text>
+                                                <Text style={styles.statLabel}>Paylaşım</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.profileInfo}>
+                                        <View style={styles.nameContainer}>
+                                            <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                            <VerificationBadge
+                                                hasBlueTick={verificationStatus.hasBlueTick}
+                                                hasGreenTick={verificationStatus.hasGreenTick}
+                                                size={18}
+                                                style={styles.nameVerificationBadge}
+                                                showTooltip={false}
+                                            />
+                                        </View>
+                                        {friend.bio && friend.bio !== "undefined" && (
+                                            <Text style={styles.bioText}>{friend.bio}</Text>
+                                        )}
+                                    </View>
+
+                                    <View style={styles.actionButtonsRow}>
+                                        <TouchableOpacity
+                                            style={buttonConfig.primary.style}
+                                            onPress={() => {
+                                                buttonConfig.primary.onPress();
+                                            }}
+                                            disabled={buttonConfig.primary.disabled || loading}
+                                        >
+                                            <Text style={buttonConfig.primary.textStyle}>
+                                                {loading ? 'İşleniyor...' : buttonConfig.primary.text}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={buttonConfig.secondary.style}
+                                            onPress={buttonConfig.secondary.onPress}
+                                            disabled={buttonConfig.secondary.disabled}
+                                        >
+                                            <Text style={buttonConfig.secondary.textStyle}>
+                                                {buttonConfig.secondary.text}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+
+                                <View style={styles.postsContainer}>
+                                    <View style={styles.postsHeader}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.tabButton,
+                                                activeTab === 'posts' && styles.activeTabButton
+                                            ]}
+                                            onPress={() => setActiveTab('posts')}
+                                        >
+                                            <Ionicons
+                                                name="grid-outline"
+                                                size={24}
+                                                color={activeTab === 'posts' ? "#25D220" : "#333"}
+                                            />
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.tabButton,
+                                                activeTab === 'likes' && styles.activeTabButton
+                                            ]}
+                                            onPress={() => {
+                                                setActiveTab('likes');
+                                                if (friendshipStatus !== 'friend' && friend.id !== currentUserId) {
+                                                    Alert.alert(
+                                                        "Sınırlı Erişim",
+                                                        "Beğenilen gönderileri görmek için arkadaş olmanız gerekiyor.",
+                                                        [{ text: "Tamam", onPress: () => setActiveTab('posts') }]
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name="heart-outline"
+                                                size={24}
+                                                color={activeTab === 'likes' ? "#25D220" : "#333"}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {activeTab === 'posts' ? (
+                                        loadingPosts ? (
+                                            <PostGridSkeleton />
+                                        ) : (
+                                            renderPostsListMemo(posts)
+                                        )
+                                    ) : (
+                                        friendshipStatus === 'friend' || friend.id === currentUserId ? (
+                                            loadingLikedPosts ? (
+                                                <PostGridSkeleton />
+                                            ) : (
+                                                renderPostsListMemo(likedPosts)
+                                            )
+                                        ) : (
+                                            <View style={styles.emptyContainer}>
+                                                <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
+                                                <Text style={styles.emptyText}>Beğenilen paylaşımları görmek için arkadaş olmanız gerekiyor</Text>
+                                            </View>
+                                        )
+                                    )}
+                                </View>
+                            </ScrollView>
+                        )}
                     </View>
-                ) : (
-                    <ScrollView
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.scrollContent}
-                    >
-                        <View style={styles.profileHeader}>
+
+                    {Platform.OS === 'android' && (
+                        <CustomActionSheet
+                            options={getActionSheetOptions().map(option => option.title)}
+                            cancelButtonIndex={getActionSheetOptions().findIndex(option => option.id === 'cancel')}
+                            destructiveButtonIndex={getActionSheetOptions().findIndex(option =>
+                                option.id === 'block' || option.id === 'report' || option.id === 'removeFriend'
+                            )}
+                            onPress={(index) => handleActionSheetPress(getActionSheetOptions()[index].id)}
+                            visible={actionSheetVisible}
+                            onDismiss={() => {
+                                setActionSheetVisible(false);
+                                // Modal'ı kapatmak için bir kısa gecikme ekleyelim
+                                setTimeout(() => {
+                                    if (Platform.OS === 'ios') {
+                                        // iOS için ek gecikme
+                                        setTimeout(() => {
+                                            setActionSheetVisible(false);
+                                        }, 100);
+                                    }
+                                }, 50);
+                            }}
+                        />
+                    )}
+
+                    {selectedPost && renderDetailModal()}
+                    {renderProfileImageModal()}
+                    {renderFriendsListModal()}
+                    <Toast />
+                </SafeAreaView>
+            ) : (
+                <View style={styles.modalContainer}>
+                    <View style={styles.headerSection}>
+                        <TouchableOpacity style={styles.backButton} onPress={onClose}>
+                            <Ionicons name="arrow-back" size={24} color="#333" />
+                        </TouchableOpacity>
+                        <View style={styles.headerTitleContainer}>
+                            <Text style={styles.headerTitle}>{informations?.username || friend.name}</Text>
+                            <VerificationBadge
+                                hasBlueTick={verificationStatus.hasBlueTick}
+                                hasGreenTick={verificationStatus.hasGreenTick}
+                                size={18}
+                                style={styles.verificationBadge}
+                                showTooltip={false}
+                            />
+                        </View>
+                        <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
+                            <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+                        </TouchableOpacity>
+                    </View>
+                    
+                    {isProfilePrivate ? (
+                        <View style={styles.privateProfileContainer}>
                             <View style={styles.profileTopSection}>
                                 <View style={styles.profileImageContainer}>
                                     <TouchableOpacity
@@ -1548,9 +1979,6 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                                         showTooltip={false}
                                     />
                                 </View>
-                                {friend.bio && friend.bio !== "undefined" && (
-                                    <Text style={styles.bioText}>{friend.bio}</Text>
-                                )}
                             </View>
 
                             <View style={styles.actionButtonsRow}>
@@ -1575,666 +2003,164 @@ const FriendProfileModal = ({ visible, onClose, friend, navigation }) => {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
+
+                            <View style={styles.privateProfileContent}>
+                                <View style={styles.lockIconContainer}>
+                                    <Ionicons name="lock-closed" size={64} color="#ccc" />
+                                </View>
+                                <Text style={styles.privateProfileTitle}>Bu Hesap Gizli</Text>
+                                <Text style={styles.privateProfileText}>
+                                    Fotoğraf ve videolarını görmek için bu hesabı takip et.
+                                </Text>
+                            </View>
                         </View>
+                    ) : (
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.scrollContent}
+                        >
+                            <View style={styles.profileHeader}>
+                                <View style={styles.profileTopSection}>
+                                    <View style={styles.profileImageContainer}>
+                                        <TouchableOpacity
+                                            onPress={handleProfileImagePress}
+                                            activeOpacity={0.8}
+                                        >
+                                            <FastImage
+                                                source={getProfileImageSource(friend)}
+                                                style={styles.profileImage}
+                                                resizeMode={FastImage.resizeMode.cover}
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
 
-                        <View style={styles.postsContainer}>
-                            <View style={styles.postsHeader}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.tabButton,
-                                        activeTab === 'posts' && styles.activeTabButton
-                                    ]}
-                                    onPress={() => setActiveTab('posts')}
-                                >
-                                    <Ionicons
-                                        name="grid-outline"
-                                        size={24}
-                                        color={activeTab === 'posts' ? "#25D220" : "#333"}
-                                    />
-                                </TouchableOpacity>
+                                    <View style={styles.statsContainer}>
+                                        <TouchableOpacity
+                                            style={styles.statCard}
+                                            onPress={handleFriendsCountPress}
+                                        >
+                                            <Text style={styles.statNumber}>{friend.friends?.length || 0}</Text>
+                                            <Text style={styles.statLabel}>Arkadaş</Text>
+                                        </TouchableOpacity>
+                                        <View style={styles.statCard}>
+                                            <Text style={styles.statNumber}>{posts.length}</Text>
+                                            <Text style={styles.statLabel}>Paylaşım</Text>
+                                        </View>
+                                    </View>
+                                </View>
 
-                                <TouchableOpacity
-                                    style={[
-                                        styles.tabButton,
-                                        activeTab === 'likes' && styles.activeTabButton
-                                    ]}
-                                    onPress={() => {
-                                        setActiveTab('likes');
-                                        if (friendshipStatus !== 'friend' && friend.id !== currentUserId) {
-                                            Alert.alert(
-                                                "Sınırlı Erişim",
-                                                "Beğenilen gönderileri görmek için arkadaş olmanız gerekiyor.",
-                                                [{ text: "Tamam", onPress: () => setActiveTab('posts') }]
-                                            );
-                                        }
-                                    }}
-                                >
-                                    <Ionicons
-                                        name="heart-outline"
-                                        size={24}
-                                        color={activeTab === 'likes' ? "#25D220" : "#333"}
-                                    />
-                                </TouchableOpacity>
+                                <View style={styles.profileInfo}>
+                                    <View style={styles.nameContainer}>
+                                        <Text style={styles.name}>{informations?.name || friend.name}</Text>
+                                        <VerificationBadge
+                                            hasBlueTick={verificationStatus.hasBlueTick}
+                                            hasGreenTick={verificationStatus.hasGreenTick}
+                                            size={18}
+                                            style={styles.nameVerificationBadge}
+                                            showTooltip={false}
+                                        />
+                                    </View>
+                                    {friend.bio && friend.bio !== "undefined" && (
+                                        <Text style={styles.bioText}>{friend.bio}</Text>
+                                    )}
+                                </View>
+
+                                <View style={styles.actionButtonsRow}>
+                                    <TouchableOpacity
+                                        style={buttonConfig.primary.style}
+                                        onPress={() => {
+                                            buttonConfig.primary.onPress();
+                                        }}
+                                        disabled={buttonConfig.primary.disabled || loading}
+                                    >
+                                        <Text style={buttonConfig.primary.textStyle}>
+                                            {loading ? 'İşleniyor...' : buttonConfig.primary.text}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={buttonConfig.secondary.style}
+                                        onPress={buttonConfig.secondary.onPress}
+                                        disabled={buttonConfig.secondary.disabled}
+                                    >
+                                        <Text style={buttonConfig.secondary.textStyle}>
+                                            {buttonConfig.secondary.text}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
 
-                            {activeTab === 'posts' ? (
-                                loadingPosts ? (
-                                    <View style={styles.loadingContainer}>
-                                        <Text style={styles.loadingText}>Paylaşımlar yükleniyor...</Text>
-                                    </View>
-                                ) : posts.length > 0 ? (
-                                    <FlatList
-                                        data={posts}
-                                        renderItem={({ item }) => renderPostItem({ item })}
-                                        keyExtractor={item => item.id}
-                                        numColumns={3}
-                                        scrollEnabled={false}
-                                        contentContainerStyle={styles.postsGrid}
-                                        removeClippedSubviews={false}
-                                        maxToRenderPerBatch={9}
-                                        initialNumToRender={9}
-                                        windowSize={10}
-                                    />
-                                ) : (
-                                    <View style={styles.emptyContainer}>
-                                        <Ionicons name="images-outline" size={48} color="#ccc" />
-                                        <Text style={styles.emptyText}>Henüz paylaşım yok</Text>
-                                    </View>
-                                )
-                            ) : (
-                                friendshipStatus === 'friend' || friend.id === currentUserId ? (
-                                    loadingLikedPosts ? (
-                                        <View style={styles.loadingContainer}>
-                                            <Text style={styles.loadingText}>Beğenilen paylaşımlar yükleniyor...</Text>
-                                        </View>
-                                    ) : likedPosts.length > 0 ? (
-                                        <FlatList
-                                            data={likedPosts}
-                                            renderItem={({ item }) => renderPostItem({ item })}
-                                            keyExtractor={item => item.id}
-                                            numColumns={3}
-                                            scrollEnabled={false}
-                                            contentContainerStyle={styles.postsGrid}
-                                            removeClippedSubviews={false}
-                                            maxToRenderPerBatch={9}
-                                            initialNumToRender={9}
-                                            windowSize={10}
+                            <View style={styles.postsContainer}>
+                                <View style={styles.postsHeader}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.tabButton,
+                                            activeTab === 'posts' && styles.activeTabButton
+                                        ]}
+                                        onPress={() => setActiveTab('posts')}
+                                    >
+                                        <Ionicons
+                                            name="grid-outline"
+                                            size={24}
+                                            color={activeTab === 'posts' ? "#25D220" : "#333"}
                                         />
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.tabButton,
+                                            activeTab === 'likes' && styles.activeTabButton
+                                        ]}
+                                        onPress={() => {
+                                            setActiveTab('likes');
+                                            if (friendshipStatus !== 'friend' && friend.id !== currentUserId) {
+                                                Alert.alert(
+                                                    "Sınırlı Erişim",
+                                                    "Beğenilen gönderileri görmek için arkadaş olmanız gerekiyor.",
+                                                    [{ text: "Tamam", onPress: () => setActiveTab('posts') }]
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="heart-outline"
+                                            size={24}
+                                            color={activeTab === 'likes' ? "#25D220" : "#333"}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {activeTab === 'posts' ? (
+                                    loadingPosts ? (
+                                        <PostGridSkeleton />
                                     ) : (
-                                        <View style={styles.emptyContainer}>
-                                            <Ionicons name="heart-outline" size={48} color="#ccc" />
-                                            <Text style={styles.emptyText}>Henüz beğenilen paylaşım yok</Text>
-                                        </View>
+                                        renderPostsListMemo(posts)
                                     )
                                 ) : (
-                                    <View style={styles.emptyContainer}>
-                                        <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
-                                        <Text style={styles.emptyText}>Beğenilen paylaşımları görmek için arkadaş olmanız gerekiyor</Text>
-                                    </View>
-                                )
-                            )}
-                        </View>
-                    </ScrollView>
-                )}
-            </View>
-
-            {Platform.OS === 'android' && (
-                <ActionSheet
-                    options={getActionSheetOptions().map(option => option.title)}
-                    cancelButtonIndex={getActionSheetOptions().findIndex(option => option.id === 'cancel')}
-                    destructiveButtonIndex={getActionSheetOptions().findIndex(option =>
-                        option.id === 'block' || option.id === 'report' || option.id === 'removeFriend'
+                                    friendshipStatus === 'friend' || friend.id === currentUserId ? (
+                                        loadingLikedPosts ? (
+                                            <PostGridSkeleton />
+                                        ) : (
+                                            renderPostsListMemo(likedPosts)
+                                        )
+                                    ) : (
+                                        <View style={styles.emptyContainer}>
+                                            <Ionicons name="lock-closed-outline" size={48} color="#ccc" />
+                                            <Text style={styles.emptyText}>Beğenilen paylaşımları görmek için arkadaş olmanız gerekiyor</Text>
+                                        </View>
+                                    )
+                                )}
+                            </View>
+                        </ScrollView>
                     )}
-                    onPress={(index) => handleActionSheetPress(getActionSheetOptions()[index].id)}
-                    visible={actionSheetVisible}
-                    onDismiss={() => setActionSheetVisible(false)}
-                />
+                    
+                    {selectedPost && renderDetailModal()}
+                    {renderProfileImageModal()}
+                    {renderFriendsListModal()}
+                    <Toast />
+                </View>
             )}
-
-            {selectedPost && renderDetailModal()}
-            {renderProfileImageModal()}
-            {renderFriendsListModal()}
-            <Toast />
         </Modal>
     );
 };
-
-const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        backgroundColor: '#FFF',
-    },
-    headerSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingTop: Platform.OS === 'ios' ? 50 : 20,
-        paddingHorizontal: 16,
-        paddingBottom: 10,
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitleContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#333',
-        marginLeft: 8,
-    },
-    menuButton: {
-        padding: 8,
-    },
-    scrollContent: {
-        paddingBottom: 20,
-    },
-    profileHeader: {
-        padding: 16,
-    },
-    profileTopSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    profileImageContainer: {
-        marginRight: 20,
-        shadowColor: '#25D220',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-        borderRadius: 50,
-    },
-    profileImage: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 2,
-        borderColor: '#25D220',
-    },
-    statsContainer: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-    },
-    statCard: {
-        alignItems: 'center',
-    },
-    statNumber: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    statLabel: {
-        fontSize: 12,
-        color: '#666',
-    },
-    profileInfo: {
-        marginBottom: 16,
-    },
-    nameContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    name: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4,
-    },
-    username: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 4,
-    },
-    bioText: {
-        fontSize: 14,
-        color: '#8E8E8E',
-        lineHeight: 20,
-        marginTop: 4,
-    },
-    actionButtonsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    followButton: {
-        flex: 1,
-        backgroundColor: '#25D220',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginRight: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    followButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    messageButton: {
-        flex: 1,
-        backgroundColor: '#F0F0F0',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginLeft: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    messageButtonText: {
-        color: '#333',
-        fontWeight: '600',
-    },
-    friendButton: {
-        flex: 1,
-        backgroundColor: '#4CAF50',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginRight: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    friendButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    pendingButton: {
-        flex: 1,
-        backgroundColor: '#FFA000',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginRight: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    pendingButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    acceptButton: {
-        flex: 1,
-        backgroundColor: '#25D220',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginRight: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    acceptButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    postsContainer: {
-        marginTop: 16,
-    },
-    postsHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-around',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderTopWidth: 0,
-        borderBottomWidth: 1,
-        borderColor: '#EFEFEF',
-        marginLeft: 0,
-    },
-    postsHeaderText: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginLeft: 8,
-    },
-    postsGrid: {
-        paddingTop: 2,
-    },
-    postItem: {
-        width: POST_SIZE,
-        height: POST_SIZE,
-        margin: 1,
-    },
-    postImage: {
-        width: '100%',
-        height: '100%',
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 40,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#666',
-        marginTop: 12,
-    },
-    loadingContainer: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    loadingText: {
-        fontSize: 16,
-        color: '#666',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-        backgroundColor: '#fff',
-        zIndex: 1,
-    },
-    modalContent: {
-        paddingBottom: 20,
-    },
-    privateProfileContainer: {
-        flex: 1,
-        padding: 16,
-    },
-    privateProfileContent: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 32,
-        marginTop: 40,
-    },
-    lockIconContainer: {
-        marginBottom: 20,
-    },
-    privateProfileTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 12,
-        textAlign: 'center',
-    },
-    privateProfileText: {
-        fontSize: 16,
-        color: '#666',
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    tabButton: {
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderBottomWidth: 2,
-        borderBottomColor: 'transparent',
-    },
-    activeTabButton: {
-        borderBottomColor: '#25D220',
-    },
-    actionSheetOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)',
-        justifyContent: 'flex-end',
-    },
-    actionSheetContainer: {
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 16,
-    },
-    actionSheetItem: {
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    actionSheetItemText: {
-        fontSize: 16,
-        color: '#333',
-        textAlign: 'center',
-    },
-    actionSheetDestructive: {
-        backgroundColor: '#FFF0F0',
-    },
-    actionSheetDestructiveText: {
-        color: '#FF3B30',
-    },
-    actionSheetCancel: {
-        marginTop: 8,
-    },
-    editButton: {
-        flex: 1,
-        backgroundColor: '#25D220',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginRight: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    editButtonText: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    shareButton: {
-        flex: 1,
-        backgroundColor: '#F0F0F0',
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        marginLeft: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    shareButtonText: {
-        color: '#333',
-        fontWeight: '600',
-    },
-    profileImageModalContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 1000,
-    },
-    profileImageModalOverlay: {
-        flex: 1,
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    profileImageModalContent: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        height: '100%',
-    },
-    profileImageModalImage: {
-        width: Dimensions.get('window').width * 0.9,
-        height: Dimensions.get('window').width * 0.9,
-        borderRadius: 20,
-    },
-    profileImageModalCloseButton: {
-        position: 'absolute',
-        top: 50,
-        right: 20,
-        padding: 10,
-        zIndex: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 20,
-    },
-    friendsModalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    friendsModalCard: {
-        backgroundColor: 'white',
-        borderRadius: 16,
-        width: '85%',
-        maxHeight: '70%',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-        elevation: 5,
-        overflow: 'hidden',
-    },
-    friendsModalCardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-    },
-    friendsModalCardHeaderLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    friendsModalCardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-        marginLeft: 8,
-    },
-    friendsModalCardClose: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        backgroundColor: '#F5F5F5',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    friendsModalDivider: {
-        height: 1,
-        backgroundColor: '#EFEFEF',
-        marginHorizontal: 0,
-    },
-    friendsModalCardSubtitle: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 12,
-        marginHorizontal: 16,
-        marginBottom: 16,
-    },
-    friendsModalSearchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F5F5',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        marginHorizontal: 16,
-        marginBottom: 16,
-    },
-    friendsModalSearchInput: {
-        flex: 1,
-        fontSize: 14,
-        color: '#333',
-        padding: 0,
-        height: 20,
-    },
-    friendsModalLoadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 40,
-    },
-    friendsModalLoadingText: {
-        fontSize: 14,
-        color: '#666',
-        fontWeight: '500',
-        marginTop: 10,
-    },
-    friendsModalListItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
-        backgroundColor: 'transparent',
-    },
-    friendsModalListItemAvatarContainer: {
-        position: 'relative',
-        marginRight: 12,
-    },
-    friendsModalListItemAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(37, 210, 32, 0.2)',
-    },
-    friendsModalListItemAvatarPlaceholder: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#F0F0F0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(37, 210, 32, 0.2)',
-    },
-    friendsModalListItemInitial: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#757575',
-    },
-    friendsModalListItemInfo: {
-        flex: 1,
-    },
-    friendsModalListItemName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 2,
-    },
-    friendsModalEmptyContainer: {
-        padding: 30,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    friendsModalEmptyText: {
-        fontSize: 14,
-        color: '#666',
-        textAlign: 'center',
-        marginTop: 12,
-    },
-    verificationBadge: {
-        marginLeft: 4,
-        alignSelf: 'center',
-        transform: [{ translateY: 0 }]
-    },
-    nameVerificationBadge: {
-        marginLeft: 8,
-        transform: [{ translateY: -1 }]
-    },
-});
 
 export default FriendProfileModal;

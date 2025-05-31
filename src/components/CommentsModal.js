@@ -21,7 +21,6 @@ import Animated, {
     useAnimatedStyle,
     withSpring,
     useSharedValue,
-    runOnJS
 } from 'react-native-reanimated';
 import VerificationBadge from './VerificationBadge';
 import { checkUserVerification } from '../utils/verificationUtils';
